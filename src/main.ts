@@ -1,8 +1,17 @@
 import { NestFactory } from '@nestjs/core';
+import { ExpressAdapter } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
-async function bootstrap() {
+const express = require('express');
+
+let cachedApp: any;
+
+async function createApp() {
+  if (cachedApp) {
+    return cachedApp;
+  }
+
   // Carregar .env manualmente ANTES de criar o app
   const dotenv = require('dotenv');
   const path = require('path');
@@ -30,7 +39,6 @@ async function bootstrap() {
       } else {
         envLoaded = true;
         console.log('✅ Variáveis carregadas do .env');
-        // Mostrar algumas variáveis para debug (sem mostrar valores completos)
         console.log('🔍 Variáveis encontradas:', Object.keys(result.parsed || {}).join(', '));
         break;
       }
@@ -41,7 +49,6 @@ async function bootstrap() {
 
   if (!envLoaded) {
     console.warn('⚠️ Nenhum arquivo .env encontrado nos caminhos testados');
-    // Tentar carregar do diretório atual como último recurso
     dotenv.config();
   }
 
@@ -51,10 +58,12 @@ async function bootstrap() {
   console.log('🔍 process.env.ASAAS_API_KEY:', asaasKeyBefore ? `Encontrado (${asaasKeyBefore.substring(0, 15)}...)` : 'Não encontrado');
   console.log('🔍 process.env.DB_HOST:', process.env.DB_HOST || 'Não encontrado');
   
-  // Preservar ASAAS_API_KEY antes de criar o app (caso o ConfigModule tente expandir)
+  // Preservar ASAAS_API_KEY antes de criar o app
   const preservedAsaasKey = process.env.ASAAS_API_KEY;
   
-  const app = await NestFactory.create(AppModule);
+  // Criar app Express para Vercel
+  const expressApp = express();
+  const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
   
   // Restaurar ASAAS_API_KEY caso tenha sido alterada pelo ConfigModule
   if (preservedAsaasKey && (!process.env.ASAAS_API_KEY || process.env.ASAAS_API_KEY !== preservedAsaasKey)) {
@@ -80,10 +89,28 @@ async function bootstrap() {
     }),
   );
 
-  const port = process.env.PORT || 5000;
-  await app.listen(port);
-  console.log(`🚀 Servidor NestJS rodando na porta ${port}`);
+  await app.init();
+  cachedApp = expressApp;
+  return expressApp;
 }
 
-bootstrap();
+// Handler para Vercel (serverless)
+export default async function handler(req: any, res: any) {
+  const app = await createApp();
+  return app(req, res);
+}
+
+// Bootstrap para desenvolvimento local
+async function bootstrap() {
+  const app = await createApp();
+  const port = process.env.PORT || 5000;
+  app.listen(port, () => {
+    console.log(`🚀 Servidor NestJS rodando na porta ${port}`);
+  });
+}
+
+// Executar bootstrap apenas se não estiver no Vercel
+if (require.main === module && !process.env.VERCEL) {
+  bootstrap();
+}
 
