@@ -35,7 +35,11 @@ export class PlanosService {
 
   async update(id: string, data: Partial<Plano>): Promise<Plano> {
     await this.planoRepository.update(id, data);
-    return this.findById(id);
+    const plano = await this.findById(id);
+    if (!plano) {
+      throw new Error('Plano não encontrado');
+    }
+    return plano;
   }
 
   async delete(id: string): Promise<void> {
@@ -91,7 +95,10 @@ export class PlanosService {
         where: { nome: planoData.nome },
       });
       if (!existing) {
-        await this.create(planoData);
+        await this.create({
+          ...planoData,
+          valorPromocional: planoData.valorPromocional ?? undefined,
+        });
       }
     }
   }

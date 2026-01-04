@@ -40,7 +40,11 @@ export class ClientesMasterService {
 
   async update(id: string, data: Partial<ClienteMaster>): Promise<ClienteMaster> {
     await this.clienteMasterRepository.update(id, data);
-    return this.findById(id);
+    const clienteMaster = await this.findById(id);
+    if (!clienteMaster) {
+      throw new Error('Cliente Master não encontrado');
+    }
+    return clienteMaster;
   }
 
   async delete(id: string): Promise<void> {

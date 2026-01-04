@@ -200,7 +200,7 @@ export class AssinaturasService {
     }
 
     // 8. Salva assinatura no banco de dados
-    const assinatura = this.assinaturaRepository.create({
+    const assinaturaData = {
       userId: clienteMaster.id,
       planoId: createSubscriptionDto.planoId,
       couponId: couponId,
@@ -224,7 +224,8 @@ export class AssinaturasService {
       creditCardBrand: creditCardBrand,
       status: 'PENDING',
       asaasResponse: JSON.stringify(asaasSubscription),
-    });
+    };
+    const assinatura = this.assinaturaRepository.create(assinaturaData);
 
     try {
       const savedSubscription = await this.assinaturaRepository.save(assinatura);
@@ -335,7 +336,7 @@ export class AssinaturasService {
     });
     
     // Busca plano se houver assinatura
-    let plano = null;
+    let plano: any = null;
     if (assinaturaEntity && assinaturaEntity.planoId) {
       plano = await this.planosService.findById(assinaturaEntity.planoId);
     }
@@ -382,7 +383,7 @@ export class AssinaturasService {
       : 0;
 
     // Calcula próxima renovação (30 dias após criação da assinatura)
-    let proximaRenovacao = null;
+    let proximaRenovacao: string | null = null;
     if (assinaturaEntity && assinaturaEntity.createdAt) {
       const dataInicio = new Date(assinaturaEntity.createdAt);
       const proxima = new Date(dataInicio);
@@ -391,7 +392,7 @@ export class AssinaturasService {
     }
 
     // Informações do cartão
-    let cartao = null;
+    let cartao: any = null;
     if (assinaturaEntity && assinaturaEntity.creditCardNumber && assinaturaEntity.creditCardBrand) {
       const ultimos4 = assinaturaEntity.creditCardNumber.slice(-4);
       cartao = {
