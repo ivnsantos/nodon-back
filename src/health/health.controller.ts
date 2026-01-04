@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Head, HttpCode, HttpStatus } from '@nestjs/common';
 
 @Controller()
 export class HealthController {
@@ -18,6 +18,13 @@ export class HealthController {
       message: 'Servidor está online',
       timestamp: new Date().toISOString(),
     };
+  }
+
+  @Head('health')
+  @HttpCode(HttpStatus.OK)
+  healthHead() {
+    // HEAD request não retorna body, apenas status code
+    return;
   }
 }
 
