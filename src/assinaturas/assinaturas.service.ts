@@ -200,10 +200,10 @@ export class AssinaturasService {
     }
 
     // 8. Salva assinatura no banco de dados
-    const assinaturaData = {
+    const assinaturaData: Partial<Assinatura> = {
       userId: clienteMaster.id,
       planoId: createSubscriptionDto.planoId,
-      couponId: couponId,
+      couponId: couponId || undefined,
       asaasCustomerId,
       asaasSubscriptionId: asaasSubscription.id,
       name: createSubscriptionDto.name,
@@ -219,9 +219,9 @@ export class AssinaturasService {
       state: createSubscriptionDto.state,
       value: valorFinal,
       billingType: createSubscriptionDto.billingType,
-      creditCardToken: creditCardToken,
-      creditCardNumber: creditCardNumber,
-      creditCardBrand: creditCardBrand,
+      creditCardToken: creditCardToken ?? undefined,
+      creditCardNumber: creditCardNumber ?? undefined,
+      creditCardBrand: creditCardBrand ?? undefined,
       status: 'PENDING',
       asaasResponse: JSON.stringify(asaasSubscription),
     };
