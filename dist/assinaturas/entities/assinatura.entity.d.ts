@@ -1,0 +1,35 @@
+import { ClienteMaster } from '../../users/entities/cliente-master.entity';
+import { Plano } from '../../planos/entities/plano.entity';
+import { Cupom } from '../../cupons/entities/cupom.entity';
+export declare class Assinatura {
+    id: string;
+    userId: string;
+    clienteMaster: ClienteMaster;
+    asaasCustomerId: string;
+    asaasSubscriptionId: string;
+    name: string;
+    email: string;
+    cpf: string;
+    phone: string;
+    postalCode: string;
+    address: string;
+    addressNumber: string;
+    complement: string;
+    province: string;
+    city: string;
+    state: string;
+    value: number;
+    billingType: string;
+    creditCardToken: string;
+    status: string;
+    asaasResponse: string;
+    adminId: string;
+    creditCardNumber: string;
+    creditCardBrand: string;
+    couponId: string;
+    cupom: Cupom;
+    planoId: string;
+    plano: Plano;
+    createdAt: Date;
+    updatedAt: Date;
+}
