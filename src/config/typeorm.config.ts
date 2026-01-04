@@ -17,18 +17,33 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
   constructor(private configService: ConfigService) {}
 
   createTypeOrmOptions(): TypeOrmModuleOptions {
-    const dbHost = this.configService.get<string>('DB_HOST');
-    const dbPort = this.configService.get<string>('DB_PORT');
-    const dbUsername = this.configService.get<string>('DB_USERNAME');
-    const dbPassword = this.configService.get<string>('DB_PASSWORD');
-    const dbName = this.configService.get<string>('DB_NAME');
-    const dbSsl = this.configService.get<string>('DB_SSL');
+    // Remover espaços extras das variáveis de ambiente (comum no Vercel)
+    const dbHost = this.configService.get<string>('DB_HOST')?.trim();
+    const dbPort = this.configService.get<string>('DB_PORT')?.trim();
+    const dbUsername = this.configService.get<string>('DB_USERNAME')?.trim();
+    const dbPassword = this.configService.get<string>('DB_PASSWORD')?.trim();
+    const dbName = this.configService.get<string>('DB_NAME')?.trim();
+    const dbSsl = this.configService.get<string>('DB_SSL')?.trim();
 
     if (!dbHost || !dbPort || !dbUsername || !dbPassword || !dbName) {
+      console.error('❌ Variáveis de banco de dados faltando ou inválidas:');
+      console.error('  - DB_HOST:', dbHost || '❌ FALTANDO');
+      console.error('  - DB_PORT:', dbPort || '❌ FALTANDO');
+      console.error('  - DB_USERNAME:', dbUsername || '❌ FALTANDO');
+      console.error('  - DB_PASSWORD:', dbPassword ? '✅ Configurado' : '❌ FALTANDO');
+      console.error('  - DB_NAME:', dbName || '❌ FALTANDO');
       throw new Error(
         'Configurações do banco de dados estão faltando no arquivo .env',
       );
     }
+    
+    // Log de configuração (sem mostrar senha)
+    console.log('✅ Configuração do banco de dados:');
+    console.log('  - Host:', dbHost);
+    console.log('  - Port:', dbPort);
+    console.log('  - Username:', dbUsername);
+    console.log('  - Database:', dbName);
+    console.log('  - SSL:', dbSsl === 'true' || process.env.VERCEL ? 'Habilitado' : 'Desabilitado');
 
     // SSL é obrigatório para conexões externas (Vercel) ou quando DB_SSL=true
     // No Vercel, sempre usar SSL
