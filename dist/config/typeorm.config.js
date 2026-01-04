@@ -20,24 +20,40 @@ let TypeOrmConfigService = class TypeOrmConfigService {
     }
     createTypeOrmOptions() {
         const sslEnabled = this.configService.get('DB_SSL', 'true') === 'true';
+        const host = this.configService.get('DB_HOST');
+        const database = this.configService.get('DB_NAME');
+        const username = this.configService.get('DB_USERNAME');
+        if (!host || !database || !username) {
+            console.error('❌ Variáveis de banco de dados faltando:');
+            console.error('  - DB_HOST:', host || '❌ FALTANDO');
+            console.error('  - DB_NAME:', database || '❌ FALTANDO');
+            console.error('  - DB_USERNAME:', username || '❌ FALTANDO');
+            throw new Error('Variáveis de banco de dados não configuradas. Verifique as variáveis de ambiente no Vercel.');
+        }
+        console.log('✅ Configuração do banco de dados:');
+        console.log('  - Host:', host);
+        console.log('  - Database:', database);
+        console.log('  - Username:', username);
+        console.log('  - SSL:', sslEnabled ? 'Habilitado' : 'Desabilitado');
         return {
             type: 'postgres',
-            host: this.configService.get('DB_HOST', 'localhost'),
+            host,
             port: this.configService.get('DB_PORT', 5432),
-            username: this.configService.get('DB_USERNAME', 'postgres'),
-            password: this.configService.get('DB_PASSWORD', 'root'),
-            database: this.configService.get('DB_NAME', 'nodondb'),
+            username,
+            password: this.configService.get('DB_PASSWORD', ''),
+            database,
             entities: [(0, path_1.join)(__dirname, '../**/*.entity{.ts,.js}')],
             synchronize: process.env.NODE_ENV !== 'production',
             logging: process.env.NODE_ENV === 'development',
             autoLoadEntities: true,
-            ssl: {
+            ssl: sslEnabled ? {
                 rejectUnauthorized: false,
-            },
+            } : false,
             extra: {
                 sslmode: sslEnabled ? 'require' : 'prefer',
-                channel_binding: 'require',
+                channel_binding: this.configService.get('PGCHANNELBINDING', 'require'),
             },
+            connectTimeoutMS: 10000,
         };
     }
 };
