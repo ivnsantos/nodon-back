@@ -2,7 +2,11 @@
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 const express = require('express');
 
@@ -17,6 +21,9 @@ async function createApp() {
     // Criar app Express para Vercel
     const expressApp = express();
     const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
+
+    // Habilitar cookie parser
+    app.use(cookieParser());
 
     // Habilitar CORS com credenciais
     app.enableCors({
@@ -35,6 +42,22 @@ async function createApp() {
         transform: true,
       }),
     );
+
+    // Filtro global de exceções
+    app.useGlobalFilters(new HttpExceptionFilter());
+
+    // Interceptor global
+    app.useGlobalInterceptors(new TransformInterceptor());
+
+    // Swagger
+    const config = new DocumentBuilder()
+      .setTitle('NODON Platform API')
+      .setDescription('API de autenticação e gerenciamento de usuários')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api', app, document);
 
     await app.init();
     cachedApp = expressApp;
@@ -67,7 +90,7 @@ async function bootstrap() {
   const port = process.env.PORT ?? 5000;
   app.listen(port, () => {
     console.log(`Application is running on: http://localhost:${port}`);
-    console.log(`API disponível em: http://localhost:${port}/api`);
+    console.log(`Swagger documentation: http://localhost:${port}/api`);
   });
 }
 
