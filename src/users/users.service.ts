@@ -41,7 +41,11 @@ export class UsersService {
 
   async update(id: string, data: Partial<User>): Promise<User> {
     await this.userRepository.update(id, data);
-    return this.findById(id);
+    const user = await this.findById(id);
+    if (!user) {
+      throw new Error('Usuário não encontrado');
+    }
+    return user;
   }
 
   async delete(id: string): Promise<void> {

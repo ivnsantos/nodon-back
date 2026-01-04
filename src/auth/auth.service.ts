@@ -53,8 +53,8 @@ export class AuthService {
     const isAdmin = tipo === 'master';
     
     // Busca assinatura e plano se for cliente master
-    let assinatura = null;
-    let planoInfo = null;
+    let assinatura: any = null;
+    let planoInfo: any = null;
     
     if (tipo === 'master') {
       assinatura = await this.assinaturasService.findByUserId(user.id);

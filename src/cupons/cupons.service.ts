@@ -39,7 +39,11 @@ export class CuponsService {
 
   async update(id: string, data: Partial<Cupom>): Promise<Cupom> {
     await this.cupomRepository.update(id, data);
-    return this.findById(id);
+    const cupom = await this.findById(id);
+    if (!cupom) {
+      throw new Error('Cupom não encontrado');
+    }
+    return cupom;
   }
 
   async delete(id: string): Promise<void> {
