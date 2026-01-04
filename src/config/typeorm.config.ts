@@ -26,7 +26,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       },
       extra: {
         sslmode: sslEnabled ? 'require' : 'prefer',
-        channel_binding: process.env.PGCHANNELBINDING || 'require',
+        channel_binding: 'require',
       },
     };
   }
