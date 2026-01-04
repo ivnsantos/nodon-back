@@ -62,8 +62,20 @@ async function createApp() {
     await app.init();
     cachedApp = expressApp;
     return expressApp;
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Erro ao criar aplicação:', error);
+    console.error('❌ Stack trace:', error?.stack);
+    console.error('❌ Error name:', error?.name);
+    console.error('❌ Error message:', error?.message);
+    
+    // Log de variáveis de ambiente (sem valores sensíveis)
+    console.error('🔍 Variáveis de ambiente verificadas:');
+    console.error('  - DB_HOST:', process.env.DB_HOST ? '✅ Configurado' : '❌ Faltando');
+    console.error('  - DB_NAME:', process.env.DB_NAME ? '✅ Configurado' : '❌ Faltando');
+    console.error('  - JWT_SECRET:', process.env.JWT_SECRET ? '✅ Configurado' : '❌ Faltando');
+    console.error('  - ASAAS_API_KEY:', process.env.ASAAS_API_KEY ? '✅ Configurado' : '❌ Faltando');
+    console.error('  - VERCEL:', process.env.VERCEL ? '✅ Detectado' : '❌ Não detectado');
+    
     throw error;
   }
 }
@@ -73,12 +85,19 @@ export default async function handler(req: any, res: any) {
   try {
     const app = await createApp();
     return app(req, res);
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Erro no handler:', error);
+    console.error('❌ Stack trace:', error?.stack);
+    console.error('❌ Error name:', error?.name);
+    console.error('❌ Error message:', error?.message);
+    
     if (!res.headersSent) {
       res.status(500).json({
         error: 'Internal Server Error',
         message: error?.message || 'Erro desconhecido',
+        type: error?.name || 'UnknownError',
+        // Em desenvolvimento, incluir stack trace
+        ...(process.env.NODE_ENV !== 'production' && { stack: error?.stack }),
       });
     }
   }
