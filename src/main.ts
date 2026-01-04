@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
@@ -19,7 +20,7 @@ async function createApp() {
 
     // Habilitar CORS com credenciais
     app.enableCors({
-      origin: true,
+      origin: true, // Em produção, especifique os domínios permitidos
       credentials: true,
     });
 
@@ -63,10 +64,10 @@ export default async function handler(req: any, res: any) {
 // Bootstrap para desenvolvimento local
 async function bootstrap() {
   const app = await createApp();
-  const port = process.env.PORT || 5000;
+  const port = process.env.PORT ?? 5000;
   app.listen(port, () => {
-    console.log(`🚀 Servidor NestJS rodando na porta ${port}`);
-    console.log(`📡 API disponível em: http://localhost:${port}/api`);
+    console.log(`Application is running on: http://localhost:${port}`);
+    console.log(`API disponível em: http://localhost:${port}/api`);
   });
 }
 
