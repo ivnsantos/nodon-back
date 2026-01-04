@@ -18,6 +18,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("./entities/user.entity");
 let UsersService = class UsersService {
+    userRepository;
     constructor(userRepository) {
         this.userRepository = userRepository;
     }
@@ -42,7 +43,11 @@ let UsersService = class UsersService {
     }
     async update(id, data) {
         await this.userRepository.update(id, data);
-        return this.findById(id);
+        const user = await this.findById(id);
+        if (!user) {
+            throw new Error('Usuário não encontrado');
+        }
+        return user;
     }
     async delete(id) {
         await this.userRepository.delete(id);

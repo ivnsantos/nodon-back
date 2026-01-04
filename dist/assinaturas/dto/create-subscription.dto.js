@@ -17,6 +17,26 @@ var BillingType;
     BillingType["BOLETO"] = "BOLETO";
 })(BillingType || (exports.BillingType = BillingType = {}));
 class CreateSubscriptionDto {
+    name;
+    email;
+    password;
+    cpf;
+    phone;
+    postalCode;
+    address;
+    addressNumber;
+    complement;
+    province;
+    city;
+    state;
+    planoId;
+    billingType;
+    couponName;
+    creditCardHolderName;
+    creditCardNumber;
+    creditCardExpiryMonth;
+    creditCardExpiryYear;
+    creditCardCcv;
 }
 exports.CreateSubscriptionDto = CreateSubscriptionDto;
 __decorate([

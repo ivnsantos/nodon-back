@@ -7,7 +7,7 @@ export declare class AssinaturasController {
     checkPaymentStatus(userId: string): Promise<{
         status: string;
     }>;
-    findMy(req: any): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto>;
+    findMy(req: any): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto | null>;
     getDashboard(req: any): Promise<{
         tokensChat: {
             tokensUtilizados: number;
@@ -44,9 +44,9 @@ export declare class AssinaturasController {
         assinatura: {
             status: string;
             valorMensal: number;
-            dataInicio: string;
-            proximaRenovacao: any;
-        };
+            dataInicio: string | null;
+            proximaRenovacao: string | null;
+        } | null;
         usuarios: {
             quantidade: number;
         };

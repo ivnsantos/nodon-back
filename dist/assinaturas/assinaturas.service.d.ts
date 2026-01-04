@@ -61,9 +61,9 @@ export declare class AssinaturasService {
         assinatura: {
             status: string;
             valorMensal: number;
-            dataInicio: string;
-            proximaRenovacao: any;
-        };
+            dataInicio: string | null;
+            proximaRenovacao: string | null;
+        } | null;
         usuarios: {
             quantidade: number;
         };

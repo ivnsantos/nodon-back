@@ -18,6 +18,7 @@ const assinaturas_service_1 = require("./assinaturas.service");
 const create_subscription_dto_1 = require("./dto/create-subscription.dto");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 let AssinaturasController = class AssinaturasController {
+    assinaturasService;
     constructor(assinaturasService) {
         this.assinaturasService = assinaturasService;
     }

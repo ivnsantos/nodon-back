@@ -14,6 +14,17 @@ const typeorm_1 = require("typeorm");
 const user_entity_1 = require("./user.entity");
 const assinatura_entity_1 = require("../../assinaturas/entities/assinatura.entity");
 let ClienteMaster = class ClienteMaster {
+    id;
+    nome;
+    email;
+    password;
+    telefone;
+    cnpj;
+    ativo;
+    createdAt;
+    updatedAt;
+    usuarios;
+    assinaturas;
 };
 exports.ClienteMaster = ClienteMaster;
 __decorate([

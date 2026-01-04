@@ -13,5 +13,6 @@ export declare class AnalisesController {
         tokens: number;
         tokensUtilizados: number;
     }>;
-    getHistorico(req: any, ano?: string): Promise<import("./entities/historico-mensal.entity").HistoricoMensal[]>;
+    getHistoricoSemAno(req: any): Promise<import("./entities/historico-mensal.entity").HistoricoMensal[]>;
+    getHistoricoComAno(req: any, ano: string): Promise<import("./entities/historico-mensal.entity").HistoricoMensal[]>;
 }

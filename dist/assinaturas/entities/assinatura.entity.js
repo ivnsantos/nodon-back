@@ -15,6 +15,36 @@ const cliente_master_entity_1 = require("../../users/entities/cliente-master.ent
 const plano_entity_1 = require("../../planos/entities/plano.entity");
 const cupom_entity_1 = require("../../cupons/entities/cupom.entity");
 let Assinatura = class Assinatura {
+    id;
+    userId;
+    clienteMaster;
+    asaasCustomerId;
+    asaasSubscriptionId;
+    name;
+    email;
+    cpf;
+    phone;
+    postalCode;
+    address;
+    addressNumber;
+    complement;
+    province;
+    city;
+    state;
+    value;
+    billingType;
+    creditCardToken;
+    status;
+    asaasResponse;
+    adminId;
+    creditCardNumber;
+    creditCardBrand;
+    couponId;
+    cupom;
+    planoId;
+    plano;
+    createdAt;
+    updatedAt;
 };
 exports.Assinatura = Assinatura;
 __decorate([

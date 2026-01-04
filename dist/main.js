@@ -1,68 +1,80 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.default = handler;
 const core_1 = require("@nestjs/core");
+const platform_express_1 = require("@nestjs/platform-express");
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const app_module_1 = require("./app.module");
-async function bootstrap() {
-    const dotenv = require('dotenv');
-    const path = require('path');
-    const fs = require('fs');
-    const envPaths = [
-        path.join(process.cwd(), 'server-nestjs', '.env'),
-        path.join(process.cwd(), '.env'),
-        path.join(__dirname, '..', '.env'),
-        '.env',
-    ];
-    console.log('🔍 Procurando arquivo .env...');
-    console.log('🔍 process.cwd():', process.cwd());
-    console.log('🔍 __dirname:', __dirname);
-    let envLoaded = false;
-    for (const envPath of envPaths) {
-        const fullPath = path.isAbsolute(envPath) ? envPath : path.join(process.cwd(), envPath);
-        if (fs.existsSync(fullPath)) {
-            console.log(`✅ Arquivo .env encontrado em: ${fullPath}`);
-            const result = dotenv.config({ path: fullPath });
-            if (result.error) {
-                console.error('❌ Erro ao carregar .env:', result.error);
-            }
-            else {
-                envLoaded = true;
-                console.log('✅ Variáveis carregadas do .env');
-                console.log('🔍 Variáveis encontradas:', Object.keys(result.parsed || {}).join(', '));
-                break;
-            }
-        }
-        else {
-            console.log(`❌ Arquivo .env não encontrado em: ${fullPath}`);
-        }
+const http_exception_filter_1 = require("./common/filters/http-exception.filter");
+const transform_interceptor_1 = require("./common/interceptors/transform.interceptor");
+const express = require('express');
+let cachedApp;
+async function createApp() {
+    if (cachedApp) {
+        return cachedApp;
     }
-    if (!envLoaded) {
-        console.warn('⚠️ Nenhum arquivo .env encontrado nos caminhos testados');
-        dotenv.config();
+    try {
+        const expressApp = express();
+        const app = await core_1.NestFactory.create(app_module_1.AppModule, new platform_express_1.ExpressAdapter(expressApp));
+        app.use((0, cookie_parser_1.default)());
+        app.enableCors({
+            origin: true,
+            credentials: true,
+        });
+        app.setGlobalPrefix('api');
+        app.useGlobalPipes(new common_1.ValidationPipe({
+            whitelist: true,
+            forbidNonWhitelisted: true,
+            transform: true,
+        }));
+        app.useGlobalFilters(new http_exception_filter_1.HttpExceptionFilter());
+        app.useGlobalInterceptors(new transform_interceptor_1.TransformInterceptor());
+        const config = new swagger_1.DocumentBuilder()
+            .setTitle('NODON Platform API')
+            .setDescription('API de autenticação e gerenciamento de usuários')
+            .setVersion('1.0')
+            .addBearerAuth()
+            .build();
+        const document = swagger_1.SwaggerModule.createDocument(app, config);
+        swagger_1.SwaggerModule.setup('api', app, document);
+        await app.init();
+        cachedApp = expressApp;
+        return expressApp;
     }
-    console.log('🔍 Verificando variáveis após carregar .env...');
-    const asaasKeyBefore = process.env.ASAAS_API_KEY;
-    console.log('🔍 process.env.ASAAS_API_KEY:', asaasKeyBefore ? `Encontrado (${asaasKeyBefore.substring(0, 15)}...)` : 'Não encontrado');
-    console.log('🔍 process.env.DB_HOST:', process.env.DB_HOST || 'Não encontrado');
-    const preservedAsaasKey = process.env.ASAAS_API_KEY;
-    const app = await core_1.NestFactory.create(app_module_1.AppModule);
-    if (preservedAsaasKey && (!process.env.ASAAS_API_KEY || process.env.ASAAS_API_KEY !== preservedAsaasKey)) {
-        process.env.ASAAS_API_KEY = preservedAsaasKey;
-        console.log('✅ ASAAS_API_KEY restaurada após criação do app');
+    catch (error) {
+        console.error('❌ Erro ao criar aplicação:', error);
+        throw error;
     }
-    app.enableCors({
-        origin: true,
-        credentials: true,
-    });
-    app.setGlobalPrefix('api');
-    app.useGlobalPipes(new common_1.ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-    }));
-    const port = process.env.PORT || 5000;
-    await app.listen(port);
-    console.log(`🚀 Servidor NestJS rodando na porta ${port}`);
 }
-bootstrap();
+async function handler(req, res) {
+    try {
+        const app = await createApp();
+        return app(req, res);
+    }
+    catch (error) {
+        console.error('❌ Erro no handler:', error);
+        if (!res.headersSent) {
+            res.status(500).json({
+                error: 'Internal Server Error',
+                message: error?.message || 'Erro desconhecido',
+            });
+        }
+    }
+}
+async function bootstrap() {
+    const app = await createApp();
+    const port = process.env.PORT ?? 5000;
+    app.listen(port, () => {
+        console.log(`Application is running on: http://localhost:${port}`);
+        console.log(`Swagger documentation: http://localhost:${port}/api`);
+    });
+}
+if (require.main === module && !process.env.VERCEL) {
+    bootstrap();
+}
 //# sourceMappingURL=main.js.map

@@ -12,6 +12,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Cupom = void 0;
 const typeorm_1 = require("typeorm");
 let Cupom = class Cupom {
+    id;
+    name;
+    campaignName;
+    discountValue;
+    active;
+    createdAt;
+    updatedAt;
 };
 exports.Cupom = Cupom;
 __decorate([

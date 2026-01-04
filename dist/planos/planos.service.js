@@ -18,6 +18,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const plano_entity_1 = require("./entities/plano.entity");
 let PlanosService = class PlanosService {
+    planoRepository;
     constructor(planoRepository) {
         this.planoRepository = planoRepository;
     }
@@ -36,7 +37,11 @@ let PlanosService = class PlanosService {
     }
     async update(id, data) {
         await this.planoRepository.update(id, data);
-        return this.findById(id);
+        const plano = await this.findById(id);
+        if (!plano) {
+            throw new Error('Plano não encontrado');
+        }
+        return plano;
     }
     async delete(id) {
         await this.planoRepository.delete(id);
@@ -89,7 +94,10 @@ let PlanosService = class PlanosService {
                 where: { nome: planoData.nome },
             });
             if (!existing) {
-                await this.create(planoData);
+                await this.create({
+                    ...planoData,
+                    valorPromocional: planoData.valorPromocional ?? undefined,
+                });
             }
         }
     }

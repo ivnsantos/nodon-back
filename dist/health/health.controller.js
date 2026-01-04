@@ -26,6 +26,9 @@ let HealthController = class HealthController {
             timestamp: new Date().toISOString(),
         };
     }
+    healthHead() {
+        return;
+    }
 };
 exports.HealthController = HealthController;
 __decorate([
@@ -40,6 +43,13 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
 ], HealthController.prototype, "healthCheck", null);
+__decorate([
+    (0, common_1.Head)('health'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], HealthController.prototype, "healthHead", null);
 exports.HealthController = HealthController = __decorate([
     (0, common_1.Controller)()
 ], HealthController);

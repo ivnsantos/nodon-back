@@ -13,6 +13,15 @@ exports.HistoricoMensal = void 0;
 const typeorm_1 = require("typeorm");
 const cliente_master_entity_1 = require("../../users/entities/cliente-master.entity");
 let HistoricoMensal = class HistoricoMensal {
+    id;
+    clienteMasterId;
+    clienteMaster;
+    ano;
+    mes;
+    tokensUtilizados;
+    analisesFeitas;
+    createdAt;
+    updatedAt;
 };
 exports.HistoricoMensal = HistoricoMensal;
 __decorate([

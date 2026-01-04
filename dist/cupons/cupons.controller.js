@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const cupons_service_1 = require("./cupons.service");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 let CuponsController = class CuponsController {
+    cuponsService;
     constructor(cuponsService) {
         this.cuponsService = cuponsService;
     }

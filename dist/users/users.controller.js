@@ -18,6 +18,7 @@ const users_service_1 = require("./users.service");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 const is_master_guard_1 = require("../auth/guards/is-master.guard");
 let UsersController = class UsersController {
+    usersService;
     constructor(usersService) {
         this.usersService = usersService;
     }

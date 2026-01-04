@@ -24,6 +24,7 @@ const health_module_1 = require("./health/health.module");
 const typeorm_config_1 = require("./config/typeorm.config");
 const planos_service_1 = require("./planos/planos.service");
 let AppModule = class AppModule {
+    planosService;
     constructor(planosService) {
         this.planosService = planosService;
     }

@@ -18,9 +18,15 @@ export class AnalisesController {
     return this.analisesService.registrarTokens(req.user.id, req.user.tipo, body.tokens);
   }
 
-  @Get('historico/:ano?')
+  @Get('historico')
   @UseGuards(JwtAuthGuard)
-  async getHistorico(@Request() req, @Param('ano') ano?: string) {
+  async getHistoricoSemAno(@Request() req) {
+    return this.analisesService.getHistorico(req.user.id, req.user.tipo);
+  }
+
+  @Get('historico/:ano')
+  @UseGuards(JwtAuthGuard)
+  async getHistoricoComAno(@Request() req, @Param('ano') ano: string) {
     return this.analisesService.getHistorico(req.user.id, req.user.tipo, ano);
   }
 }

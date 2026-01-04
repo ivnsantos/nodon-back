@@ -17,6 +17,10 @@ const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const axios_1 = __importDefault(require("axios"));
 let AsaasService = class AsaasService {
+    configService;
+    apiUrl;
+    apiKey;
+    axiosInstance;
     constructor(configService) {
         this.configService = configService;
         this.apiUrl = this.configService.get('ASAAS_API_URL', 'https://sandbox.asaas.com/api/v3');

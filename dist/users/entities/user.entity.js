@@ -19,6 +19,16 @@ var UserType;
     UserType["USER"] = "usuario";
 })(UserType || (exports.UserType = UserType = {}));
 let User = class User {
+    id;
+    nome;
+    email;
+    password;
+    tipo;
+    clienteMasterId;
+    clienteMaster;
+    ativo;
+    createdAt;
+    updatedAt;
 };
 exports.User = User;
 __decorate([
