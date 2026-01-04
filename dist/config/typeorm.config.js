@@ -14,6 +14,7 @@ const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const path_1 = require("path");
 let TypeOrmConfigService = class TypeOrmConfigService {
+    configService;
     constructor(configService) {
         this.configService = configService;
     }
@@ -35,7 +36,7 @@ let TypeOrmConfigService = class TypeOrmConfigService {
             },
             extra: {
                 sslmode: sslEnabled ? 'require' : 'prefer',
-                channel_binding: process.env.PGCHANNELBINDING || 'require',
+                channel_binding: 'require',
             },
         };
     }

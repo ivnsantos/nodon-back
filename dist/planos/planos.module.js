@@ -16,6 +16,7 @@ const planos_service_1 = require("./planos.service");
 const planos_controller_1 = require("./planos.controller");
 const plano_entity_1 = require("./entities/plano.entity");
 let PlanosModule = class PlanosModule {
+    planosService;
     constructor(planosService) {
         this.planosService = planosService;
     }

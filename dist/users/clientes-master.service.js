@@ -18,6 +18,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const cliente_master_entity_1 = require("./entities/cliente-master.entity");
 let ClientesMasterService = class ClientesMasterService {
+    clienteMasterRepository;
     constructor(clienteMasterRepository) {
         this.clienteMasterRepository = clienteMasterRepository;
     }
@@ -41,7 +42,11 @@ let ClientesMasterService = class ClientesMasterService {
     }
     async update(id, data) {
         await this.clienteMasterRepository.update(id, data);
-        return this.findById(id);
+        const clienteMaster = await this.findById(id);
+        if (!clienteMaster) {
+            throw new Error('Cliente Master não encontrado');
+        }
+        return clienteMaster;
     }
     async delete(id) {
         await this.clienteMasterRepository.delete(id);

@@ -9,4 +9,5 @@ export declare class HealthController {
         message: string;
         timestamp: string;
     };
+    healthHead(): void;
 }

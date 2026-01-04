@@ -59,6 +59,14 @@ const clientes_master_service_1 = require("../users/clientes-master.service");
 const users_service_1 = require("../users/users.service");
 const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
 let AssinaturasService = class AssinaturasService {
+    assinaturaRepository;
+    cupomRepository;
+    historicoRepository;
+    asaasService;
+    planosService;
+    cuponsService;
+    clientesMasterService;
+    usersService;
     constructor(assinaturaRepository, cupomRepository, historicoRepository, asaasService, planosService, cuponsService, clientesMasterService, usersService) {
         this.assinaturaRepository = assinaturaRepository;
         this.cupomRepository = cupomRepository;
@@ -198,10 +206,10 @@ let AssinaturasService = class AssinaturasService {
             }
             throw new common_1.InternalServerErrorException(`Erro ao criar cliente master: ${error.message || 'Erro desconhecido'}`);
         }
-        const assinatura = this.assinaturaRepository.create({
+        const assinaturaData = {
             userId: clienteMaster.id,
             planoId: createSubscriptionDto.planoId,
-            couponId: couponId,
+            couponId: couponId || undefined,
             asaasCustomerId,
             asaasSubscriptionId: asaasSubscription.id,
             name: createSubscriptionDto.name,
@@ -217,12 +225,13 @@ let AssinaturasService = class AssinaturasService {
             state: createSubscriptionDto.state,
             value: valorFinal,
             billingType: createSubscriptionDto.billingType,
-            creditCardToken: creditCardToken,
-            creditCardNumber: creditCardNumber,
-            creditCardBrand: creditCardBrand,
+            creditCardToken: creditCardToken ?? undefined,
+            creditCardNumber: creditCardNumber ?? undefined,
+            creditCardBrand: creditCardBrand ?? undefined,
             status: 'PENDING',
             asaasResponse: JSON.stringify(asaasSubscription),
-        });
+        };
+        const assinatura = this.assinaturaRepository.create(assinaturaData);
         try {
             const savedSubscription = await this.assinaturaRepository.save(assinatura);
             return this.toResponseDto(savedSubscription);

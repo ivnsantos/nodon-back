@@ -24,7 +24,7 @@ export declare class AuthService {
                 status: any;
                 planoId: any;
                 plano: any;
-            };
+            } | null;
         };
     }>;
     registerClienteMaster(data: {

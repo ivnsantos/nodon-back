@@ -22,6 +22,11 @@ const assinaturas_service_1 = require("../assinaturas/assinaturas.service");
 const planos_service_1 = require("../planos/planos.service");
 const users_service_1 = require("../users/users.service");
 let AnalisesService = class AnalisesService {
+    historicoRepository;
+    clientesMasterService;
+    assinaturasService;
+    planosService;
+    usersService;
     constructor(historicoRepository, clientesMasterService, assinaturasService, planosService, usersService) {
         this.historicoRepository = historicoRepository;
         this.clientesMasterService = clientesMasterService;

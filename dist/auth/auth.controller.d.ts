@@ -18,7 +18,7 @@ export declare class AuthController {
                 status: any;
                 planoId: any;
                 plano: any;
-            };
+            } | null;
         };
     }>;
     registerMaster(registerDto: {

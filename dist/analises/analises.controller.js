@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const analises_service_1 = require("./analises.service");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 let AnalisesController = class AnalisesController {
+    analisesService;
     constructor(analisesService) {
         this.analisesService = analisesService;
     }
@@ -26,7 +27,10 @@ let AnalisesController = class AnalisesController {
     async registrarTokens(req, body) {
         return this.analisesService.registrarTokens(req.user.id, req.user.tipo, body.tokens);
     }
-    async getHistorico(req, ano) {
+    async getHistoricoSemAno(req) {
+        return this.analisesService.getHistorico(req.user.id, req.user.tipo);
+    }
+    async getHistoricoComAno(req, ano) {
         return this.analisesService.getHistorico(req.user.id, req.user.tipo, ano);
     }
 };
@@ -49,14 +53,22 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AnalisesController.prototype, "registrarTokens", null);
 __decorate([
-    (0, common_1.Get)('historico/:ano?'),
+    (0, common_1.Get)('historico'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AnalisesController.prototype, "getHistoricoSemAno", null);
+__decorate([
+    (0, common_1.Get)('historico/:ano'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Request)()),
     __param(1, (0, common_1.Param)('ano')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
-], AnalisesController.prototype, "getHistorico", null);
+], AnalisesController.prototype, "getHistoricoComAno", null);
 exports.AnalisesController = AnalisesController = __decorate([
     (0, common_1.Controller)('analises'),
     __metadata("design:paramtypes", [analises_service_1.AnalisesService])

@@ -18,6 +18,7 @@ const clientes_master_service_1 = require("./clientes-master.service");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 const is_master_guard_1 = require("../auth/guards/is-master.guard");
 let ClientesMasterController = class ClientesMasterController {
+    clientesMasterService;
     constructor(clientesMasterService) {
         this.clientesMasterService = clientesMasterService;
     }

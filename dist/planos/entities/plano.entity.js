@@ -12,6 +12,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.Plano = void 0;
 const typeorm_1 = require("typeorm");
 let Plano = class Plano {
+    id;
+    nome;
+    valorOriginal;
+    valorPromocional;
+    limiteAnalises;
+    tokenChat;
+    ativo;
+    descricao;
+    createdAt;
+    updatedAt;
 };
 exports.Plano = Plano;
 __decorate([

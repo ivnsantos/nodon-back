@@ -18,6 +18,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const cupom_entity_1 = require("./entities/cupom.entity");
 let CuponsService = class CuponsService {
+    cupomRepository;
     constructor(cupomRepository) {
         this.cupomRepository = cupomRepository;
     }
@@ -41,7 +42,11 @@ let CuponsService = class CuponsService {
     }
     async update(id, data) {
         await this.cupomRepository.update(id, data);
-        return this.findById(id);
+        const cupom = await this.findById(id);
+        if (!cupom) {
+            throw new Error('Cupom não encontrado');
+        }
+        return cupom;
     }
     async delete(id) {
         await this.cupomRepository.delete(id);

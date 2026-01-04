@@ -51,6 +51,11 @@ const clientes_master_service_1 = require("../users/clientes-master.service");
 const assinaturas_service_1 = require("../assinaturas/assinaturas.service");
 const planos_service_1 = require("../planos/planos.service");
 let AuthService = class AuthService {
+    usersService;
+    clientesMasterService;
+    assinaturasService;
+    planosService;
+    jwtService;
     constructor(usersService, clientesMasterService, assinaturasService, planosService, jwtService) {
         this.usersService = usersService;
         this.clientesMasterService = clientesMasterService;

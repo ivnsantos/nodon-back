@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const planos_service_1 = require("./planos.service");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 let PlanosController = class PlanosController {
+    planosService;
     constructor(planosService) {
         this.planosService = planosService;
     }
