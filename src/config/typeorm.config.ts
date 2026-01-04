@@ -1,54 +1,53 @@
+/* eslint-disable */
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmOptionsFactory, TypeOrmModuleOptions } from '@nestjs/typeorm';
-import { join } from 'path';
+import { config } from 'dotenv';
+import { User } from '../users/entities/user.entity';
+import { ClienteMaster } from '../users/entities/cliente-master.entity';
+import { Plano } from '../planos/entities/plano.entity';
+import { Cupom } from '../cupons/entities/cupom.entity';
+import { Assinatura } from '../assinaturas/entities/assinatura.entity';
+import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
+
+config();
 
 @Injectable()
 export class TypeOrmConfigService implements TypeOrmOptionsFactory {
   constructor(private configService: ConfigService) {}
 
   createTypeOrmOptions(): TypeOrmModuleOptions {
-    const sslEnabled = this.configService.get<string>('DB_SSL', 'true') === 'true';
-    
-    const host = this.configService.get<string>('DB_HOST');
-    const database = this.configService.get<string>('DB_NAME');
-    const username = this.configService.get<string>('DB_USERNAME');
-    
-    // Validação de variáveis críticas
-    if (!host || !database || !username) {
-      console.error('❌ Variáveis de banco de dados faltando:');
-      console.error('  - DB_HOST:', host || '❌ FALTANDO');
-      console.error('  - DB_NAME:', database || '❌ FALTANDO');
-      console.error('  - DB_USERNAME:', username || '❌ FALTANDO');
-      throw new Error('Variáveis de banco de dados não configuradas. Verifique as variáveis de ambiente no Vercel.');
+    const dbHost = this.configService.get<string>('DB_HOST');
+    const dbPort = this.configService.get<string>('DB_PORT');
+    const dbUsername = this.configService.get<string>('DB_USERNAME');
+    const dbPassword = this.configService.get<string>('DB_PASSWORD');
+    const dbName = this.configService.get<string>('DB_NAME');
+    const dbSsl = this.configService.get<string>('DB_SSL');
+
+    if (!dbHost || !dbPort || !dbUsername || !dbPassword || !dbName) {
+      throw new Error(
+        'Configurações do banco de dados estão faltando no arquivo .env',
+      );
     }
-    
-    console.log('✅ Configuração do banco de dados:');
-    console.log('  - Host:', host);
-    console.log('  - Database:', database);
-    console.log('  - Username:', username);
-    console.log('  - SSL:', sslEnabled ? 'Habilitado' : 'Desabilitado');
-    
+
     return {
       type: 'postgres',
-      host,
-      port: this.configService.get<number>('DB_PORT', 5432),
-      username,
-      password: this.configService.get<string>('DB_PASSWORD', ''),
-      database,
-      entities: [join(__dirname, '../**/*.entity{.ts,.js}')],
-      synchronize: process.env.NODE_ENV !== 'production',
-      logging: process.env.NODE_ENV === 'development',
-      autoLoadEntities: true,
-      ssl: sslEnabled ? {
-        rejectUnauthorized: false,
+      host: dbHost,
+      port: parseInt(dbPort, 10),
+      username: dbUsername,
+      password: dbPassword,
+      database: dbName,
+      ssl: dbSsl === 'true' ? {
+        rejectUnauthorized: false, // Necessário para alguns ambientes de hospedagem
       } : false,
+      entities: [User, ClienteMaster, Plano, Cupom, Assinatura, HistoricoMensal],
+      synchronize: process.env.NODE_ENV !== 'production',
+      logging: this.configService.get<string>('NODE_ENV') === 'development',
+      autoLoadEntities: true,
       extra: {
-        sslmode: sslEnabled ? 'require' : 'prefer',
+        sslmode: dbSsl === 'true' ? 'require' : 'prefer',
         channel_binding: this.configService.get<string>('PGCHANNELBINDING', 'require'),
       },
-      // Timeout de conexão (10s para Vercel Hobby)
-      connectTimeoutMS: 10000,
     };
   }
 }
