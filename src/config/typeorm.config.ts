@@ -30,6 +30,10 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       );
     }
 
+    // SSL é obrigatório para conexões externas (Vercel) ou quando DB_SSL=true
+    // No Vercel, sempre usar SSL
+    const useSsl = dbSsl === 'true' || process.env.VERCEL === '1' || !!process.env.VERCEL;
+    
     return {
       type: 'postgres',
       host: dbHost,
@@ -37,17 +41,20 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       username: dbUsername,
       password: dbPassword,
       database: dbName,
-      ssl: dbSsl === 'true' ? {
+      ssl: useSsl ? {
         rejectUnauthorized: false, // Necessário para alguns ambientes de hospedagem
       } : false,
       entities: [User, ClienteMaster, Plano, Cupom, Assinatura, HistoricoMensal],
       synchronize: process.env.NODE_ENV !== 'production',
       logging: this.configService.get<string>('NODE_ENV') === 'development',
       autoLoadEntities: true,
-      extra: {
-        sslmode: dbSsl === 'true' ? 'require' : 'prefer',
+      extra: useSsl ? {
+        ssl: {
+          rejectUnauthorized: false,
+        },
+        sslmode: 'require',
         channel_binding: this.configService.get<string>('PGCHANNELBINDING', 'require'),
-      },
+      } : {},
     };
   }
 }
