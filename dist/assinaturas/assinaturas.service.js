@@ -57,6 +57,8 @@ const planos_service_1 = require("../planos/planos.service");
 const cupons_service_1 = require("../cupons/cupons.service");
 const clientes_master_service_1 = require("../users/clientes-master.service");
 const users_service_1 = require("../users/users.service");
+const user_base_service_1 = require("../users/services/user-base.service");
+const email_service_1 = require("../email/email.service");
 const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
 let AssinaturasService = class AssinaturasService {
     assinaturaRepository;
@@ -67,7 +69,9 @@ let AssinaturasService = class AssinaturasService {
     cuponsService;
     clientesMasterService;
     usersService;
-    constructor(assinaturaRepository, cupomRepository, historicoRepository, asaasService, planosService, cuponsService, clientesMasterService, usersService) {
+    userBaseService;
+    emailService;
+    constructor(assinaturaRepository, cupomRepository, historicoRepository, asaasService, planosService, cuponsService, clientesMasterService, usersService, userBaseService, emailService) {
         this.assinaturaRepository = assinaturaRepository;
         this.cupomRepository = cupomRepository;
         this.historicoRepository = historicoRepository;
@@ -76,6 +80,8 @@ let AssinaturasService = class AssinaturasService {
         this.cuponsService = cuponsService;
         this.clientesMasterService = clientesMasterService;
         this.usersService = usersService;
+        this.userBaseService = userBaseService;
+        this.emailService = emailService;
     }
     async create(createSubscriptionDto) {
         let coupon = null;
@@ -187,23 +193,64 @@ let AssinaturasService = class AssinaturasService {
         }
         const asaasSubscription = await this.asaasService.createSubscription(subscriptionData);
         const hashedPassword = await bcrypt.hash(createSubscriptionDto.password, 10);
-        let clienteMaster;
+        let userBase;
         try {
-            const existingCliente = await this.clientesMasterService.findByEmail(createSubscriptionDto.email);
-            if (existingCliente) {
-                throw new common_1.ConflictException('Já existe um cliente com este email');
+            const existingUserBase = await this.userBaseService.findByEmail(createSubscriptionDto.email);
+            if (existingUserBase) {
+                throw new common_1.ConflictException('Já existe um usuário cadastrado com este e-mail');
             }
-            clienteMaster = await this.clientesMasterService.create({
+            const existingClienteMaster = await this.clientesMasterService.findByEmail(createSubscriptionDto.email);
+            const existingUser = await this.usersService.findByEmail(createSubscriptionDto.email);
+            let emailJaVerificado = false;
+            if (existingClienteMaster) {
+                const userBaseDoCliente = await this.userBaseService.findById(existingClienteMaster.userId);
+                emailJaVerificado = userBaseDoCliente?.isVerified || false;
+            }
+            if (!emailJaVerificado && existingUser) {
+                emailJaVerificado = existingUser.isVerified || false;
+            }
+            let verificationToken = null;
+            let tokenExpiresAt = null;
+            let isVerified = false;
+            if (emailJaVerificado) {
+                isVerified = true;
+            }
+            else {
+                verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+                tokenExpiresAt = new Date();
+                tokenExpiresAt.setMinutes(tokenExpiresAt.getMinutes() + 15);
+            }
+            userBase = await this.userBaseService.create({
                 nome: createSubscriptionDto.name,
                 email: createSubscriptionDto.email,
                 password: hashedPassword,
+                cpf: createSubscriptionDto.cpf,
                 telefone: createSubscriptionDto.phone,
+                postalCode: createSubscriptionDto.postalCode,
+                address: createSubscriptionDto.address,
+                addressNumber: createSubscriptionDto.addressNumber,
+                complement: createSubscriptionDto.complement,
+                province: createSubscriptionDto.province,
+                city: createSubscriptionDto.city,
+                state: createSubscriptionDto.state,
+                isVerified,
+                verificationToken,
+                tokenExpiresAt,
             });
         }
         catch (error) {
             if (error instanceof common_1.ConflictException) {
                 throw error;
             }
+            throw new common_1.InternalServerErrorException(`Erro ao criar usuário: ${error.message || 'Erro desconhecido'}`);
+        }
+        let clienteMaster;
+        try {
+            clienteMaster = await this.clientesMasterService.create({
+                userId: userBase.id,
+            });
+        }
+        catch (error) {
             throw new common_1.InternalServerErrorException(`Erro ao criar cliente master: ${error.message || 'Erro desconhecido'}`);
         }
         const assinaturaData = {
@@ -225,6 +272,169 @@ let AssinaturasService = class AssinaturasService {
             state: createSubscriptionDto.state,
             value: valorFinal,
             billingType: createSubscriptionDto.billingType,
+            creditCardToken: creditCardToken ?? undefined,
+            creditCardNumber: creditCardNumber ?? undefined,
+            creditCardBrand: creditCardBrand ?? undefined,
+            status: 'PENDING',
+            asaasResponse: JSON.stringify(asaasSubscription),
+        };
+        const assinatura = this.assinaturaRepository.create(assinaturaData);
+        try {
+            const savedSubscription = await this.assinaturaRepository.save(assinatura);
+            return this.toResponseDto(savedSubscription);
+        }
+        catch (error) {
+            throw new common_1.InternalServerErrorException(`Erro ao salvar assinatura no banco de dados: ${error.message || 'Erro desconhecido'}`);
+        }
+    }
+    async createSimple(createSimpleSubscriptionDto, user) {
+        const userBase = await this.userBaseService.findByEmail(user.email);
+        if (!userBase) {
+            throw new common_1.NotFoundException('Usuário não encontrado');
+        }
+        const clienteMaster = await this.clientesMasterService.create({
+            userId: userBase.id,
+        });
+        if (!userBase.cpf || !userBase.telefone || !userBase.postalCode || !userBase.address) {
+            throw new common_1.BadRequestException('Dados incompletos. Por favor, complete seu cadastro com CPF, telefone e endereço antes de criar uma assinatura.');
+        }
+        let coupon = null;
+        let couponId = null;
+        if (createSimpleSubscriptionDto.couponName) {
+            coupon = await this.cuponsService.findByName(createSimpleSubscriptionDto.couponName);
+            if (!coupon) {
+                throw new common_1.BadRequestException('CUPOM INVALIDO');
+            }
+            if (!coupon.active) {
+                throw new common_1.BadRequestException('CUPOM INVALIDO');
+            }
+            couponId = coupon.id;
+        }
+        const plano = await this.planosService.findById(createSimpleSubscriptionDto.planoId);
+        if (!plano) {
+            throw new common_1.NotFoundException('Plano não encontrado');
+        }
+        let valorFinal = plano.valorPromocional || plano.valorOriginal;
+        if (coupon && coupon.active) {
+            const desconto = (valorFinal * Number(coupon.discountValue)) / 100;
+            valorFinal = valorFinal - desconto;
+            if (valorFinal < 0)
+                valorFinal = 0;
+        }
+        const existingSubscription = await this.assinaturaRepository.findOne({
+            where: { userId: clienteMaster.id },
+            order: { createdAt: 'DESC' },
+        });
+        let asaasCustomerId;
+        if (existingSubscription && existingSubscription.asaasCustomerId) {
+            asaasCustomerId = existingSubscription.asaasCustomerId;
+        }
+        else {
+            asaasCustomerId = await this.asaasService.createCustomer({
+                name: userBase.nome,
+                email: userBase.email,
+                cpfCnpj: userBase.cpf.replace(/\D/g, ''),
+                phone: userBase.telefone.replace(/\D/g, ''),
+                postalCode: userBase.postalCode.replace(/\D/g, ''),
+                address: userBase.address,
+                addressNumber: userBase.addressNumber || '',
+                complement: userBase.complement || '',
+                province: userBase.province || '',
+                city: userBase.city,
+                state: userBase.state,
+            });
+        }
+        let creditCardToken = null;
+        let creditCardNumber = null;
+        let creditCardBrand = null;
+        if (createSimpleSubscriptionDto.billingType === 'CREDIT_CARD') {
+            if (!createSimpleSubscriptionDto.creditCardHolderName ||
+                !createSimpleSubscriptionDto.creditCardNumber ||
+                !createSimpleSubscriptionDto.creditCardExpiryMonth ||
+                !createSimpleSubscriptionDto.creditCardExpiryYear ||
+                !createSimpleSubscriptionDto.creditCardCcv) {
+                throw new common_1.BadRequestException('Dados do cartão de crédito são obrigatórios');
+            }
+            try {
+                const tokenizedCard = await this.asaasService.tokenizeCreditCard({
+                    customer: asaasCustomerId,
+                    creditCard: {
+                        holderName: createSimpleSubscriptionDto.creditCardHolderName,
+                        number: createSimpleSubscriptionDto.creditCardNumber,
+                        expiryMonth: createSimpleSubscriptionDto.creditCardExpiryMonth,
+                        expiryYear: createSimpleSubscriptionDto.creditCardExpiryYear,
+                        ccv: createSimpleSubscriptionDto.creditCardCcv,
+                    },
+                    creditCardHolderInfo: {
+                        name: userBase.nome,
+                        email: userBase.email,
+                        cpfCnpj: userBase.cpf.replace(/\D/g, ''),
+                        postalCode: userBase.postalCode.replace(/\D/g, ''),
+                        addressNumber: userBase.addressNumber || '',
+                        addressComplement: userBase.complement || null,
+                        phone: userBase.telefone.replace(/\D/g, ''),
+                        mobilePhone: userBase.telefone.replace(/\D/g, ''),
+                    },
+                });
+                creditCardToken = tokenizedCard.creditCardToken;
+                creditCardNumber = tokenizedCard.creditCardNumber;
+                creditCardBrand = tokenizedCard.creditCardBrand;
+            }
+            catch (error) {
+                throw new common_1.BadRequestException(`Erro ao tokenizar cartão: ${error.message || 'Erro desconhecido'}`);
+            }
+        }
+        const nextDueDate = new Date();
+        const nextDueDateString = nextDueDate.toISOString().split('T')[0];
+        const subscriptionData = {
+            customer: asaasCustomerId,
+            billingType: createSimpleSubscriptionDto.billingType,
+            value: valorFinal,
+            nextDueDate: nextDueDateString,
+            cycle: 'MONTHLY',
+            description: `Assinatura ${plano.nome} NODON`,
+        };
+        if (coupon && coupon.active) {
+            subscriptionData.discount = {
+                value: Number(coupon.discountValue),
+                type: 'PERCENTAGE',
+            };
+        }
+        if (createSimpleSubscriptionDto.billingType === 'CREDIT_CARD') {
+            subscriptionData.creditCard = {
+                creditCardHolderName: createSimpleSubscriptionDto.creditCardHolderName,
+                creditCardHolderEmail: userBase.email,
+                creditCardHolderCpfCnpj: userBase.cpf.replace(/\D/g, ''),
+                creditCardHolderPhone: userBase.telefone.replace(/\D/g, ''),
+                creditCardHolderPostalCode: userBase.postalCode.replace(/\D/g, ''),
+                creditCardHolderAddress: userBase.address,
+                creditCardHolderAddressNumber: userBase.addressNumber || '',
+                creditCardHolderAddressComplement: userBase.complement || '',
+                creditCardHolderProvince: userBase.province || '',
+                creditCardHolderCity: userBase.city,
+                creditCardHolderState: userBase.state,
+            };
+        }
+        const asaasSubscription = await this.asaasService.createSubscription(subscriptionData);
+        const assinaturaData = {
+            userId: clienteMaster.id,
+            planoId: createSimpleSubscriptionDto.planoId,
+            couponId: couponId || undefined,
+            asaasCustomerId,
+            asaasSubscriptionId: asaasSubscription.id,
+            name: userBase.nome,
+            email: userBase.email,
+            cpf: userBase.cpf,
+            phone: userBase.telefone,
+            postalCode: userBase.postalCode,
+            address: userBase.address,
+            addressNumber: userBase.addressNumber,
+            complement: userBase.complement,
+            province: userBase.province,
+            city: userBase.city,
+            state: userBase.state,
+            value: valorFinal,
+            billingType: createSimpleSubscriptionDto.billingType,
             creditCardToken: creditCardToken ?? undefined,
             creditCardNumber: creditCardNumber ?? undefined,
             creditCardBrand: creditCardBrand ?? undefined,
@@ -436,6 +646,7 @@ exports.AssinaturasService = AssinaturasService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(assinatura_entity_1.Assinatura)),
     __param(1, (0, typeorm_1.InjectRepository)(cupom_entity_1.Cupom)),
     __param(2, (0, typeorm_1.InjectRepository)(historico_mensal_entity_1.HistoricoMensal)),
+    __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => clientes_master_service_1.ClientesMasterService))),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
@@ -443,6 +654,8 @@ exports.AssinaturasService = AssinaturasService = __decorate([
         planos_service_1.PlanosService,
         cupons_service_1.CuponsService,
         clientes_master_service_1.ClientesMasterService,
-        users_service_1.UsersService])
+        users_service_1.UsersService,
+        user_base_service_1.UserBaseService,
+        email_service_1.EmailService])
 ], AssinaturasService);
 //# sourceMappingURL=assinaturas.service.js.map

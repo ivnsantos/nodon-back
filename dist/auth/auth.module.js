@@ -18,6 +18,7 @@ const users_module_1 = require("../users/users.module");
 const clientes_master_module_1 = require("../users/clientes-master.module");
 const assinaturas_module_1 = require("../assinaturas/assinaturas.module");
 const planos_module_1 = require("../planos/planos.module");
+const email_module_1 = require("../email/email.module");
 let AuthModule = class AuthModule {
 };
 exports.AuthModule = AuthModule;
@@ -28,6 +29,7 @@ exports.AuthModule = AuthModule = __decorate([
             clientes_master_module_1.ClientesMasterModule,
             assinaturas_module_1.AssinaturasModule,
             planos_module_1.PlanosModule,
+            email_module_1.EmailModule,
             passport_1.PassportModule,
             jwt_1.JwtModule.registerAsync({
                 imports: [config_1.ConfigModule],

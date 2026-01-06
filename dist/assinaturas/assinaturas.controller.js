@@ -16,6 +16,7 @@ exports.AssinaturasController = void 0;
 const common_1 = require("@nestjs/common");
 const assinaturas_service_1 = require("./assinaturas.service");
 const create_subscription_dto_1 = require("./dto/create-subscription.dto");
+const create_simple_subscription_dto_1 = require("./dto/create-simple-subscription.dto");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 let AssinaturasController = class AssinaturasController {
     assinaturasService;
@@ -24,6 +25,9 @@ let AssinaturasController = class AssinaturasController {
     }
     async create(createSubscriptionDto) {
         return this.assinaturasService.create(createSubscriptionDto);
+    }
+    async createSimple(createSimpleSubscriptionDto, req) {
+        return this.assinaturasService.createSimple(createSimpleSubscriptionDto, req.user);
     }
     async checkPaymentStatus(userId) {
         return this.assinaturasService.checkFirstPaymentStatus(userId);
@@ -46,6 +50,15 @@ __decorate([
     __metadata("design:paramtypes", [create_subscription_dto_1.CreateSubscriptionDto]),
     __metadata("design:returntype", Promise)
 ], AssinaturasController.prototype, "create", null);
+__decorate([
+    (0, common_1.Post)('simple'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_simple_subscription_dto_1.CreateSimpleSubscriptionDto, Object]),
+    __metadata("design:returntype", Promise)
+], AssinaturasController.prototype, "createSimple", null);
 __decorate([
     (0, common_1.Get)('check-payment-status/:userId'),
     __param(0, (0, common_1.Param)('userId')),

@@ -47,6 +47,15 @@ export class User {
   @Column({ default: true })
   ativo: boolean;
 
+  @Column({ name: 'is_verified', type: 'boolean', default: false })
+  isVerified: boolean;
+
+  @Column({ name: 'verification_token', type: 'varchar', nullable: true })
+  verificationToken: string | null;
+
+  @Column({ name: 'token_expires_at', type: 'timestamp', nullable: true })
+  tokenExpiresAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

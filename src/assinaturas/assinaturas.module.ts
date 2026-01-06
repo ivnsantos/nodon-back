@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AssinaturasService } from './assinaturas.service';
 import { AssinaturasController } from './assinaturas.controller';
@@ -10,6 +10,7 @@ import { CuponsModule } from '../cupons/cupons.module';
 import { AsaasService } from './services/asaas.service';
 import { UsersModule } from '../users/users.module';
 import { ClientesMasterModule } from '../users/clientes-master.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
@@ -17,7 +18,8 @@ import { ClientesMasterModule } from '../users/clientes-master.module';
     PlanosModule,
     CuponsModule,
     UsersModule,
-    ClientesMasterModule,
+    forwardRef(() => ClientesMasterModule),
+    EmailModule,
   ],
   controllers: [AssinaturasController],
   providers: [AssinaturasService, AsaasService],

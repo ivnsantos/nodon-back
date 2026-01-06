@@ -2,12 +2,15 @@ import { Repository } from 'typeorm';
 import { Assinatura } from './entities/assinatura.entity';
 import { Cupom } from '../cupons/entities/cupom.entity';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { CreateSimpleSubscriptionDto } from './dto/create-simple-subscription.dto';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import { AsaasService } from './services/asaas.service';
 import { PlanosService } from '../planos/planos.service';
 import { CuponsService } from '../cupons/cupons.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { UsersService } from '../users/users.service';
+import { UserBaseService } from '../users/services/user-base.service';
+import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 export declare class AssinaturasService {
     private readonly assinaturaRepository;
@@ -18,8 +21,16 @@ export declare class AssinaturasService {
     private readonly cuponsService;
     private readonly clientesMasterService;
     private readonly usersService;
-    constructor(assinaturaRepository: Repository<Assinatura>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService);
+    private readonly userBaseService;
+    private readonly emailService;
+    constructor(assinaturaRepository: Repository<Assinatura>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, emailService: EmailService);
     create(createSubscriptionDto: CreateSubscriptionDto): Promise<SubscriptionResponseDto>;
+    createSimple(createSimpleSubscriptionDto: CreateSimpleSubscriptionDto, user: {
+        id: string;
+        email: string;
+        tipo: string;
+        clienteMasterId?: string | null;
+    }): Promise<SubscriptionResponseDto>;
     findByUserId(userId: string): Promise<SubscriptionResponseDto | null>;
     checkFirstPaymentStatus(userId: string): Promise<{
         status: string;
