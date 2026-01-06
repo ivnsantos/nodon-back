@@ -9,6 +9,7 @@ import { UsersModule } from '../users/users.module';
 import { ClientesMasterModule } from '../users/clientes-master.module';
 import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { PlanosModule } from '../planos/planos.module';
+import { EmailModule } from '../email/email.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { PlanosModule } from '../planos/planos.module';
     ClientesMasterModule,
     AssinaturasModule,
     PlanosModule,
+    EmailModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

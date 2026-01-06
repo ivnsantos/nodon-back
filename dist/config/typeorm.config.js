@@ -12,48 +12,63 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TypeOrmConfigService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
-const path_1 = require("path");
+const dotenv_1 = require("dotenv");
+const user_entity_1 = require("../users/entities/user.entity");
+const user_base_entity_1 = require("../users/entities/user-base.entity");
+const user_comum_entity_1 = require("../users/entities/user-comum.entity");
+const cliente_master_entity_1 = require("../users/entities/cliente-master.entity");
+const plano_entity_1 = require("../planos/entities/plano.entity");
+const cupom_entity_1 = require("../cupons/entities/cupom.entity");
+const assinatura_entity_1 = require("../assinaturas/entities/assinatura.entity");
+const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
+(0, dotenv_1.config)();
 let TypeOrmConfigService = class TypeOrmConfigService {
     configService;
     constructor(configService) {
         this.configService = configService;
     }
     createTypeOrmOptions() {
-        const sslEnabled = this.configService.get('DB_SSL', 'true') === 'true';
-        const host = this.configService.get('DB_HOST');
-        const database = this.configService.get('DB_NAME');
-        const username = this.configService.get('DB_USERNAME');
-        if (!host || !database || !username) {
-            console.error('❌ Variáveis de banco de dados faltando:');
-            console.error('  - DB_HOST:', host || '❌ FALTANDO');
-            console.error('  - DB_NAME:', database || '❌ FALTANDO');
-            console.error('  - DB_USERNAME:', username || '❌ FALTANDO');
-            throw new Error('Variáveis de banco de dados não configuradas. Verifique as variáveis de ambiente no Vercel.');
+        const dbHost = this.configService.get('DB_HOST')?.trim();
+        const dbPort = this.configService.get('DB_PORT')?.trim();
+        const dbUsername = this.configService.get('DB_USERNAME')?.trim();
+        const dbPassword = this.configService.get('DB_PASSWORD')?.trim();
+        const dbName = this.configService.get('DB_NAME')?.trim();
+        const dbSsl = this.configService.get('DB_SSL')?.trim();
+        if (!dbHost || !dbPort || !dbUsername || !dbPassword || !dbName) {
+            console.error('❌ Variáveis de banco de dados faltando ou inválidas:');
+            console.error('  - DB_HOST:', dbHost || '❌ FALTANDO');
+            console.error('  - DB_PORT:', dbPort || '❌ FALTANDO');
+            console.error('  - DB_USERNAME:', dbUsername || '❌ FALTANDO');
+            console.error('  - DB_PASSWORD:', dbPassword ? '✅ Configurado' : '❌ FALTANDO');
+            console.error('  - DB_NAME:', dbName || '❌ FALTANDO');
+            throw new Error('Configurações do banco de dados estão faltando no arquivo .env');
         }
         console.log('✅ Configuração do banco de dados:');
-        console.log('  - Host:', host);
-        console.log('  - Database:', database);
-        console.log('  - Username:', username);
-        console.log('  - SSL:', sslEnabled ? 'Habilitado' : 'Desabilitado');
+        console.log('  - Host:', dbHost);
+        console.log('  - Port:', dbPort);
+        console.log('  - Username:', dbUsername);
+        console.log('  - Database:', dbName);
+        console.log('  - SSL:', dbSsl === 'true' || process.env.VERCEL ? 'Habilitado' : 'Desabilitado');
+        const useSsl = true;
         return {
             type: 'postgres',
-            host,
-            port: this.configService.get('DB_PORT', 5432),
-            username,
-            password: this.configService.get('DB_PASSWORD', ''),
-            database,
-            entities: [(0, path_1.join)(__dirname, '../**/*.entity{.ts,.js}')],
-            synchronize: process.env.NODE_ENV !== 'production',
-            logging: process.env.NODE_ENV === 'development',
-            autoLoadEntities: true,
-            ssl: sslEnabled ? {
+            host: dbHost,
+            port: parseInt(dbPort, 10),
+            username: dbUsername,
+            password: dbPassword,
+            database: dbName,
+            ssl: useSsl ? {
                 rejectUnauthorized: false,
             } : false,
-            extra: {
-                sslmode: sslEnabled ? 'require' : 'prefer',
-                channel_binding: this.configService.get('PGCHANNELBINDING', 'require'),
-            },
-            connectTimeoutMS: 10000,
+            entities: [user_entity_1.User, user_base_entity_1.UserBase, user_comum_entity_1.UserComum, cliente_master_entity_1.ClienteMaster, plano_entity_1.Plano, cupom_entity_1.Cupom, assinatura_entity_1.Assinatura, historico_mensal_entity_1.HistoricoMensal],
+            synchronize: process.env.NODE_ENV !== 'production',
+            logging: this.configService.get('NODE_ENV') === 'development',
+            autoLoadEntities: true,
+            extra: useSsl ? {
+                ssl: {
+                    rejectUnauthorized: false,
+                },
+            } : {},
         };
     }
 };

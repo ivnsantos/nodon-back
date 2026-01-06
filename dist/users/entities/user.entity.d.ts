@@ -13,6 +13,9 @@ export declare class User {
     clienteMasterId: string;
     clienteMaster: ClienteMaster;
     ativo: boolean;
+    isVerified: boolean;
+    verificationToken: string | null;
+    tokenExpiresAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
 }

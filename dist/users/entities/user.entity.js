@@ -27,6 +27,9 @@ let User = class User {
     clienteMasterId;
     clienteMaster;
     ativo;
+    isVerified;
+    verificationToken;
+    tokenExpiresAt;
     createdAt;
     updatedAt;
 };
@@ -69,6 +72,18 @@ __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
 ], User.prototype, "ativo", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'is_verified', type: 'boolean', default: false }),
+    __metadata("design:type", Boolean)
+], User.prototype, "isVerified", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'verification_token', type: 'varchar', nullable: true }),
+    __metadata("design:type", Object)
+], User.prototype, "verificationToken", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'token_expires_at', type: 'timestamp', nullable: true }),
+    __metadata("design:type", Object)
+], User.prototype, "tokenExpiresAt", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at' }),
     __metadata("design:type", Date)

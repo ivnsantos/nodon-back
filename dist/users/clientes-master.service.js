@@ -17,22 +17,55 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const cliente_master_entity_1 = require("./entities/cliente-master.entity");
+const user_base_entity_1 = require("./entities/user-base.entity");
+const assinaturas_service_1 = require("../assinaturas/assinaturas.service");
+const planos_service_1 = require("../planos/planos.service");
 let ClientesMasterService = class ClientesMasterService {
     clienteMasterRepository;
-    constructor(clienteMasterRepository) {
+    userBaseRepository;
+    assinaturasService;
+    planosService;
+    constructor(clienteMasterRepository, userBaseRepository, assinaturasService, planosService) {
         this.clienteMasterRepository = clienteMasterRepository;
+        this.userBaseRepository = userBaseRepository;
+        this.assinaturasService = assinaturasService;
+        this.planosService = planosService;
     }
     async create(data) {
-        const clienteMaster = this.clienteMasterRepository.create(data);
+        const clienteMaster = this.clienteMasterRepository.create({
+            userId: data.userId,
+            nomeEmpresa: data.nomeEmpresa || 'Empresa',
+            cnpj: data.cnpj,
+            logo: data.logo,
+            cor: data.cor,
+            telefoneEmpresa: data.telefoneEmpresa,
+            site: data.site,
+            descricao: data.descricao,
+            outrasInformacoes: data.outrasInformacoes,
+            ativo: true,
+        });
         return this.clienteMasterRepository.save(clienteMaster);
     }
+    async findByUserId(userId) {
+        return this.clienteMasterRepository.find({
+            where: { userId },
+            relations: ['user', 'usuarios', 'assinaturas'],
+        });
+    }
     async findByEmail(email) {
-        return this.clienteMasterRepository.findOne({ where: { email } });
+        const userBase = await this.userBaseRepository.findOne({ where: { email } });
+        if (!userBase) {
+            return null;
+        }
+        return this.clienteMasterRepository.findOne({
+            where: { userId: userBase.id },
+            relations: ['user', 'usuarios', 'assinaturas'],
+        });
     }
     async findById(id) {
         return this.clienteMasterRepository.findOne({
             where: { id },
-            relations: ['usuarios', 'assinaturas'],
+            relations: ['user', 'usuarios', 'assinaturas'],
         });
     }
     async findAll() {
@@ -51,11 +84,146 @@ let ClientesMasterService = class ClientesMasterService {
     async delete(id) {
         await this.clienteMasterRepository.delete(id);
     }
+    async getCompleteInfo(clienteMasterId) {
+        const clienteMaster = await this.findById(clienteMasterId);
+        if (!clienteMaster) {
+            throw new common_1.NotFoundException('Cliente Master não encontrado');
+        }
+        const userBase = clienteMaster.user;
+        if (!userBase) {
+            throw new common_1.NotFoundException('Usuário base não encontrado para este Cliente Master');
+        }
+        const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
+        if (assinatura && assinatura.status === 'PENDING') {
+            return {
+                clienteMaster: {
+                    id: clienteMaster.id,
+                    nomeEmpresa: clienteMaster.nomeEmpresa,
+                    cnpj: clienteMaster.cnpj,
+                    logo: clienteMaster.logo,
+                    cor: clienteMaster.cor,
+                    telefoneEmpresa: clienteMaster.telefoneEmpresa,
+                    site: clienteMaster.site,
+                    descricao: clienteMaster.descricao,
+                    outrasInformacoes: clienteMaster.outrasInformacoes,
+                    ativo: clienteMaster.ativo,
+                    createdAt: clienteMaster.createdAt,
+                    updatedAt: clienteMaster.updatedAt,
+                },
+                user: {
+                    id: userBase.id,
+                    nome: userBase.nome,
+                    email: userBase.email,
+                    cpf: userBase.cpf,
+                    telefone: userBase.telefone,
+                    cro: userBase.cro,
+                    postalCode: userBase.postalCode,
+                    address: userBase.address,
+                    addressNumber: userBase.addressNumber,
+                    complement: userBase.complement,
+                    province: userBase.province,
+                    city: userBase.city,
+                    state: userBase.state,
+                    isVerified: userBase.isVerified,
+                    createdAt: userBase.createdAt,
+                    updatedAt: userBase.updatedAt,
+                },
+                assinatura: {
+                    id: assinatura.id,
+                    status: assinatura.status,
+                },
+                plano: null,
+            };
+        }
+        let plano = null;
+        if (assinatura && assinatura.planoId) {
+            plano = await this.planosService.findById(assinatura.planoId);
+        }
+        return {
+            clienteMaster: {
+                id: clienteMaster.id,
+                nomeEmpresa: clienteMaster.nomeEmpresa,
+                cnpj: clienteMaster.cnpj,
+                logo: clienteMaster.logo,
+                cor: clienteMaster.cor,
+                telefoneEmpresa: clienteMaster.telefoneEmpresa,
+                site: clienteMaster.site,
+                descricao: clienteMaster.descricao,
+                outrasInformacoes: clienteMaster.outrasInformacoes,
+                ativo: clienteMaster.ativo,
+                createdAt: clienteMaster.createdAt,
+                updatedAt: clienteMaster.updatedAt,
+            },
+            user: {
+                id: userBase.id,
+                nome: userBase.nome,
+                email: userBase.email,
+                cpf: userBase.cpf,
+                telefone: userBase.telefone,
+                cro: userBase.cro,
+                postalCode: userBase.postalCode,
+                address: userBase.address,
+                addressNumber: userBase.addressNumber,
+                complement: userBase.complement,
+                province: userBase.province,
+                city: userBase.city,
+                state: userBase.state,
+                isVerified: userBase.isVerified,
+                createdAt: userBase.createdAt,
+                updatedAt: userBase.updatedAt,
+            },
+            assinatura: assinatura
+                ? {
+                    id: assinatura.id,
+                    userId: assinatura.userId,
+                    asaasCustomerId: assinatura.asaasCustomerId,
+                    asaasSubscriptionId: assinatura.asaasSubscriptionId,
+                    name: assinatura.name,
+                    email: assinatura.email,
+                    cpf: assinatura.cpf,
+                    phone: assinatura.phone,
+                    postalCode: assinatura.postalCode,
+                    address: assinatura.address,
+                    addressNumber: assinatura.addressNumber,
+                    complement: assinatura.complement,
+                    province: assinatura.province,
+                    city: assinatura.city,
+                    state: assinatura.state,
+                    value: assinatura.value,
+                    billingType: assinatura.billingType,
+                    status: assinatura.status,
+                    planoId: assinatura.planoId,
+                    couponId: assinatura.couponId,
+                    createdAt: assinatura.createdAt,
+                    updatedAt: assinatura.updatedAt,
+                }
+                : null,
+            plano: plano
+                ? {
+                    id: plano.id,
+                    nome: plano.nome,
+                    descricao: plano.descricao,
+                    valorOriginal: plano.valorOriginal,
+                    valorPromocional: plano.valorPromocional,
+                    tokenChat: plano.tokenChat,
+                    limiteAnalises: plano.limiteAnalises,
+                    ativo: plano.ativo,
+                    createdAt: plano.createdAt,
+                    updatedAt: plano.updatedAt,
+                }
+                : null,
+        };
+    }
 };
 exports.ClientesMasterService = ClientesMasterService;
 exports.ClientesMasterService = ClientesMasterService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(cliente_master_entity_1.ClienteMaster)),
-    __metadata("design:paramtypes", [typeorm_2.Repository])
+    __param(1, (0, typeorm_1.InjectRepository)(user_base_entity_1.UserBase)),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => assinaturas_service_1.AssinaturasService))),
+    __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
+        assinaturas_service_1.AssinaturasService,
+        planos_service_1.PlanosService])
 ], ClientesMasterService);
 //# sourceMappingURL=clientes-master.service.js.map

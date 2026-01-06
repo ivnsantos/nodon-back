@@ -34,6 +34,24 @@ let AuthController = class AuthController {
     async logout(req) {
         return this.authService.logout(req.user);
     }
+    async verifyEmail(body) {
+        if (!body.email || !body.code) {
+            throw new common_1.BadRequestException('E-mail e código são obrigatórios');
+        }
+        return this.authService.verifyEmail(body.email, body.code);
+    }
+    async resendVerificationCode(body) {
+        if (!body.email) {
+            throw new common_1.BadRequestException('E-mail é obrigatório');
+        }
+        return this.authService.resendVerificationCode(body.email);
+    }
+    async getClientByEmail(email) {
+        if (!email) {
+            throw new common_1.BadRequestException('E-mail é obrigatório');
+        }
+        return this.authService.getClientMasterByEmail(email);
+    }
 };
 exports.AuthController = AuthController;
 __decorate([
@@ -67,6 +85,27 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "logout", null);
+__decorate([
+    (0, common_1.Post)('verify-email'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "verifyEmail", null);
+__decorate([
+    (0, common_1.Post)('resend-verification-code'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "resendVerificationCode", null);
+__decorate([
+    (0, common_1.Get)('get-client-by-email'),
+    __param(0, (0, common_1.Query)('email')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "getClientByEmail", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
     __metadata("design:paramtypes", [auth_service_1.AuthService])

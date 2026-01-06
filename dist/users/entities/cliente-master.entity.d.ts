@@ -1,15 +1,21 @@
-import { User } from './user.entity';
+import { UserBase } from './user-base.entity';
+import { UserComum } from './user-comum.entity';
 import { Assinatura } from '../../assinaturas/entities/assinatura.entity';
 export declare class ClienteMaster {
     id: string;
-    nome: string;
-    email: string;
-    password: string;
-    telefone: string;
+    userId: string;
+    user: UserBase;
+    nomeEmpresa: string;
     cnpj: string;
+    logo: string;
+    cor: string;
+    telefoneEmpresa: string;
+    site: string;
+    descricao: string;
+    outrasInformacoes: string;
     ativo: boolean;
     createdAt: Date;
     updatedAt: Date;
-    usuarios: User[];
+    usuarios: UserComum[];
     assinaturas: Assinatura[];
 }

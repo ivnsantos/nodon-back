@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmOptionsFactory, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { config } from 'dotenv';
 import { User } from '../users/entities/user.entity';
+import { UserBase } from '../users/entities/user-base.entity';
+import { UserComum } from '../users/entities/user-comum.entity';
 import { ClienteMaster } from '../users/entities/cliente-master.entity';
 import { Plano } from '../planos/entities/plano.entity';
 import { Cupom } from '../cupons/entities/cupom.entity';
@@ -47,8 +49,8 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
 
     // SSL é obrigatório para conexões externas (Vercel) ou quando DB_SSL=true
     // No Vercel, sempre usar SSL
-    const useSsl = dbSsl === 'true' || process.env.VERCEL === '1' || !!process.env.VERCEL;
-    
+    const useSsl = true;
+
     return {
       type: 'postgres',
       host: dbHost,
@@ -59,7 +61,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       ssl: useSsl ? {
         rejectUnauthorized: false, // Necessário para alguns ambientes de hospedagem
       } : false,
-      entities: [User, ClienteMaster, Plano, Cupom, Assinatura, HistoricoMensal],
+      entities: [User, UserBase, UserComum, ClienteMaster, Plano, Cupom, Assinatura, HistoricoMensal],
       synchronize: process.env.NODE_ENV !== 'production',
       logging: this.configService.get<string>('NODE_ENV') === 'development',
       autoLoadEntities: true,
@@ -67,8 +69,6 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
         ssl: {
           rejectUnauthorized: false,
         },
-        sslmode: 'require',
-        channel_binding: this.configService.get<string>('PGCHANNELBINDING', 'require'),
       } : {},
     };
   }

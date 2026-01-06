@@ -11,15 +11,21 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ClienteMaster = void 0;
 const typeorm_1 = require("typeorm");
-const user_entity_1 = require("./user.entity");
+const user_base_entity_1 = require("./user-base.entity");
+const user_comum_entity_1 = require("./user-comum.entity");
 const assinatura_entity_1 = require("../../assinaturas/entities/assinatura.entity");
 let ClienteMaster = class ClienteMaster {
     id;
-    nome;
-    email;
-    password;
-    telefone;
+    userId;
+    user;
+    nomeEmpresa;
     cnpj;
+    logo;
+    cor;
+    telefoneEmpresa;
+    site;
+    descricao;
+    outrasInformacoes;
     ativo;
     createdAt;
     updatedAt;
@@ -32,25 +38,46 @@ __decorate([
     __metadata("design:type", String)
 ], ClienteMaster.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)(),
+    (0, typeorm_1.Column)({ name: 'user_id' }),
     __metadata("design:type", String)
-], ClienteMaster.prototype, "nome", void 0);
+], ClienteMaster.prototype, "userId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ unique: true }),
-    __metadata("design:type", String)
-], ClienteMaster.prototype, "email", void 0);
+    (0, typeorm_1.ManyToOne)(() => user_base_entity_1.UserBase, (user) => user.clientesMaster),
+    (0, typeorm_1.JoinColumn)({ name: 'user_id' }),
+    __metadata("design:type", user_base_entity_1.UserBase)
+], ClienteMaster.prototype, "user", void 0);
 __decorate([
-    (0, typeorm_1.Column)(),
+    (0, typeorm_1.Column)({ name: 'nome_empresa', default: 'Empresa' }),
     __metadata("design:type", String)
-], ClienteMaster.prototype, "password", void 0);
-__decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
-    __metadata("design:type", String)
-], ClienteMaster.prototype, "telefone", void 0);
+], ClienteMaster.prototype, "nomeEmpresa", void 0);
 __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], ClienteMaster.prototype, "cnpj", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], ClienteMaster.prototype, "logo", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ nullable: true }),
+    __metadata("design:type", String)
+], ClienteMaster.prototype, "cor", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'telefone_empresa', nullable: true }),
+    __metadata("design:type", String)
+], ClienteMaster.prototype, "telefoneEmpresa", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'site', nullable: true }),
+    __metadata("design:type", String)
+], ClienteMaster.prototype, "site", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'descricao', type: 'text', nullable: true }),
+    __metadata("design:type", String)
+], ClienteMaster.prototype, "descricao", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'outras_informacoes', type: 'text', nullable: true }),
+    __metadata("design:type", String)
+], ClienteMaster.prototype, "outrasInformacoes", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)
@@ -64,7 +91,7 @@ __decorate([
     __metadata("design:type", Date)
 ], ClienteMaster.prototype, "updatedAt", void 0);
 __decorate([
-    (0, typeorm_1.OneToMany)(() => user_entity_1.User, (user) => user.clienteMaster),
+    (0, typeorm_1.OneToMany)(() => user_comum_entity_1.UserComum, (userComum) => userComum.clienteMaster),
     __metadata("design:type", Array)
 ], ClienteMaster.prototype, "usuarios", void 0);
 __decorate([

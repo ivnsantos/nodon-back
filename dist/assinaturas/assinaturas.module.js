@@ -19,6 +19,7 @@ const cupons_module_1 = require("../cupons/cupons.module");
 const asaas_service_1 = require("./services/asaas.service");
 const users_module_1 = require("../users/users.module");
 const clientes_master_module_1 = require("../users/clientes-master.module");
+const email_module_1 = require("../email/email.module");
 let AssinaturasModule = class AssinaturasModule {
 };
 exports.AssinaturasModule = AssinaturasModule;
@@ -29,7 +30,8 @@ exports.AssinaturasModule = AssinaturasModule = __decorate([
             planos_module_1.PlanosModule,
             cupons_module_1.CuponsModule,
             users_module_1.UsersModule,
-            clientes_master_module_1.ClientesMasterModule,
+            (0, common_1.forwardRef)(() => clientes_master_module_1.ClientesMasterModule),
+            email_module_1.EmailModule,
         ],
         controllers: [assinaturas_controller_1.AssinaturasController],
         providers: [assinaturas_service_1.AssinaturasService, asaas_service_1.AsaasService],

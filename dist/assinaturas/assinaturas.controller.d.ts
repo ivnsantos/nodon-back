@@ -1,9 +1,11 @@
 import { AssinaturasService } from './assinaturas.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { CreateSimpleSubscriptionDto } from './dto/create-simple-subscription.dto';
 export declare class AssinaturasController {
     private assinaturasService;
     constructor(assinaturasService: AssinaturasService);
     create(createSubscriptionDto: CreateSubscriptionDto): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto>;
+    createSimple(createSimpleSubscriptionDto: CreateSimpleSubscriptionDto, req: any): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto>;
     checkPaymentStatus(userId: string): Promise<{
         status: string;
     }>;

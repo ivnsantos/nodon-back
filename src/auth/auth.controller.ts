@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Query, BadRequestException } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { IsMasterGuard } from './guards/is-master.guard';
@@ -45,6 +45,30 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async logout(@Request() req) {
     return this.authService.logout(req.user);
+  }
+
+  @Post('verify-email')
+  async verifyEmail(@Body() body: { email: string; code: string }) {
+    if (!body.email || !body.code) {
+      throw new BadRequestException('E-mail e código são obrigatórios');
+    }
+    return this.authService.verifyEmail(body.email, body.code);
+  }
+
+  @Post('resend-verification-code')
+  async resendVerificationCode(@Body() body: { email: string }) {
+    if (!body.email) {
+      throw new BadRequestException('E-mail é obrigatório');
+    }
+    return this.authService.resendVerificationCode(body.email);
+  }
+
+  @Get('get-client-by-email')
+  async getClientByEmail(@Query('email') email: string) {
+    if (!email) {
+      throw new BadRequestException('E-mail é obrigatório');
+    }
+    return this.authService.getClientMasterByEmail(email);
   }
 }
 

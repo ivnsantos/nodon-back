@@ -17,15 +17,21 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("./entities/user.entity");
+const user_comum_entity_1 = require("./entities/user-comum.entity");
 let UsersService = class UsersService {
     userRepository;
-    constructor(userRepository) {
+    userComumRepository;
+    constructor(userRepository, userComumRepository) {
         this.userRepository = userRepository;
+        this.userComumRepository = userComumRepository;
     }
     async create(data) {
         const user = this.userRepository.create({
             ...data,
             tipo: data.tipo || user_entity_1.UserType.USER,
+            isVerified: data.isVerified ?? false,
+            verificationToken: data.verificationToken ?? null,
+            tokenExpiresAt: data.tokenExpiresAt ?? null,
         });
         return this.userRepository.save(user);
     }
@@ -36,8 +42,9 @@ let UsersService = class UsersService {
         return this.userRepository.findOne({ where: { id } });
     }
     async findAllByClienteMaster(clienteMasterId) {
-        return this.userRepository.find({
+        return this.userComumRepository.find({
             where: { clienteMasterId },
+            relations: ['user', 'clienteMaster'],
             order: { createdAt: 'DESC' },
         });
     }
@@ -52,11 +59,28 @@ let UsersService = class UsersService {
     async delete(id) {
         await this.userRepository.delete(id);
     }
+    async findByVerificationToken(token) {
+        return this.userRepository.findOne({ where: { verificationToken: token } });
+    }
+    async updateVerificationStatus(id, isVerified) {
+        await this.userRepository.update(id, {
+            isVerified,
+            verificationToken: null,
+            tokenExpiresAt: null,
+        });
+        const user = await this.findById(id);
+        if (!user) {
+            throw new Error('Usuário não encontrado');
+        }
+        return user;
+    }
 };
 exports.UsersService = UsersService;
 exports.UsersService = UsersService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
-    __metadata("design:paramtypes", [typeorm_2.Repository])
+    __param(1, (0, typeorm_1.InjectRepository)(user_comum_entity_1.UserComum)),
+    __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository])
 ], UsersService);
 //# sourceMappingURL=users.service.js.map

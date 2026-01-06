@@ -9,6 +9,8 @@ import { CuponsModule } from './cupons/cupons.module';
 import { AssinaturasModule } from './assinaturas/assinaturas.module';
 import { AnalisesModule } from './analises/analises.module';
 import { HealthModule } from './health/health.module';
+import { EmailModule } from './email/email.module';
+import { StorageModule } from './storage/storage.module';
 import { TypeOrmConfigService } from './config/typeorm.config';
 import { PlanosService } from './planos/planos.service';
 
@@ -36,6 +38,8 @@ import { PlanosService } from './planos/planos.service';
     AssinaturasModule,
     AnalisesModule,
     HealthModule,
+    EmailModule,
+    StorageModule,
   ],
 })
 export class AppModule implements OnModuleInit {

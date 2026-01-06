@@ -13,6 +13,7 @@ export declare class AuthController {
             email: any;
             tipo: any;
             isAdmin: boolean;
+            isEmailVerified: boolean;
             assinatura: {
                 id: any;
                 status: any;
@@ -28,12 +29,14 @@ export declare class AuthController {
         telefone?: string;
         cnpj?: string;
     }): Promise<{
-        access_token: string;
+        message: string;
         user: {
             id: string;
+            userId: string;
             nome: string;
             email: string;
             tipo: string;
+            isVerified: boolean;
         };
     }>;
     registerUser(registerDto: {
@@ -42,17 +45,39 @@ export declare class AuthController {
         password: string;
         clienteMasterId: string;
     }, req: any): Promise<{
-        access_token: string;
+        message: string;
         user: {
             id: string;
             nome: string;
             email: string;
             tipo: import("../users/entities/user.entity").UserType;
             clienteMasterId: string;
+            isVerified: boolean;
         };
     }>;
     logout(req: any): Promise<{
         message: string;
         userId: any;
+    }>;
+    verifyEmail(body: {
+        email: string;
+        code: string;
+    }): Promise<{
+        message: string;
+    }>;
+    resendVerificationCode(body: {
+        email: string;
+    }): Promise<{
+        message: string;
+        code?: undefined;
+        warning?: undefined;
+    } | {
+        message: string;
+        code: string;
+        warning: string;
+    }>;
+    getClientByEmail(email: string): Promise<{
+        quantidade: number;
+        clientesMaster: import("./auth.service").ClienteMasterInfo[];
     }>;
 }
