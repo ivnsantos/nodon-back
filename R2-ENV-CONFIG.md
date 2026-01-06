@@ -6,9 +6,11 @@ Para que o upload de imagens funcione, você **DEVE** configurar estas variávei
 
 ```env
 # Cloudflare R2 - OBRIGATÓRIAS
-R2_ACCOUNT_ID=016184c3fec4e160e9b38a985a7fc4db
-R2_ACCESS_KEY_ID=0cc461c690364ea512d5151cb4e41f38
-R2_SECRET_ACCESS_KEY=5c456726242aee7b5ae71cf547e048ce89c6111ce636f6303df083876011cd6b
+# ⚠️ NUNCA commite credenciais reais no Git!
+# Use valores reais apenas no arquivo .env local (que está no .gitignore)
+R2_ACCOUNT_ID=SEU_ACCOUNT_ID_AQUI
+R2_ACCESS_KEY_ID=SUA_ACCESS_KEY_ID_AQUI
+R2_SECRET_ACCESS_KEY=SUA_SECRET_ACCESS_KEY_AQUI
 ```
 
 ## Variáveis Opcionais (com valores padrão)
@@ -17,8 +19,8 @@ Estas variáveis têm valores padrão, mas você pode personalizá-las:
 
 ```env
 # Cloudflare R2 - OPCIONAIS
-R2_BUCKET_NAME=hml
-R2_PUBLIC_DOMAIN=https://pub-f6373861b23346918a681332b65f9a68.r2.dev
+R2_BUCKET_NAME=seu-bucket
+R2_PUBLIC_DOMAIN=https://seu-dominio-publico.r2.dev
 ```
 
 ## O que acontece se não configurar?
@@ -34,11 +36,12 @@ Adicione ao seu arquivo `.env` na raiz do projeto:
 
 ```env
 # Cloudflare R2
-R2_ACCOUNT_ID=016184c3fec4e160e9b38a985a7fc4db
-R2_ACCESS_KEY_ID=0cc461c690364ea512d5151cb4e41f38
-R2_SECRET_ACCESS_KEY=5c456726242aee7b5ae71cf547e048ce89c6111ce636f6303df083876011cd6b
-R2_BUCKET_NAME=hml
-R2_PUBLIC_DOMAIN=https://pub-f6373861b23346918a681332b65f9a68.r2.dev
+# ⚠️ NUNCA commite credenciais reais no Git!
+R2_ACCOUNT_ID=SEU_ACCOUNT_ID_AQUI
+R2_ACCESS_KEY_ID=SUA_ACCESS_KEY_ID_AQUI
+R2_SECRET_ACCESS_KEY=SUA_SECRET_ACCESS_KEY_AQUI
+R2_BUCKET_NAME=seu-bucket
+R2_PUBLIC_DOMAIN=https://seu-dominio-publico.r2.dev
 ```
 
 ## Configuração no Vercel
@@ -59,15 +62,17 @@ R2_PUBLIC_DOMAIN=https://pub-f6373861b23346918a681332b65f9a68.r2.dev
 
 ```env
 # Banco de Dados
+# ⚠️ NUNCA commite credenciais reais no Git!
 DB_HOST=localhost
 DB_PORT=5432
 DB_USERNAME=postgres
-DB_PASSWORD=root
+DB_PASSWORD=SUA_SENHA_AQUI
 DB_NAME=nodondb
 DB_SSL=false
 
 # JWT
-JWT_SECRET=NodonDentista@8898GOLdoPalmeiras
+# ⚠️ NUNCA commite secrets reais no Git!
+JWT_SECRET=SEU_JWT_SECRET_AQUI
 
 # Asaas
 ASAAS_API_KEY=sua_chave_api_asaas
