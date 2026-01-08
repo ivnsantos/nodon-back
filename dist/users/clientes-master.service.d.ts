@@ -23,12 +23,14 @@ export declare class ClientesMasterService {
     findByUserId(userId: string): Promise<ClienteMaster[]>;
     findByEmail(email: string): Promise<ClienteMaster | null>;
     findById(id: string): Promise<ClienteMaster | null>;
+    findByHash(hash: string): Promise<ClienteMaster | null>;
     findAll(): Promise<ClienteMaster[]>;
     update(id: string, data: Partial<ClienteMaster>): Promise<ClienteMaster>;
     delete(id: string): Promise<void>;
     getCompleteInfo(clienteMasterId: string): Promise<{
         clienteMaster: {
             id: string;
+            hash: string | null;
             nomeEmpresa: string;
             cnpj: string;
             logo: string;
@@ -87,6 +89,7 @@ export declare class ClientesMasterService {
     } | {
         clienteMaster: {
             id: string;
+            hash: string | null;
             nomeEmpresa: string;
             cnpj: string;
             logo: string;

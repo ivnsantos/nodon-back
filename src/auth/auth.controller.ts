@@ -1,11 +1,15 @@
-import { Controller, Post, Body, UseGuards, Request, Get, Query, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Query, BadRequestException, NotFoundException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { ClientesMasterService } from '../users/clientes-master.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { IsMasterGuard } from './guards/is-master.guard';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private clientesMasterService: ClientesMasterService,
+  ) {}
 
   @Post('login')
   async login(@Body() loginDto: { email: string; password: string }) {
@@ -34,11 +38,28 @@ export class AuthController {
       nome: string;
       email: string;
       password: string;
-      clienteMasterId: string;
+      clienteMasterId?: string;
     },
     @Request() req,
   ) {
-    return this.authService.registerUser(registerDto, req.user.clienteMasterId || req.user.id);
+    // req.user.id agora é o ID do UserBase
+    // Se clienteMasterId não for fornecido no body, buscar do UserBase
+    let clienteMasterId = registerDto.clienteMasterId;
+    if (!clienteMasterId) {
+      // Buscar ClienteMaster pelo userId (UserBase.id)
+      const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
+      if (!clientesMaster || clientesMaster.length === 0) {
+        throw new NotFoundException('Cliente Master não encontrado para este usuário');
+      }
+      // Por enquanto, usar o primeiro ClienteMaster associado ao UserBase
+      clienteMasterId = clientesMaster[0].id;
+    }
+    // Criar objeto com clienteMasterId obrigatório
+    const registerData = {
+      ...registerDto,
+      clienteMasterId,
+    };
+    return this.authService.registerUser(registerData, clienteMasterId);
   }
 
   @Post('logout')
@@ -63,12 +84,14 @@ export class AuthController {
     return this.authService.resendVerificationCode(body.email);
   }
 
-  @Get('get-client-by-email')
-  async getClientByEmail(@Query('email') email: string) {
-    if (!email) {
-      throw new BadRequestException('E-mail é obrigatório');
-    }
-    return this.authService.getClientMasterByEmail(email);
+  @Get('get-client-token')
+  @UseGuards(JwtAuthGuard)
+  async getClientByToken(@Request() req) {
+    // Pegar userBaseId do token JWT
+    const userBaseId = req.user.id;
+    
+    // Usar o userBaseId do token para buscar os ClienteMaster associados
+    return this.authService.getClientMasterByUserBaseId(userBaseId);
   }
 }
 

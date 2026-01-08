@@ -17,7 +17,7 @@ import { EmailModule } from '../email/email.module';
     TypeOrmModule.forFeature([Assinatura, Cupom, HistoricoMensal]),
     PlanosModule,
     CuponsModule,
-    UsersModule,
+    forwardRef(() => UsersModule),
     forwardRef(() => ClientesMasterModule),
     EmailModule,
   ],

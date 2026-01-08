@@ -18,10 +18,16 @@ const assinaturas_service_1 = require("./assinaturas.service");
 const create_subscription_dto_1 = require("./dto/create-subscription.dto");
 const create_simple_subscription_dto_1 = require("./dto/create-simple-subscription.dto");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
+const clientes_master_service_1 = require("../users/clientes-master.service");
+const user_comum_service_1 = require("../users/services/user-comum.service");
 let AssinaturasController = class AssinaturasController {
     assinaturasService;
-    constructor(assinaturasService) {
+    clientesMasterService;
+    userComumService;
+    constructor(assinaturasService, clientesMasterService, userComumService) {
         this.assinaturasService = assinaturasService;
+        this.clientesMasterService = clientesMasterService;
+        this.userComumService = userComumService;
     }
     async create(createSubscriptionDto) {
         return this.assinaturasService.create(createSubscriptionDto);
@@ -35,8 +41,40 @@ let AssinaturasController = class AssinaturasController {
     async findMy(req) {
         return this.assinaturasService.findByUserId(req.user.id);
     }
-    async getDashboard(req) {
-        return this.assinaturasService.getDashboardInfo(req.user.id, req.user.tipo);
+    async getDashboard(req, clienteMasterId, usuario) {
+        if (usuario) {
+            const userComum = await this.userComumService.findById(usuario);
+            if (!userComum) {
+                throw new common_1.NotFoundException('Usuário não encontrado');
+            }
+            if (userComum.userId !== req.user.id) {
+                throw new common_1.ForbiddenException('Você não tem permissão para acessar este usuário');
+            }
+            return this.assinaturasService.getDashboardInfoUsuario(userComum.clienteMasterId, userComum);
+        }
+        if (clienteMasterId) {
+            if (req.user.tipo === 'master') {
+                const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
+                const temVinculo = clientesMaster.some(cm => cm.id === clienteMasterId);
+                if (!temVinculo) {
+                    throw new common_1.ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+                }
+            }
+            else {
+                const usuariosComuns = await this.userComumService.findByUserId(req.user.id);
+                const temVinculo = usuariosComuns.some(uc => uc.clienteMasterId === clienteMasterId);
+                if (!temVinculo) {
+                    throw new common_1.ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+                }
+            }
+            return this.assinaturasService.getDashboardInfo(clienteMasterId, req.user.tipo);
+        }
+        const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
+        if (!clientesMaster || clientesMaster.length === 0) {
+            throw new common_1.NotFoundException('Cliente Master não encontrado para este usuário');
+        }
+        const idClienteMaster = clientesMaster[0].id;
+        return this.assinaturasService.getDashboardInfo(idClienteMaster, req.user.tipo);
     }
     async findOne(id) {
         return this.assinaturasService.findById(id);
@@ -78,8 +116,10 @@ __decorate([
     (0, common_1.Get)('dashboard'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Query)('clienteMasterId')),
+    __param(2, (0, common_1.Query)('usuario')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, String, String]),
     __metadata("design:returntype", Promise)
 ], AssinaturasController.prototype, "getDashboard", null);
 __decorate([
@@ -92,6 +132,8 @@ __decorate([
 ], AssinaturasController.prototype, "findOne", null);
 exports.AssinaturasController = AssinaturasController = __decorate([
     (0, common_1.Controller)('assinaturas'),
-    __metadata("design:paramtypes", [assinaturas_service_1.AssinaturasService])
+    __metadata("design:paramtypes", [assinaturas_service_1.AssinaturasService,
+        clientes_master_service_1.ClientesMasterService,
+        user_comum_service_1.UserComumService])
 ], AssinaturasController);
 //# sourceMappingURL=assinaturas.controller.js.map

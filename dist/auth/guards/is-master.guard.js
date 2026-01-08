@@ -12,7 +12,7 @@ let IsMasterGuard = class IsMasterGuard {
     canActivate(context) {
         const request = context.switchToHttp().getRequest();
         const user = request.user;
-        if (!user || (user.tipo !== 'master' && !user.clienteMasterId)) {
+        if (!user || user.tipo !== 'master') {
             throw new common_1.ForbiddenException('Acesso negado. Apenas clientes master podem realizar esta ação.');
         }
         return true;

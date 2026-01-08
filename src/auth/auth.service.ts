@@ -3,15 +3,16 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { UserBaseService } from '../users/services/user-base.service';
+import { UserComumService } from '../users/services/user-comum.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
 import { EmailService } from '../email/email.service';
-import { User } from '../users/entities/user.entity';
 import { ClienteMaster } from '../users/entities/cliente-master.entity';
 
 export interface ClienteMasterInfo {
   id: string;
+  hash: string | null;
   nome: string;
   email: string;
   telefone: string | null;
@@ -45,6 +46,7 @@ export class AuthService {
   constructor(
     private usersService: UsersService,
     private userBaseService: UserBaseService,
+    private userComumService: UserComumService,
     private clientesMasterService: ClientesMasterService,
     private assinaturasService: AssinaturasService,
     private planosService: PlanosService,
@@ -78,16 +80,17 @@ export class AuthService {
       };
     }
 
-    // Verificar se é User comum
-    const user = await this.usersService.findByEmail(email);
-    if (user && user.ativo) {
+    // Verificar se é User comum (UserComum)
+    const usuariosComuns = await this.userComumService.findByUserId(userBase.id);
+    if (usuariosComuns && usuariosComuns.length > 0) {
+      const userComum = usuariosComuns[0];
       return {
-        id: user.id,
+        id: userComum.id,
         userId: userBase.id,
         nome: userBase.nome,
         email: userBase.email,
-        tipo: user.tipo || 'usuario',
-        clienteMasterId: user.clienteMasterId,
+        tipo: 'usuario',
+        clienteMasterId: userComum.clienteMasterId,
       };
     }
 
@@ -145,10 +148,9 @@ export class AuthService {
     }
 
     const payload = {
-      id: user.id,
+      id: user.userId, // ID do UserBase
       email: user.email,
       tipo: tipo,
-      clienteMasterId: user.clienteMasterId || null,
     };
 
     return {
@@ -187,16 +189,12 @@ export class AuthService {
 
     // Verificar se já existe conta verificada com este email em outras tabelas
     const existingClienteMaster = await this.clientesMasterService.findByEmail(data.email);
-    const existingUser = await this.usersService.findByEmail(data.email);
     
     // Se já existe uma conta verificada, a nova conta nasce verificada
     let emailJaVerificado = false;
     if (existingClienteMaster) {
       const userBaseDoCliente = await this.userBaseService.findById(existingClienteMaster.userId);
       emailJaVerificado = userBaseDoCliente?.isVerified || false;
-    }
-    if (!emailJaVerificado && existingUser) {
-      emailJaVerificado = existingUser.isVerified || false;
     }
 
     // Gerar código de verificação (6 dígitos) - só se email não estiver verificado
@@ -277,16 +275,12 @@ export class AuthService {
 
     // Verificar se já existe conta verificada com este email em outras tabelas
     const existingClienteMaster = await this.clientesMasterService.findByEmail(data.email);
-    const existingUser = await this.usersService.findByEmail(data.email);
     
     // Se já existe uma conta verificada, a nova conta nasce verificada
     let emailJaVerificado = false;
     if (existingClienteMaster) {
       const userBaseDoCliente = await this.userBaseService.findById(existingClienteMaster.userId);
       emailJaVerificado = userBaseDoCliente?.isVerified || false;
-    }
-    if (!emailJaVerificado && existingUser) {
-      emailJaVerificado = existingUser.isVerified || false;
     }
 
     // Gerar código de verificação (6 dígitos) - só se email não estiver verificado
@@ -304,23 +298,32 @@ export class AuthService {
       tokenExpiresAt.setMinutes(tokenExpiresAt.getMinutes() + 15);
     }
 
+    // Criar UserBase primeiro
     const hashedPassword = await bcrypt.hash(data.password, 10);
-    const user = await this.usersService.create({
-      ...data,
+    const userBase = await this.userBaseService.create({
+      nome: data.nome,
+      email: data.email,
       password: hashedPassword,
-      clienteMasterId,
       isVerified,
       verificationToken,
       tokenExpiresAt,
+    });
+
+    // Criar UserComum vinculado ao ClienteMaster
+    const userComum = await this.userComumService.create({
+      userId: userBase.id,
+      clienteMasterId,
+      ativo: true,
+      status: 'ativo',
     });
 
     // Enviar email de verificação apenas se não estiver verificado
     if (!isVerified && verificationToken) {
       try {
         await this.emailService.sendVerificationCode(
-          user.email,
+          userBase.email,
           verificationToken,
-          user.nome,
+          userBase.nome,
         );
       } catch (error) {
         console.error('Erro ao enviar email de verificação:', error);
@@ -333,11 +336,11 @@ export class AuthService {
         ? 'Usuário cadastrado com sucesso! Seu e-mail já estava verificado em outra conta.'
         : 'Usuário cadastrado com sucesso! Por favor, verifique seu e-mail para ativar sua conta.',
       user: {
-        id: user.id,
-        nome: user.nome,
-        email: user.email,
-        tipo: user.tipo,
-        clienteMasterId: user.clienteMasterId,
+        id: userBase.id,
+        nome: userBase.nome,
+        email: userBase.email,
+        tipo: 'usuario',
+        clienteMasterId: userComum.clienteMasterId,
         isVerified,
       },
     };
@@ -351,6 +354,23 @@ export class AuthService {
       message: 'Logout realizado com sucesso',
       userId: user.id,
     };
+  }
+
+  async validateToken(token: string): Promise<any> {
+    try {
+      return this.jwtService.verify(token);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  async generateTokenForUser(userId: string, email: string, tipo: string): Promise<string> {
+    const payload = {
+      id: userId, // ID do UserBase
+      email: email,
+      tipo: tipo,
+    };
+    return this.jwtService.sign(payload);
   }
 
   async verifyEmail(email: string, code: string) {
@@ -413,6 +433,238 @@ export class AuthService {
     }
   }
 
+  async getClientMasterByUserBaseId(userBaseId: string) {
+    const clientesMasterAssociados: ClienteMasterInfo[] = [];
+
+    // 1. Buscar UserBase pelo ID
+    console.log('DEBUG - Buscando UserBase com ID:', userBaseId);
+    let userBase = await this.userBaseService.findById(userBaseId);
+    if (!userBase) {
+      // Tentar buscar UserComum diretamente para verificar se o userId existe
+      console.log('DEBUG - UserBase não encontrado, tentando buscar UserComum com userId:', userBaseId);
+      const usuariosComuns = await this.userComumService.findByUserId(userBaseId);
+      if (usuariosComuns && usuariosComuns.length > 0 && usuariosComuns[0].user) {
+        // Se encontrou UserComum com user relacionado, usar o user do relacionamento
+        userBase = usuariosComuns[0].user;
+        console.log('DEBUG - UserBase encontrado através do UserComum:', userBase.id);
+      } else {
+        throw new BadRequestException('Nenhum usuário encontrado para este ID.');
+      }
+    }
+
+    // 2. VERIFICAR SE TEM CLIENTE MASTER (É DONO)
+    // Buscar TODOS os ClienteMaster onde este UserBase é dono (userId = userBase.id)
+    const clientesMasterComoDono = await this.clientesMasterService.findByUserId(userBase.id);
+    
+    // Se encontrou ClienteMaster como dono, guardar essa informação
+    if (clientesMasterComoDono && clientesMasterComoDono.length > 0) {
+      for (const clienteMaster of clientesMasterComoDono) {
+        // Garantir que o relacionamento user está carregado
+        let clienteMasterCompleto = clienteMaster;
+        if (!clienteMaster.user) {
+          const clienteMasterComRelacoes = await this.clientesMasterService.findById(clienteMaster.id);
+          if (!clienteMasterComRelacoes || !clienteMasterComRelacoes.user) {
+            continue;
+          }
+          clienteMasterCompleto = clienteMasterComRelacoes;
+        }
+
+        // Buscar assinatura do cliente master
+        const assinatura = await this.assinaturasService.findByUserId(clienteMasterCompleto.id);
+
+        // Buscar informações do plano se houver assinatura
+        let planoInfo: {
+          id: string;
+          nome: string;
+          valor: number;
+          tokenChat: number;
+          analises: number;
+        } | undefined = undefined;
+        if (assinatura && assinatura.planoId) {
+          const plano = await this.planosService.findById(assinatura.planoId);
+          if (plano) {
+            planoInfo = {
+              id: plano.id,
+              nome: plano.nome,
+              valor: plano.valorPromocional || plano.valorOriginal,
+              tokenChat: plano.tokenChat,
+              analises: plano.limiteAnalises,
+            };
+          }
+        }
+
+        clientesMasterAssociados.push({
+          id: clienteMasterCompleto.id,
+          hash: clienteMasterCompleto.hash,
+          nome: clienteMasterCompleto.user.nome,
+          email: clienteMasterCompleto.user.email,
+          telefone: clienteMasterCompleto.user.telefone,
+          cnpj: clienteMasterCompleto.cnpj,
+          ativo: clienteMasterCompleto.ativo,
+          isVerified: clienteMasterCompleto.user.isVerified,
+          createdAt: clienteMasterCompleto.createdAt,
+          updatedAt: clienteMasterCompleto.updatedAt,
+          tipo: 'master',
+          assinatura: assinatura
+            ? {
+                id: assinatura.id,
+                status: assinatura.status,
+                planoId: assinatura.planoId,
+                ...(planoInfo && { plano: planoInfo }),
+              }
+            : null,
+          nomeEmpresa: clienteMasterCompleto.nomeEmpresa,
+          logo: clienteMasterCompleto.logo,
+          cor: clienteMasterCompleto.cor,
+          documento: clienteMasterCompleto.cnpj,
+        });
+      }
+    }
+
+    // 3. VERIFICAR SE É USUARIO COMUM
+    // Buscar todos os UserComum vinculados a este UserBase
+    console.log('DEBUG - Buscando UserComum para userBase.id:', userBase.id);
+    const usuariosComuns = await this.userComumService.findByUserId(userBase.id);
+    
+    // DEBUG: Log para verificar se encontrou usuariosComuns
+    console.log('DEBUG - userBase.id:', userBase.id);
+    console.log('DEBUG - usuariosComuns encontrados:', usuariosComuns ? usuariosComuns.length : 0);
+    if (usuariosComuns && usuariosComuns.length > 0) {
+      console.log('DEBUG - Primeiro userComum:', {
+        id: usuariosComuns[0].id,
+        userId: usuariosComuns[0].userId,
+        clienteMasterId: usuariosComuns[0].clienteMasterId,
+        ativo: usuariosComuns[0].ativo,
+        status: usuariosComuns[0].status,
+      });
+    } else {
+      console.log('DEBUG - NENHUM UserComum encontrado para userBase.id:', userBase.id);
+    }
+    
+    // Se encontrou UserComum, buscar o ClienteMaster vinculado a cada um
+    if (usuariosComuns && usuariosComuns.length > 0) {
+      for (const userComum of usuariosComuns) {
+        // Verificar se tem clienteMasterId válido
+        if (!userComum.clienteMasterId) {
+          console.log('DEBUG - UserComum sem clienteMasterId:', userComum.id);
+          continue;
+        }
+
+        // Buscar o ClienteMaster completo pelo ID do usuarioComum
+        console.log('DEBUG - Buscando ClienteMaster com ID:', userComum.clienteMasterId);
+        const clienteMasterVinculado = await this.clientesMasterService.findById(userComum.clienteMasterId);
+        
+        console.log('DEBUG - ClienteMaster encontrado:', clienteMasterVinculado ? 'SIM' : 'NÃO');
+        if (!clienteMasterVinculado) {
+          console.log('DEBUG - ClienteMaster não encontrado para clienteMasterId:', userComum.clienteMasterId);
+          continue;
+        }
+        console.log('DEBUG - ClienteMaster encontrado com ID:', clienteMasterVinculado.id);
+        
+        // Garantir que o relacionamento user do ClienteMaster está carregado
+        if (!clienteMasterVinculado.user) {
+          const clienteMasterComRelacoes = await this.clientesMasterService.findById(clienteMasterVinculado.id);
+          if (!clienteMasterComRelacoes || !clienteMasterComRelacoes.user) {
+            continue;
+          }
+          Object.assign(clienteMasterVinculado, clienteMasterComRelacoes);
+        }
+        
+        // Verificar se já não foi adicionado (evitar duplicatas)
+        const jaExiste = clientesMasterAssociados.some(
+          (cm) => cm.id === clienteMasterVinculado.id,
+        );
+
+        if (!jaExiste) {
+          // Buscar assinatura do cliente master vinculado
+          const assinatura = await this.assinaturasService.findByUserId(clienteMasterVinculado.id);
+
+          // Buscar informações do plano se houver assinatura
+          let planoInfo: {
+            id: string;
+            nome: string;
+            valor: number;
+            tokenChat: number;
+            analises: number;
+          } | undefined = undefined;
+          if (assinatura && assinatura.planoId) {
+            const plano = await this.planosService.findById(assinatura.planoId);
+            if (plano) {
+              planoInfo = {
+                id: plano.id,
+                nome: plano.nome,
+                valor: plano.valorPromocional || plano.valorOriginal,
+                tokenChat: plano.tokenChat,
+                analises: plano.limiteAnalises,
+              };
+            }
+          }
+
+          // Guardar a informação do ClienteMaster vinculado ao usuarioComum
+          clientesMasterAssociados.push({
+            id: clienteMasterVinculado.id,
+            hash: clienteMasterVinculado.hash,
+            nome: clienteMasterVinculado.user.nome,
+            email: clienteMasterVinculado.user.email,
+            telefone: clienteMasterVinculado.user.telefone,
+            cnpj: clienteMasterVinculado.cnpj,
+            ativo: clienteMasterVinculado.ativo,
+            isVerified: clienteMasterVinculado.user.isVerified,
+            createdAt: clienteMasterVinculado.createdAt,
+            updatedAt: clienteMasterVinculado.updatedAt,
+            tipo: 'associado',
+            assinatura: assinatura
+              ? {
+                  id: assinatura.id,
+                  status: assinatura.status,
+                  planoId: assinatura.planoId,
+                  ...(planoInfo && { plano: planoInfo }),
+                }
+              : null,
+            nomeEmpresa: clienteMasterVinculado.nomeEmpresa,
+            logo: clienteMasterVinculado.logo,
+            cor: clienteMasterVinculado.cor,
+            documento: clienteMasterVinculado.cnpj,
+          });
+        }
+      }
+    }
+
+    // 4. Retornar resultado
+    // Se não encontrou nenhum ClienteMaster (nem como dono, nem como usuarioComum)
+    if (clientesMasterAssociados.length === 0) {
+      throw new BadRequestException(
+        'Nenhum Cliente Master encontrado para este usuário. Verifique se o usuário é dono de um Cliente Master ou está vinculado como usuário comum.',
+      );
+    }
+
+    // 6. Montar dados completos do UserBase (já foi buscado no início do método)
+    const userBaseData = {
+      id: userBase.id,
+      nome: userBase.nome,
+      email: userBase.email,
+      cpf: userBase.cpf,
+      telefone: userBase.telefone,
+      cro: userBase.cro,
+      postalCode: userBase.postalCode,
+      address: userBase.address,
+      addressNumber: userBase.addressNumber,
+      complement: userBase.complement,
+      province: userBase.province,
+      city: userBase.city,
+      state: userBase.state,
+      isVerified: userBase.isVerified,
+      createdAt: userBase.createdAt,
+      updatedAt: userBase.updatedAt,
+    };
+
+    return {
+      quantidade: clientesMasterAssociados.length,
+      user: userBaseData,
+      clientesMaster: clientesMasterAssociados,
+    };
+  }
+
   async getClientMasterByEmail(email: string) {
     const clientesMasterAssociados: ClienteMasterInfo[] = [];
 
@@ -425,14 +677,21 @@ export class AuthService {
     // 2. Buscar TODOS os ClienteMaster associados a este UserBase
     const todosClientesMaster = await this.clientesMasterService.findByUserId(userBase.id);
 
-    // 3. Para cada ClienteMaster, buscar assinatura e plano
+    // 3. Para cada ClienteMaster onde o userBase é dono, buscar assinatura e plano
     for (const clienteMaster of todosClientesMaster) {
+      // Garantir que o relacionamento user está carregado
+      let clienteMasterCompleto = clienteMaster;
       if (!clienteMaster.user) {
-        continue; // Pular se não tiver user vinculado
+        // Se não estiver carregado, buscar novamente com relacionamentos
+        const clienteMasterComRelacoes = await this.clientesMasterService.findById(clienteMaster.id);
+        if (!clienteMasterComRelacoes || !clienteMasterComRelacoes.user) {
+          continue; // Pular se não tiver user vinculado
+        }
+        clienteMasterCompleto = clienteMasterComRelacoes;
       }
 
       // Buscar assinatura do cliente master
-      const assinatura = await this.assinaturasService.findByUserId(clienteMaster.id);
+      const assinatura = await this.assinaturasService.findByUserId(clienteMasterCompleto.id);
 
       // Buscar informações do plano se houver assinatura
       let planoInfo: {
@@ -456,15 +715,16 @@ export class AuthService {
       }
 
       clientesMasterAssociados.push({
-        id: clienteMaster.id,
-        nome: clienteMaster.user.nome,
-        email: clienteMaster.user.email,
-        telefone: clienteMaster.user.telefone,
-        cnpj: clienteMaster.cnpj,
-        ativo: clienteMaster.ativo,
-        isVerified: clienteMaster.user.isVerified,
-        createdAt: clienteMaster.createdAt,
-        updatedAt: clienteMaster.updatedAt,
+        id: clienteMasterCompleto.id,
+        hash: clienteMasterCompleto.hash,
+        nome: clienteMasterCompleto.user.nome,
+        email: clienteMasterCompleto.user.email,
+        telefone: clienteMasterCompleto.user.telefone,
+        cnpj: clienteMasterCompleto.cnpj,
+        ativo: clienteMasterCompleto.ativo,
+        isVerified: clienteMasterCompleto.user.isVerified,
+        createdAt: clienteMasterCompleto.createdAt,
+        updatedAt: clienteMasterCompleto.updatedAt,
         tipo: 'master', // Todos são master (vinculados ao mesmo UserBase)
         assinatura: assinatura
           ? {
@@ -475,18 +735,33 @@ export class AuthService {
             }
           : null,
         // Dados da empresa
-        nomeEmpresa: clienteMaster.nomeEmpresa,
-        logo: clienteMaster.logo,
-        cor: clienteMaster.cor,
-        documento: clienteMaster.cnpj, // CNPJ como documento
+        nomeEmpresa: clienteMasterCompleto.nomeEmpresa,
+        logo: clienteMasterCompleto.logo,
+        cor: clienteMasterCompleto.cor,
+        documento: clienteMasterCompleto.cnpj, // CNPJ como documento
       });
     }
 
-    // 4. Verificar se o email também é de um Usuário comum e buscar Clientes Master associados
-    const user = await this.usersService.findByEmail(email);
-    if (user && user.clienteMasterId) {
-      const clienteMasterAssociado = await this.clientesMasterService.findById(user.clienteMasterId);
-      if (clienteMasterAssociado && clienteMasterAssociado.user) {
+    // 4. Buscar Clientes Master associados via UserComum (quando o userBaseId é um usuário comum)
+    // Buscar todos os UserComum vinculados a este UserBase
+    const usuariosComuns = await this.userComumService.findByUserId(userBase.id);
+    
+    // Para cada UserComum, buscar o ClienteMaster associado
+    for (const userComum of usuariosComuns) {
+      const clienteMasterAssociado = await this.clientesMasterService.findById(userComum.clienteMasterId);
+      
+      if (clienteMasterAssociado) {
+        // Garantir que o relacionamento user está carregado
+        if (!clienteMasterAssociado.user) {
+          // Se não estiver carregado, buscar novamente com relacionamentos
+          const clienteMasterComRelacoes = await this.clientesMasterService.findById(clienteMasterAssociado.id);
+          if (!clienteMasterComRelacoes || !clienteMasterComRelacoes.user) {
+            continue; // Pular se não tiver user vinculado
+          }
+          // Atualizar o objeto com os relacionamentos
+          Object.assign(clienteMasterAssociado, clienteMasterComRelacoes);
+        }
+        
         // Verificar se já não foi adicionado (caso o ClienteMaster já esteja na lista)
         const jaExiste = clientesMasterAssociados.some(
           (cm) => cm.id === clienteMasterAssociado.id,
@@ -519,6 +794,7 @@ export class AuthService {
 
           clientesMasterAssociados.push({
             id: clienteMasterAssociado.id,
+            hash: clienteMasterAssociado.hash,
             nome: clienteMasterAssociado.user.nome,
             email: clienteMasterAssociado.user.email,
             telefone: clienteMasterAssociado.user.telefone,
@@ -551,8 +827,29 @@ export class AuthService {
       throw new BadRequestException('Nenhum Cliente Master encontrado para este e-mail.');
     }
 
+    // 6. Montar dados completos do UserBase (já foi buscado no início do método)
+    const userBaseData = {
+      id: userBase.id,
+      nome: userBase.nome,
+      email: userBase.email,
+      cpf: userBase.cpf,
+      telefone: userBase.telefone,
+      cro: userBase.cro,
+      postalCode: userBase.postalCode,
+      address: userBase.address,
+      addressNumber: userBase.addressNumber,
+      complement: userBase.complement,
+      province: userBase.province,
+      city: userBase.city,
+      state: userBase.state,
+      isVerified: userBase.isVerified,
+      createdAt: userBase.createdAt,
+      updatedAt: userBase.updatedAt,
+    };
+
     return {
       quantidade: clientesMasterAssociados.length,
+      user: userBaseData,
       clientesMaster: clientesMasterAssociados,
     };
   }

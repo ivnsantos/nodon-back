@@ -15,12 +15,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
 const auth_service_1 = require("./auth.service");
+const clientes_master_service_1 = require("../users/clientes-master.service");
 const jwt_auth_guard_1 = require("./guards/jwt-auth.guard");
 const is_master_guard_1 = require("./guards/is-master.guard");
 let AuthController = class AuthController {
     authService;
-    constructor(authService) {
+    clientesMasterService;
+    constructor(authService, clientesMasterService) {
         this.authService = authService;
+        this.clientesMasterService = clientesMasterService;
     }
     async login(loginDto) {
         return this.authService.login(loginDto.email, loginDto.password);
@@ -29,7 +32,19 @@ let AuthController = class AuthController {
         return this.authService.registerClienteMaster(registerDto);
     }
     async registerUser(registerDto, req) {
-        return this.authService.registerUser(registerDto, req.user.clienteMasterId || req.user.id);
+        let clienteMasterId = registerDto.clienteMasterId;
+        if (!clienteMasterId) {
+            const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
+            if (!clientesMaster || clientesMaster.length === 0) {
+                throw new common_1.NotFoundException('Cliente Master não encontrado para este usuário');
+            }
+            clienteMasterId = clientesMaster[0].id;
+        }
+        const registerData = {
+            ...registerDto,
+            clienteMasterId,
+        };
+        return this.authService.registerUser(registerData, clienteMasterId);
     }
     async logout(req) {
         return this.authService.logout(req.user);
@@ -46,11 +61,9 @@ let AuthController = class AuthController {
         }
         return this.authService.resendVerificationCode(body.email);
     }
-    async getClientByEmail(email) {
-        if (!email) {
-            throw new common_1.BadRequestException('E-mail é obrigatório');
-        }
-        return this.authService.getClientMasterByEmail(email);
+    async getClientByToken(req) {
+        const userBaseId = req.user.id;
+        return this.authService.getClientMasterByUserBaseId(userBaseId);
     }
 };
 exports.AuthController = AuthController;
@@ -100,14 +113,16 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "resendVerificationCode", null);
 __decorate([
-    (0, common_1.Get)('get-client-by-email'),
-    __param(0, (0, common_1.Query)('email')),
+    (0, common_1.Get)('get-client-token'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Request)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
-], AuthController.prototype, "getClientByEmail", null);
+], AuthController.prototype, "getClientByToken", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
-    __metadata("design:paramtypes", [auth_service_1.AuthService])
+    __metadata("design:paramtypes", [auth_service_1.AuthService,
+        clientes_master_service_1.ClientesMasterService])
 ], AuthController);
 //# sourceMappingURL=auth.controller.js.map

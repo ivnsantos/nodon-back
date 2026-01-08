@@ -26,6 +26,7 @@ let ClienteMaster = class ClienteMaster {
     site;
     descricao;
     outrasInformacoes;
+    hash;
     ativo;
     createdAt;
     updatedAt;
@@ -78,6 +79,10 @@ __decorate([
     (0, typeorm_1.Column)({ name: 'outras_informacoes', type: 'text', nullable: true }),
     __metadata("design:type", String)
 ], ClienteMaster.prototype, "outrasInformacoes", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 36, unique: true, nullable: true }),
+    __metadata("design:type", Object)
+], ClienteMaster.prototype, "hash", void 0);
 __decorate([
     (0, typeorm_1.Column)({ default: true }),
     __metadata("design:type", Boolean)

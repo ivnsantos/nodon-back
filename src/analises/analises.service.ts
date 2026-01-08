@@ -5,7 +5,7 @@ import { HistoricoMensal } from './entities/historico-mensal.entity';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
-import { UsersService } from '../users/users.service';
+import { UserComumService } from '../users/services/user-comum.service';
 
 @Injectable()
 export class AnalisesService {
@@ -15,17 +15,26 @@ export class AnalisesService {
     private clientesMasterService: ClientesMasterService,
     private assinaturasService: AssinaturasService,
     private planosService: PlanosService,
-    private usersService: UsersService,
+    private userComumService: UserComumService,
   ) {}
 
   async registrarAnalise(userId: string, userTipo: string) {
-    // Determina o ID do cliente master
-    let clienteMasterId = userId;
+    // userId agora é o ID do UserBase
+    let clienteMasterId: string;
     
-    if (userTipo !== 'master') {
-      const user = await this.usersService.findById(userId);
-      if (user && user.clienteMasterId) {
-        clienteMasterId = user.clienteMasterId;
+    if (userTipo === 'master') {
+      // Buscar ClienteMaster pelo userId (UserBase.id)
+      const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+      if (!clientesMaster || clientesMaster.length === 0) {
+        throw new NotFoundException('Cliente Master não encontrado');
+      }
+      // Por enquanto, usar o primeiro ClienteMaster associado ao UserBase
+      clienteMasterId = clientesMaster[0].id;
+    } else {
+      // Se for usuário comum, buscar pelo UserComum
+      const usuariosComuns = await this.userComumService.findByUserId(userId);
+      if (usuariosComuns && usuariosComuns.length > 0) {
+        clienteMasterId = usuariosComuns[0].clienteMasterId;
       } else {
         throw new NotFoundException('Cliente Master não encontrado');
       }
@@ -73,13 +82,22 @@ export class AnalisesService {
   }
 
   async registrarTokens(userId: string, userTipo: string, tokens: number) {
-    // Determina o ID do cliente master
-    let clienteMasterId = userId;
+    // userId agora é o ID do UserBase
+    let clienteMasterId: string;
     
-    if (userTipo !== 'master') {
-      const user = await this.usersService.findById(userId);
-      if (user && user.clienteMasterId) {
-        clienteMasterId = user.clienteMasterId;
+    if (userTipo === 'master') {
+      // Buscar ClienteMaster pelo userId (UserBase.id)
+      const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+      if (!clientesMaster || clientesMaster.length === 0) {
+        throw new NotFoundException('Cliente Master não encontrado');
+      }
+      // Por enquanto, usar o primeiro ClienteMaster associado ao UserBase
+      clienteMasterId = clientesMaster[0].id;
+    } else {
+      // Se for usuário comum, buscar pelo UserComum
+      const usuariosComuns = await this.userComumService.findByUserId(userId);
+      if (usuariosComuns && usuariosComuns.length > 0) {
+        clienteMasterId = usuariosComuns[0].clienteMasterId;
       } else {
         throw new NotFoundException('Cliente Master não encontrado');
       }
@@ -140,13 +158,22 @@ export class AnalisesService {
   }
 
   async getHistorico(userId: string, userTipo: string, ano?: string) {
-    // Determina o ID do cliente master
-    let clienteMasterId = userId;
+    // userId agora é o ID do UserBase
+    let clienteMasterId: string;
     
-    if (userTipo !== 'master') {
-      const user = await this.usersService.findById(userId);
-      if (user && user.clienteMasterId) {
-        clienteMasterId = user.clienteMasterId;
+    if (userTipo === 'master') {
+      // Buscar ClienteMaster pelo userId (UserBase.id)
+      const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+      if (!clientesMaster || clientesMaster.length === 0) {
+        throw new NotFoundException('Cliente Master não encontrado');
+      }
+      // Por enquanto, usar o primeiro ClienteMaster associado ao UserBase
+      clienteMasterId = clientesMaster[0].id;
+    } else {
+      // Se for usuário comum, buscar pelo UserComum
+      const usuariosComuns = await this.userComumService.findByUserId(userId);
+      if (usuariosComuns && usuariosComuns.length > 0) {
+        clienteMasterId = usuariosComuns[0].clienteMasterId;
       } else {
         throw new NotFoundException('Cliente Master não encontrado');
       }

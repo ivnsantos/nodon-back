@@ -6,7 +6,7 @@ export class IsMasterGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    if (!user || (user.tipo !== 'master' && !user.clienteMasterId)) {
+    if (!user || user.tipo !== 'master') {
       throw new ForbiddenException('Acesso negado. Apenas clientes master podem realizar esta ação.');
     }
 

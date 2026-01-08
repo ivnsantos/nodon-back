@@ -58,6 +58,7 @@ const cupons_service_1 = require("../cupons/cupons.service");
 const clientes_master_service_1 = require("../users/clientes-master.service");
 const users_service_1 = require("../users/users.service");
 const user_base_service_1 = require("../users/services/user-base.service");
+const user_comum_service_1 = require("../users/services/user-comum.service");
 const email_service_1 = require("../email/email.service");
 const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
 let AssinaturasService = class AssinaturasService {
@@ -70,8 +71,9 @@ let AssinaturasService = class AssinaturasService {
     clientesMasterService;
     usersService;
     userBaseService;
+    userComumService;
     emailService;
-    constructor(assinaturaRepository, cupomRepository, historicoRepository, asaasService, planosService, cuponsService, clientesMasterService, usersService, userBaseService, emailService) {
+    constructor(assinaturaRepository, cupomRepository, historicoRepository, asaasService, planosService, cuponsService, clientesMasterService, usersService, userBaseService, userComumService, emailService) {
         this.assinaturaRepository = assinaturaRepository;
         this.cupomRepository = cupomRepository;
         this.historicoRepository = historicoRepository;
@@ -81,6 +83,7 @@ let AssinaturasService = class AssinaturasService {
         this.clientesMasterService = clientesMasterService;
         this.usersService = usersService;
         this.userBaseService = userBaseService;
+        this.userComumService = userComumService;
         this.emailService = emailService;
     }
     async create(createSubscriptionDto) {
@@ -200,14 +203,10 @@ let AssinaturasService = class AssinaturasService {
                 throw new common_1.ConflictException('Já existe um usuário cadastrado com este e-mail');
             }
             const existingClienteMaster = await this.clientesMasterService.findByEmail(createSubscriptionDto.email);
-            const existingUser = await this.usersService.findByEmail(createSubscriptionDto.email);
             let emailJaVerificado = false;
             if (existingClienteMaster) {
                 const userBaseDoCliente = await this.userBaseService.findById(existingClienteMaster.userId);
                 emailJaVerificado = userBaseDoCliente?.isVerified || false;
-            }
-            if (!emailJaVerificado && existingUser) {
-                emailJaVerificado = existingUser.isVerified || false;
             }
             let verificationToken = null;
             let tokenExpiresAt = null;
@@ -499,18 +498,8 @@ let AssinaturasService = class AssinaturasService {
         }
         return this.toResponseDto(subscription);
     }
-    async getDashboardInfo(userId, userTipo) {
-        const clienteMasterId = userTipo === 'master' ? userId : null;
-        let clienteMaster;
-        if (userTipo === 'master') {
-            clienteMaster = await this.clientesMasterService.findById(userId);
-        }
-        else {
-            const user = await this.usersService.findById(userId);
-            if (user && user.clienteMasterId) {
-                clienteMaster = await this.clientesMasterService.findById(user.clienteMasterId);
-            }
-        }
+    async getDashboardInfo(clienteMasterId, userTipo) {
+        const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
         if (!clienteMaster) {
             throw new common_1.NotFoundException('Cliente Master não encontrado');
         }
@@ -525,7 +514,7 @@ let AssinaturasService = class AssinaturasService {
         }
         let quantidadeUsuarios = 0;
         if (userTipo === 'master') {
-            const usuarios = await this.usersService.findAllByClienteMaster(userId);
+            const usuarios = await this.usersService.findAllByClienteMaster(clienteMasterId);
             quantidadeUsuarios = usuarios.length;
         }
         const agora = new Date();
@@ -572,6 +561,7 @@ let AssinaturasService = class AssinaturasService {
         }
         if (userTipo !== 'master') {
             return {
+                clienteMasterId: clienteMaster.id,
                 tokensChat: {
                     tokensUtilizados: tokensChatUsadosMes,
                     limitePlano: tokensChatLimite,
@@ -585,6 +575,7 @@ let AssinaturasService = class AssinaturasService {
             };
         }
         return {
+            clienteMasterId: clienteMaster.id,
             tokensChat: {
                 tokensUtilizados: tokensChatUsados,
                 tokensUtilizadosMes: tokensChatUsadosMes,
@@ -611,6 +602,61 @@ let AssinaturasService = class AssinaturasService {
                 quantidade: quantidadeUsuarios,
             },
             cartao: cartao,
+        };
+    }
+    async getDashboardInfoUsuario(clienteMasterId, userComum) {
+        const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
+        if (!clienteMaster) {
+            throw new common_1.NotFoundException('Cliente Master não encontrado');
+        }
+        const assinaturaEntity = await this.assinaturaRepository.findOne({
+            where: { userId: clienteMaster.id },
+            relations: ['plano'],
+            order: { createdAt: 'DESC' },
+        });
+        let plano = null;
+        if (assinaturaEntity && assinaturaEntity.planoId) {
+            plano = await this.planosService.findById(assinaturaEntity.planoId);
+        }
+        const agora = new Date();
+        const ano = agora.getFullYear();
+        const mes = agora.getMonth() + 1;
+        const historicoAtual = await this.historicoRepository.findOne({
+            where: {
+                clienteMasterId: clienteMaster.id,
+                ano,
+                mes,
+            },
+        });
+        const tokensChatUsadosMes = Number(historicoAtual?.tokensUtilizados || 0);
+        const tokensChatLimite = plano ? Number(plano.tokenChat) : 0;
+        const porcentagemUsoTokens = tokensChatLimite > 0
+            ? Math.min(100, Math.round((tokensChatUsadosMes / tokensChatLimite) * 100))
+            : 0;
+        const analisesFeitasMes = Number(historicoAtual?.analisesFeitas || 0);
+        const analisesLimite = plano ? Number(plano.limiteAnalises) : 0;
+        const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasMes);
+        const porcentagemUsoAnalises = analisesLimite > 0
+            ? Math.min(100, Math.round((analisesFeitasMes / analisesLimite) * 100))
+            : 0;
+        return {
+            clienteMasterId: clienteMaster.id,
+            usuarioId: userComum.id,
+            tokensChat: {
+                tokensUtilizados: tokensChatUsadosMes,
+                limitePlano: tokensChatLimite,
+                porcentagemUso: porcentagemUsoTokens,
+            },
+            analises: {
+                analisesRestantes: analisesRestantes,
+                limitePlano: analisesLimite,
+                porcentagemUso: porcentagemUsoAnalises,
+            },
+            perfil: {
+                nome: userComum.user?.nome || null,
+                email: userComum.user?.email || null,
+                ativo: userComum.ativo,
+            },
         };
     }
     toResponseDto(subscription) {
@@ -656,6 +702,7 @@ exports.AssinaturasService = AssinaturasService = __decorate([
         clientes_master_service_1.ClientesMasterService,
         users_service_1.UsersService,
         user_base_service_1.UserBaseService,
+        user_comum_service_1.UserComumService,
         email_service_1.EmailService])
 ], AssinaturasService);
 //# sourceMappingURL=assinaturas.service.js.map
