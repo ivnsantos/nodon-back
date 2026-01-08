@@ -3,7 +3,6 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmOptionsFactory, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { config } from 'dotenv';
-import { User } from '../users/entities/user.entity';
 import { UserBase } from '../users/entities/user-base.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
 import { ClienteMaster } from '../users/entities/cliente-master.entity';
@@ -61,7 +60,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       ssl: useSsl ? {
         rejectUnauthorized: false, // Necessário para alguns ambientes de hospedagem
       } : false,
-      entities: [User, UserBase, UserComum, ClienteMaster, Plano, Cupom, Assinatura, HistoricoMensal],
+      entities: [UserBase, UserComum, ClienteMaster, Plano, Cupom, Assinatura, HistoricoMensal],
       synchronize: process.env.NODE_ENV !== 'production',
       logging: this.configService.get<string>('NODE_ENV') === 'development',
       autoLoadEntities: true,

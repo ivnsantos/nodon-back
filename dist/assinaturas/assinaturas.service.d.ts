@@ -10,8 +10,10 @@ import { CuponsService } from '../cupons/cupons.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { UsersService } from '../users/users.service';
 import { UserBaseService } from '../users/services/user-base.service';
+import { UserComumService } from '../users/services/user-comum.service';
 import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
+import { UserComum } from '../users/entities/user-comum.entity';
 export declare class AssinaturasService {
     private readonly assinaturaRepository;
     private readonly cupomRepository;
@@ -22,8 +24,9 @@ export declare class AssinaturasService {
     private readonly clientesMasterService;
     private readonly usersService;
     private readonly userBaseService;
+    private readonly userComumService;
     private readonly emailService;
-    constructor(assinaturaRepository: Repository<Assinatura>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, emailService: EmailService);
+    constructor(assinaturaRepository: Repository<Assinatura>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, emailService: EmailService);
     create(createSubscriptionDto: CreateSubscriptionDto): Promise<SubscriptionResponseDto>;
     createSimple(createSimpleSubscriptionDto: CreateSimpleSubscriptionDto, user: {
         id: string;
@@ -36,7 +39,8 @@ export declare class AssinaturasService {
         status: string;
     }>;
     findById(id: string): Promise<SubscriptionResponseDto>;
-    getDashboardInfo(userId: string, userTipo: string): Promise<{
+    getDashboardInfo(clienteMasterId: string, userTipo: string): Promise<{
+        clienteMasterId: string;
         tokensChat: {
             tokensUtilizados: number;
             limitePlano: number;
@@ -55,12 +59,13 @@ export declare class AssinaturasService {
         usuarios?: undefined;
         cartao?: undefined;
     } | {
+        clienteMasterId: string;
         tokensChat: {
             tokensUtilizados: number;
             tokensUtilizadosMes: number;
             limitePlano: number;
             porcentagemUso: number;
-            ultimaAtualizacao: any;
+            ultimaAtualizacao: Date;
         };
         analises: {
             analisesFeitas: number;
@@ -79,6 +84,25 @@ export declare class AssinaturasService {
             quantidade: number;
         };
         cartao: any;
+    }>;
+    getDashboardInfoUsuario(clienteMasterId: string, userComum: UserComum): Promise<{
+        clienteMasterId: string;
+        usuarioId: string;
+        tokensChat: {
+            tokensUtilizados: number;
+            limitePlano: number;
+            porcentagemUso: number;
+        };
+        analises: {
+            analisesRestantes: number;
+            limitePlano: number;
+            porcentagemUso: number;
+        };
+        perfil: {
+            nome: string | null;
+            email: string | null;
+            ativo: boolean;
+        };
     }>;
     private toResponseDto;
 }

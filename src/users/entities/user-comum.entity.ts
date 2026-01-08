@@ -36,6 +36,13 @@ export class UserComum {
   @Column({ default: true })
   ativo: boolean;
 
+  @Column({
+    type: 'varchar',
+    length: 20,
+    default: 'ativo',
+  })
+  status: 'ativo' | 'inativo';
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

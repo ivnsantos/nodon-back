@@ -16,6 +16,7 @@ exports.ClientesMasterService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
+const crypto_1 = require("crypto");
 const cliente_master_entity_1 = require("./entities/cliente-master.entity");
 const user_base_entity_1 = require("./entities/user-base.entity");
 const assinaturas_service_1 = require("../assinaturas/assinaturas.service");
@@ -32,6 +33,17 @@ let ClientesMasterService = class ClientesMasterService {
         this.planosService = planosService;
     }
     async create(data) {
+        let hash;
+        let hashUnico = false;
+        while (!hashUnico) {
+            hash = (0, crypto_1.randomUUID)();
+            const existe = await this.clienteMasterRepository.findOne({
+                where: { hash },
+            });
+            if (!existe) {
+                hashUnico = true;
+            }
+        }
         const clienteMaster = this.clienteMasterRepository.create({
             userId: data.userId,
             nomeEmpresa: data.nomeEmpresa || 'Empresa',
@@ -42,6 +54,7 @@ let ClientesMasterService = class ClientesMasterService {
             site: data.site,
             descricao: data.descricao,
             outrasInformacoes: data.outrasInformacoes,
+            hash: hash,
             ativo: true,
         });
         return this.clienteMasterRepository.save(clienteMaster);
@@ -65,6 +78,12 @@ let ClientesMasterService = class ClientesMasterService {
     async findById(id) {
         return this.clienteMasterRepository.findOne({
             where: { id },
+            relations: ['user', 'usuarios', 'assinaturas'],
+        });
+    }
+    async findByHash(hash) {
+        return this.clienteMasterRepository.findOne({
+            where: { hash },
             relations: ['user', 'usuarios', 'assinaturas'],
         });
     }
@@ -98,6 +117,7 @@ let ClientesMasterService = class ClientesMasterService {
             return {
                 clienteMaster: {
                     id: clienteMaster.id,
+                    hash: clienteMaster.hash,
                     nomeEmpresa: clienteMaster.nomeEmpresa,
                     cnpj: clienteMaster.cnpj,
                     logo: clienteMaster.logo,
@@ -142,6 +162,7 @@ let ClientesMasterService = class ClientesMasterService {
         return {
             clienteMaster: {
                 id: clienteMaster.id,
+                hash: clienteMaster.hash,
                 nomeEmpresa: clienteMaster.nomeEmpresa,
                 cnpj: clienteMaster.cnpj,
                 logo: clienteMaster.logo,

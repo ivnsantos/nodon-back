@@ -53,6 +53,9 @@ export class ClienteMaster {
   @Column({ name: 'outras_informacoes', type: 'text', nullable: true })
   outrasInformacoes: string; // Outras informações da empresa (JSON ou texto)
 
+  @Column({ type: 'varchar', length: 36, unique: true, nullable: true })
+  hash: string | null; // Hash UUID único para vinculação de usuários comuns
+
   @Column({ default: true })
   ativo: boolean;
 

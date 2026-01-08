@@ -4,16 +4,21 @@ import { ClientesMasterService } from './clientes-master.service';
 import { ClientesMasterController } from './clientes-master.controller';
 import { ClienteMaster } from './entities/cliente-master.entity';
 import { UserBase } from './entities/user-base.entity';
+import { UserComum } from './entities/user-comum.entity';
 import { StorageModule } from '../storage/storage.module';
 import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { PlanosModule } from '../planos/planos.module';
+import { UsersModule } from './users.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ClienteMaster, UserBase]),
+    TypeOrmModule.forFeature([ClienteMaster, UserBase, UserComum]),
     StorageModule,
     forwardRef(() => AssinaturasModule),
     PlanosModule,
+    forwardRef(() => UsersModule),
+    forwardRef(() => AuthModule),
   ],
   controllers: [ClientesMasterController],
   providers: [ClientesMasterService],

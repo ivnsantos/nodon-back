@@ -1,15 +1,76 @@
 import { ClientesMasterService } from './clientes-master.service';
 import { UpdateClienteMasterDto } from './dto/update-cliente-master.dto';
 import { StorageService } from '../storage/storage.service';
+import { UserComumService } from './services/user-comum.service';
+import { RegisterUserByHashDto } from './dto/register-user-by-hash.dto';
+import { UpdateUsuarioStatusDto } from './dto/update-usuario-status.dto';
+import { UserBaseService } from './services/user-base.service';
+import { AuthService } from '../auth/auth.service';
+import { AssinaturasService } from '../assinaturas/assinaturas.service';
 export declare class ClientesMasterController {
     private clientesMasterService;
     private storageService;
-    constructor(clientesMasterService: ClientesMasterService, storageService: StorageService);
+    private userComumService;
+    private userBaseService;
+    private authService;
+    private assinaturasService;
+    constructor(clientesMasterService: ClientesMasterService, storageService: StorageService, userComumService: UserComumService, userBaseService: UserBaseService, authService: AuthService, assinaturasService: AssinaturasService);
     findAll(): Promise<import("./entities/cliente-master.entity").ClienteMaster[]>;
-    findOne(id: string): Promise<import("./entities/cliente-master.entity").ClienteMaster | null>;
-    getCompleteInfo(id: string): Promise<{
+    getClienteMasterByHash(hash: string): Promise<{
         clienteMaster: {
             id: string;
+            hash: string | null;
+            nomeEmpresa: string;
+            cnpj: string;
+            logo: string;
+            cor: string;
+            telefoneEmpresa: string;
+            site: string;
+            descricao: string;
+            outrasInformacoes: string;
+            ativo: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        user: {
+            id: string;
+            nome: string;
+            email: string;
+        } | null;
+        assinatura: {
+            id: string;
+            status: string;
+        } | null;
+    }>;
+    findOne(id: string): Promise<import("./entities/cliente-master.entity").ClienteMaster | null>;
+    getCompleteInfo(id: string, req: any): Promise<{
+        userComum: {
+            id: string;
+            userId: string;
+            clienteMasterId: string;
+            ativo: boolean;
+            status: "ativo" | "inativo";
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        clienteMasterId: string;
+        assinatura: {
+            status: string;
+        } | null;
+        relacionamento: {
+            tipo: "usuario";
+            id: string;
+            status: "ativo" | "inativo";
+        };
+    } | {
+        relacionamento: {
+            tipo: "clienteMaster";
+            id: string;
+            status?: undefined;
+        };
+        clienteMaster: {
+            id: string;
+            hash: string | null;
             nomeEmpresa: string;
             cnpj: string;
             logo: string;
@@ -65,9 +126,17 @@ export declare class ClientesMasterController {
             updatedAt?: undefined;
         };
         plano: null;
+        userComum?: undefined;
+        clienteMasterId?: undefined;
     } | {
+        relacionamento: {
+            tipo: "clienteMaster";
+            id: string;
+            status?: undefined;
+        };
         clienteMaster: {
             id: string;
+            hash: string | null;
             nomeEmpresa: string;
             cnpj: string;
             logo: string;
@@ -134,6 +203,8 @@ export declare class ClientesMasterController {
             createdAt: any;
             updatedAt: any;
         } | null;
+        userComum?: undefined;
+        clienteMasterId?: undefined;
     }>;
     atualizarMeusDados(req: any, updateDto: UpdateClienteMasterDto, file: any): Promise<{
         message: string;
@@ -153,5 +224,108 @@ export declare class ClientesMasterController {
     update(id: string, data: any): Promise<import("./entities/cliente-master.entity").ClienteMaster>;
     delete(id: string): Promise<{
         message: string;
+    }>;
+    registerUserByHash(hash: string, registerDto: RegisterUserByHashDto, authorization?: string): Promise<{
+        message: string;
+        user: {
+            id: string;
+            nome: string;
+            email: string;
+            cpf: string;
+            telefone: string;
+            cro: string;
+            postalCode: string;
+            address: string;
+            addressNumber: string;
+            complement: string;
+            province: string;
+            city: string;
+            state: string;
+            isVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+        } | null;
+        userComum: {
+            id: string;
+            userId: string;
+            clienteMasterId: string;
+            ativo: boolean;
+            status: "ativo" | "inativo";
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        access_token?: undefined;
+    } | {
+        message: string;
+        access_token: string;
+        user: {
+            id: string;
+            nome: string;
+            email: string;
+            cpf: string;
+            telefone: string;
+            cro: string;
+            postalCode: string;
+            address: string;
+            addressNumber: string;
+            complement: string;
+            province: string;
+            city: string;
+            state: string;
+            isVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        userComum: {
+            id: string;
+            userId: string;
+            clienteMasterId: string;
+            ativo: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+            status?: undefined;
+        };
+    }>;
+    getUsuariosByClienteMaster(id: string, req: any): Promise<{
+        quantidade: number;
+        usuarios: {
+            id: string;
+            userId: string;
+            clienteMasterId: string;
+            ativo: boolean;
+            status: "ativo" | "inativo";
+            createdAt: Date;
+            updatedAt: Date;
+            user: {
+                id: string;
+                nome: string;
+                email: string;
+                cpf: string;
+                telefone: string;
+                cro: string;
+                postalCode: string;
+                address: string;
+                addressNumber: string;
+                complement: string;
+                province: string;
+                city: string;
+                state: string;
+                isVerified: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+            } | null;
+        }[];
+    }>;
+    updateUsuarioStatus(id: string, updateDto: UpdateUsuarioStatusDto, req: any): Promise<{
+        message: string;
+        usuario: {
+            id: string;
+            userId: string;
+            clienteMasterId: string;
+            ativo: boolean;
+            status: "ativo" | "inativo";
+            createdAt: Date;
+            updatedAt: Date;
+        };
     }>;
 }

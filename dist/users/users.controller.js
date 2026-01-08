@@ -15,33 +15,49 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersController = void 0;
 const common_1 = require("@nestjs/common");
 const users_service_1 = require("./users.service");
+const user_comum_service_1 = require("./services/user-comum.service");
+const clientes_master_service_1 = require("./clientes-master.service");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 const is_master_guard_1 = require("../auth/guards/is-master.guard");
 let UsersController = class UsersController {
     usersService;
-    constructor(usersService) {
+    userComumService;
+    clientesMasterService;
+    constructor(usersService, userComumService, clientesMasterService) {
         this.usersService = usersService;
+        this.userComumService = userComumService;
+        this.clientesMasterService = clientesMasterService;
     }
     async findAll(req) {
-        const clienteMasterId = req.user.clienteMasterId || req.user.id;
+        const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
+        if (!clientesMaster || clientesMaster.length === 0) {
+            throw new Error('Cliente Master não encontrado');
+        }
+        const clienteMasterId = clientesMaster[0].id;
         return this.usersService.findAllByClienteMaster(clienteMasterId);
     }
     async findOne(id, req) {
-        const user = await this.usersService.findById(id);
-        if (!user) {
+        const userComum = await this.userComumService.findById(id);
+        if (!userComum) {
             throw new Error('Usuário não encontrado');
         }
-        const clienteMasterId = req.user.clienteMasterId || req.user.id;
-        if (user.clienteMasterId !== clienteMasterId && req.user.tipo !== 'master') {
-            throw new Error('Acesso negado');
+        if (req.user.tipo === 'master') {
+            const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
+            if (!clientesMaster || clientesMaster.length === 0) {
+                throw new Error('Cliente Master não encontrado');
+            }
+            const clienteMasterId = clientesMaster[0].id;
+            if (userComum.clienteMasterId !== clienteMasterId) {
+                throw new Error('Acesso negado');
+            }
         }
-        return user;
+        return userComum;
     }
     async update(id, data) {
-        return this.usersService.update(id, data);
+        return this.userComumService.update(id, data);
     }
     async delete(id) {
-        await this.usersService.delete(id);
+        await this.userComumService.delete(id);
         return { message: 'Usuário deletado com sucesso' };
     }
 };
@@ -82,6 +98,8 @@ __decorate([
 exports.UsersController = UsersController = __decorate([
     (0, common_1.Controller)('users'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    __metadata("design:paramtypes", [users_service_1.UsersService])
+    __metadata("design:paramtypes", [users_service_1.UsersService,
+        user_comum_service_1.UserComumService,
+        clientes_master_service_1.ClientesMasterService])
 ], UsersController);
 //# sourceMappingURL=users.controller.js.map

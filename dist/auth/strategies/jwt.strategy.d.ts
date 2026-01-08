@@ -8,7 +8,6 @@ export declare class JwtStrategy extends JwtStrategy_base {
         id: any;
         email: any;
         tipo: any;
-        clienteMasterId: any;
     }>;
 }
 export {};

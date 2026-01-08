@@ -21,8 +21,10 @@ import { CuponsService } from '../cupons/cupons.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { UsersService } from '../users/users.service';
 import { UserBaseService } from '../users/services/user-base.service';
+import { UserComumService } from '../users/services/user-comum.service';
 import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
+import { UserComum } from '../users/entities/user-comum.entity';
 
 @Injectable()
 export class AssinaturasService {
@@ -40,6 +42,7 @@ export class AssinaturasService {
     private readonly clientesMasterService: ClientesMasterService,
     private readonly usersService: UsersService,
     private readonly userBaseService: UserBaseService,
+    private readonly userComumService: UserComumService,
     private readonly emailService: EmailService,
   ) {}
 
@@ -195,7 +198,7 @@ export class AssinaturasService {
 
       // Verificar se já existe conta verificada com este email em outras tabelas
       const existingClienteMaster = await this.clientesMasterService.findByEmail(createSubscriptionDto.email);
-      const existingUser = await this.usersService.findByEmail(createSubscriptionDto.email);
+      // Verificação de User removida - usar apenas UserBase
       
       // Se já existe uma conta verificada, a nova conta nasce verificada
       // Buscar UserBase diretamente se ClienteMaster existir
@@ -203,9 +206,6 @@ export class AssinaturasService {
       if (existingClienteMaster) {
         const userBaseDoCliente = await this.userBaseService.findById(existingClienteMaster.userId);
         emailJaVerificado = userBaseDoCliente?.isVerified || false;
-      }
-      if (!emailJaVerificado && existingUser) {
-        emailJaVerificado = existingUser.isVerified || false;
       }
 
       // Gerar código de verificação (6 dígitos) - só se email não estiver verificado
@@ -590,20 +590,9 @@ export class AssinaturasService {
     return this.toResponseDto(subscription);
   }
 
-  async getDashboardInfo(userId: string, userTipo: string) {
-    // Determina o ID do cliente master
-    const clienteMasterId = userTipo === 'master' ? userId : null;
-    
-    // Se for usuário, busca o cliente master
-    let clienteMaster;
-    if (userTipo === 'master') {
-      clienteMaster = await this.clientesMasterService.findById(userId);
-    } else {
-      const user = await this.usersService.findById(userId);
-      if (user && user.clienteMasterId) {
-        clienteMaster = await this.clientesMasterService.findById(user.clienteMasterId);
-      }
-    }
+  async getDashboardInfo(clienteMasterId: string, userTipo: string) {
+    // Busca o ClienteMaster pelo ID fornecido
+    const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
 
     if (!clienteMaster) {
       throw new NotFoundException('Cliente Master não encontrado');
@@ -625,7 +614,7 @@ export class AssinaturasService {
     // Conta usuários se for master
     let quantidadeUsuarios = 0;
     if (userTipo === 'master') {
-      const usuarios = await this.usersService.findAllByClienteMaster(userId);
+      const usuarios = await this.usersService.findAllByClienteMaster(clienteMasterId);
       quantidadeUsuarios = usuarios.length;
     }
 
@@ -687,6 +676,7 @@ export class AssinaturasService {
     // Se não for master, retorna apenas tokens e análises
     if (userTipo !== 'master') {
       return {
+        clienteMasterId: clienteMaster.id,
         tokensChat: {
           tokensUtilizados: tokensChatUsadosMes,
           limitePlano: tokensChatLimite,
@@ -702,6 +692,7 @@ export class AssinaturasService {
 
     // Se for master, retorna todas as informações
     return {
+      clienteMasterId: clienteMaster.id,
       tokensChat: {
         tokensUtilizados: tokensChatUsados,
         tokensUtilizadosMes: tokensChatUsadosMes,
@@ -728,6 +719,76 @@ export class AssinaturasService {
         quantidade: quantidadeUsuarios,
       },
       cartao: cartao,
+    };
+  }
+
+  async getDashboardInfoUsuario(clienteMasterId: string, userComum: UserComum) {
+    // Busca o ClienteMaster pelo ID fornecido
+    const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
+
+    if (!clienteMaster) {
+      throw new NotFoundException('Cliente Master não encontrado');
+    }
+
+    // Busca assinatura diretamente do repositório para ter acesso a todos os campos
+    const assinaturaEntity = await this.assinaturaRepository.findOne({
+      where: { userId: clienteMaster.id },
+      relations: ['plano'],
+      order: { createdAt: 'DESC' },
+    });
+    
+    // Busca plano se houver assinatura
+    let plano: any = null;
+    if (assinaturaEntity && assinaturaEntity.planoId) {
+      plano = await this.planosService.findById(assinaturaEntity.planoId);
+    }
+
+    // Busca histórico do mês atual
+    const agora = new Date();
+    const ano = agora.getFullYear();
+    const mes = agora.getMonth() + 1;
+
+    const historicoAtual = await this.historicoRepository.findOne({
+      where: {
+        clienteMasterId: clienteMaster.id,
+        ano,
+        mes,
+      },
+    });
+
+    const tokensChatUsadosMes = Number(historicoAtual?.tokensUtilizados || 0);
+    const tokensChatLimite = plano ? Number(plano.tokenChat) : 0;
+    const porcentagemUsoTokens = tokensChatLimite > 0 
+      ? Math.min(100, Math.round((tokensChatUsadosMes / tokensChatLimite) * 100)) 
+      : 0;
+
+    // Calcula informações de análises
+    const analisesFeitasMes = Number(historicoAtual?.analisesFeitas || 0);
+    const analisesLimite = plano ? Number(plano.limiteAnalises) : 0;
+    const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasMes);
+    const porcentagemUsoAnalises = analisesLimite > 0 
+      ? Math.min(100, Math.round((analisesFeitasMes / analisesLimite) * 100)) 
+      : 0;
+
+    // Retorna apenas dados limitados para usuário comum
+    return {
+      clienteMasterId: clienteMaster.id,
+      usuarioId: userComum.id,
+      tokensChat: {
+        tokensUtilizados: tokensChatUsadosMes,
+        limitePlano: tokensChatLimite,
+        porcentagemUso: porcentagemUsoTokens,
+      },
+      analises: {
+        analisesRestantes: analisesRestantes,
+        limitePlano: analisesLimite,
+        porcentagemUso: porcentagemUsoAnalises,
+      },
+      perfil: {
+        nome: userComum.user?.nome || null,
+        email: userComum.user?.email || null,
+        ativo: userComum.ativo,
+      },
     };
   }
 

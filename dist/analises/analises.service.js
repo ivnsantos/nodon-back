@@ -20,26 +20,33 @@ const historico_mensal_entity_1 = require("./entities/historico-mensal.entity");
 const clientes_master_service_1 = require("../users/clientes-master.service");
 const assinaturas_service_1 = require("../assinaturas/assinaturas.service");
 const planos_service_1 = require("../planos/planos.service");
-const users_service_1 = require("../users/users.service");
+const user_comum_service_1 = require("../users/services/user-comum.service");
 let AnalisesService = class AnalisesService {
     historicoRepository;
     clientesMasterService;
     assinaturasService;
     planosService;
-    usersService;
-    constructor(historicoRepository, clientesMasterService, assinaturasService, planosService, usersService) {
+    userComumService;
+    constructor(historicoRepository, clientesMasterService, assinaturasService, planosService, userComumService) {
         this.historicoRepository = historicoRepository;
         this.clientesMasterService = clientesMasterService;
         this.assinaturasService = assinaturasService;
         this.planosService = planosService;
-        this.usersService = usersService;
+        this.userComumService = userComumService;
     }
     async registrarAnalise(userId, userTipo) {
-        let clienteMasterId = userId;
-        if (userTipo !== 'master') {
-            const user = await this.usersService.findById(userId);
-            if (user && user.clienteMasterId) {
-                clienteMasterId = user.clienteMasterId;
+        let clienteMasterId;
+        if (userTipo === 'master') {
+            const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+            if (!clientesMaster || clientesMaster.length === 0) {
+                throw new common_1.NotFoundException('Cliente Master não encontrado');
+            }
+            clienteMasterId = clientesMaster[0].id;
+        }
+        else {
+            const usuariosComuns = await this.userComumService.findByUserId(userId);
+            if (usuariosComuns && usuariosComuns.length > 0) {
+                clienteMasterId = usuariosComuns[0].clienteMasterId;
             }
             else {
                 throw new common_1.NotFoundException('Cliente Master não encontrado');
@@ -79,11 +86,18 @@ let AnalisesService = class AnalisesService {
         };
     }
     async registrarTokens(userId, userTipo, tokens) {
-        let clienteMasterId = userId;
-        if (userTipo !== 'master') {
-            const user = await this.usersService.findById(userId);
-            if (user && user.clienteMasterId) {
-                clienteMasterId = user.clienteMasterId;
+        let clienteMasterId;
+        if (userTipo === 'master') {
+            const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+            if (!clientesMaster || clientesMaster.length === 0) {
+                throw new common_1.NotFoundException('Cliente Master não encontrado');
+            }
+            clienteMasterId = clientesMaster[0].id;
+        }
+        else {
+            const usuariosComuns = await this.userComumService.findByUserId(userId);
+            if (usuariosComuns && usuariosComuns.length > 0) {
+                clienteMasterId = usuariosComuns[0].clienteMasterId;
             }
             else {
                 throw new common_1.NotFoundException('Cliente Master não encontrado');
@@ -134,11 +148,18 @@ let AnalisesService = class AnalisesService {
         });
     }
     async getHistorico(userId, userTipo, ano) {
-        let clienteMasterId = userId;
-        if (userTipo !== 'master') {
-            const user = await this.usersService.findById(userId);
-            if (user && user.clienteMasterId) {
-                clienteMasterId = user.clienteMasterId;
+        let clienteMasterId;
+        if (userTipo === 'master') {
+            const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+            if (!clientesMaster || clientesMaster.length === 0) {
+                throw new common_1.NotFoundException('Cliente Master não encontrado');
+            }
+            clienteMasterId = clientesMaster[0].id;
+        }
+        else {
+            const usuariosComuns = await this.userComumService.findByUserId(userId);
+            if (usuariosComuns && usuariosComuns.length > 0) {
+                clienteMasterId = usuariosComuns[0].clienteMasterId;
             }
             else {
                 throw new common_1.NotFoundException('Cliente Master não encontrado');
@@ -156,6 +177,6 @@ exports.AnalisesService = AnalisesService = __decorate([
         clientes_master_service_1.ClientesMasterService,
         assinaturas_service_1.AssinaturasService,
         planos_service_1.PlanosService,
-        users_service_1.UsersService])
+        user_comum_service_1.UserComumService])
 ], AnalisesService);
 //# sourceMappingURL=analises.service.js.map

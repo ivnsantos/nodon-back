@@ -13,7 +13,6 @@ exports.TypeOrmConfigService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const dotenv_1 = require("dotenv");
-const user_entity_1 = require("../users/entities/user.entity");
 const user_base_entity_1 = require("../users/entities/user-base.entity");
 const user_comum_entity_1 = require("../users/entities/user-comum.entity");
 const cliente_master_entity_1 = require("../users/entities/cliente-master.entity");
@@ -60,7 +59,7 @@ let TypeOrmConfigService = class TypeOrmConfigService {
             ssl: useSsl ? {
                 rejectUnauthorized: false,
             } : false,
-            entities: [user_entity_1.User, user_base_entity_1.UserBase, user_comum_entity_1.UserComum, cliente_master_entity_1.ClienteMaster, plano_entity_1.Plano, cupom_entity_1.Cupom, assinatura_entity_1.Assinatura, historico_mensal_entity_1.HistoricoMensal],
+            entities: [user_base_entity_1.UserBase, user_comum_entity_1.UserComum, cliente_master_entity_1.ClienteMaster, plano_entity_1.Plano, cupom_entity_1.Cupom, assinatura_entity_1.Assinatura, historico_mensal_entity_1.HistoricoMensal],
             synchronize: process.env.NODE_ENV !== 'production',
             logging: this.configService.get('NODE_ENV') === 'development',
             autoLoadEntities: true,

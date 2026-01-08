@@ -29,7 +29,7 @@ exports.AssinaturasModule = AssinaturasModule = __decorate([
             typeorm_1.TypeOrmModule.forFeature([assinatura_entity_1.Assinatura, cupom_entity_1.Cupom, historico_mensal_entity_1.HistoricoMensal]),
             planos_module_1.PlanosModule,
             cupons_module_1.CuponsModule,
-            users_module_1.UsersModule,
+            (0, common_1.forwardRef)(() => users_module_1.UsersModule),
             (0, common_1.forwardRef)(() => clientes_master_module_1.ClientesMasterModule),
             email_module_1.EmailModule,
         ],

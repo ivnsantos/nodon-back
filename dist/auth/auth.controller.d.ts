@@ -1,7 +1,9 @@
 import { AuthService } from './auth.service';
+import { ClientesMasterService } from '../users/clientes-master.service';
 export declare class AuthController {
     private authService;
-    constructor(authService: AuthService);
+    private clientesMasterService;
+    constructor(authService: AuthService, clientesMasterService: ClientesMasterService);
     login(loginDto: {
         email: string;
         password: string;
@@ -43,14 +45,14 @@ export declare class AuthController {
         nome: string;
         email: string;
         password: string;
-        clienteMasterId: string;
+        clienteMasterId?: string;
     }, req: any): Promise<{
         message: string;
         user: {
             id: string;
             nome: string;
             email: string;
-            tipo: import("../users/entities/user.entity").UserType;
+            tipo: string;
             clienteMasterId: string;
             isVerified: boolean;
         };
@@ -76,8 +78,26 @@ export declare class AuthController {
         code: string;
         warning: string;
     }>;
-    getClientByEmail(email: string): Promise<{
+    getClientByToken(req: any): Promise<{
         quantidade: number;
+        user: {
+            id: string;
+            nome: string;
+            email: string;
+            cpf: string;
+            telefone: string;
+            cro: string;
+            postalCode: string;
+            address: string;
+            addressNumber: string;
+            complement: string;
+            province: string;
+            city: string;
+            state: string;
+            isVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+        };
         clientesMaster: import("./auth.service").ClienteMasterInfo[];
     }>;
 }

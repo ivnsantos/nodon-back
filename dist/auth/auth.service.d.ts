@@ -1,12 +1,14 @@
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { UserBaseService } from '../users/services/user-base.service';
+import { UserComumService } from '../users/services/user-comum.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
 import { EmailService } from '../email/email.service';
 export interface ClienteMasterInfo {
     id: string;
+    hash: string | null;
     nome: string;
     email: string;
     telefone: string | null;
@@ -36,12 +38,13 @@ export interface ClienteMasterInfo {
 export declare class AuthService {
     private usersService;
     private userBaseService;
+    private userComumService;
     private clientesMasterService;
     private assinaturasService;
     private planosService;
     private jwtService;
     private emailService;
-    constructor(usersService: UsersService, userBaseService: UserBaseService, clientesMasterService: ClientesMasterService, assinaturasService: AssinaturasService, planosService: PlanosService, jwtService: JwtService, emailService: EmailService);
+    constructor(usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, clientesMasterService: ClientesMasterService, assinaturasService: AssinaturasService, planosService: PlanosService, jwtService: JwtService, emailService: EmailService);
     validateUser(email: string, password: string): Promise<any>;
     login(email: string, password: string): Promise<{
         access_token: string;
@@ -88,7 +91,7 @@ export declare class AuthService {
             id: string;
             nome: string;
             email: string;
-            tipo: import("../users/entities/user.entity").UserType;
+            tipo: string;
             clienteMasterId: string;
             isVerified: boolean;
         };
@@ -97,6 +100,8 @@ export declare class AuthService {
         message: string;
         userId: any;
     }>;
+    validateToken(token: string): Promise<any>;
+    generateTokenForUser(userId: string, email: string, tipo: string): Promise<string>;
     verifyEmail(email: string, code: string): Promise<{
         message: string;
     }>;
@@ -109,8 +114,48 @@ export declare class AuthService {
         code: string;
         warning: string;
     }>;
+    getClientMasterByUserBaseId(userBaseId: string): Promise<{
+        quantidade: number;
+        user: {
+            id: string;
+            nome: string;
+            email: string;
+            cpf: string;
+            telefone: string;
+            cro: string;
+            postalCode: string;
+            address: string;
+            addressNumber: string;
+            complement: string;
+            province: string;
+            city: string;
+            state: string;
+            isVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+        };
+        clientesMaster: ClienteMasterInfo[];
+    }>;
     getClientMasterByEmail(email: string): Promise<{
         quantidade: number;
+        user: {
+            id: string;
+            nome: string;
+            email: string;
+            cpf: string;
+            telefone: string;
+            cro: string;
+            postalCode: string;
+            address: string;
+            addressNumber: string;
+            complement: string;
+            province: string;
+            city: string;
+            state: string;
+            isVerified: boolean;
+            createdAt: Date;
+            updatedAt: Date;
+        };
         clientesMaster: ClienteMasterInfo[];
     }>;
 }
