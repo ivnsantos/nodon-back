@@ -13,7 +13,7 @@ export class UserBaseService {
   async create(data: {
     nome: string;
     email: string;
-    password: string;
+    password?: string;
     cpf?: string;
     telefone?: string;
     cro?: string;
@@ -27,6 +27,9 @@ export class UserBaseService {
     isVerified?: boolean;
     verificationToken?: string | null;
     tokenExpiresAt?: Date | null;
+    googleId?: string | null;
+    facebookId?: string | null;
+    foto?: string | null;
   }): Promise<UserBase> {
     const userBase = this.userBaseRepository.create({
       nome: data.nome,
@@ -45,6 +48,9 @@ export class UserBaseService {
       isVerified: data.isVerified ?? false,
       verificationToken: data.verificationToken ?? null,
       tokenExpiresAt: data.tokenExpiresAt ?? null,
+      googleId: data.googleId ?? null,
+      facebookId: data.facebookId ?? null,
+      foto: data.foto ?? null,
     });
     return this.userBaseRepository.save(userBase);
   }
@@ -84,6 +90,32 @@ export class UserBaseService {
 
   async findByVerificationToken(token: string): Promise<UserBase | null> {
     return this.userBaseRepository.findOne({ where: { verificationToken: token } });
+  }
+
+  async findByGoogleId(googleId: string): Promise<UserBase | null> {
+    return this.userBaseRepository.findOne({ where: { googleId } });
+  }
+
+  async updateGoogleId(id: string, googleId: string): Promise<UserBase> {
+    await this.userBaseRepository.update(id, { googleId });
+    const user = await this.findById(id);
+    if (!user) {
+      throw new Error('Usuário não encontrado');
+    }
+    return user;
+  }
+
+  async findByFacebookId(facebookId: string): Promise<UserBase | null> {
+    return this.userBaseRepository.findOne({ where: { facebookId } });
+  }
+
+  async updateFacebookId(id: string, facebookId: string): Promise<UserBase> {
+    await this.userBaseRepository.update(id, { facebookId });
+    const user = await this.findById(id);
+    if (!user) {
+      throw new Error('Usuário não encontrado');
+    }
+    return user;
   }
 }
 

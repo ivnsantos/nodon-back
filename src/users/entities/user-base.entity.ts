@@ -24,7 +24,7 @@ export class UserBase {
   @Column({ unique: true })
   email: string;
 
-  @Column()
+  @Column({ nullable: true })
   password: string;
 
   @Column({ nullable: true })
@@ -66,6 +66,15 @@ export class UserBase {
 
   @Column({ name: 'token_expires_at', type: 'timestamp', nullable: true })
   tokenExpiresAt: Date | null;
+
+  @Column({ name: 'google_id', type: 'varchar', nullable: true, unique: true })
+  googleId: string | null;
+
+  @Column({ name: 'facebook_id', type: 'varchar', nullable: true, unique: true })
+  facebookId: string | null;
+
+  @Column({ name: 'foto', type: 'varchar', nullable: true })
+  foto: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

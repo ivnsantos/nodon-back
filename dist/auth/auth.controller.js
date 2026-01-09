@@ -14,16 +14,27 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthController = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
 const auth_service_1 = require("./auth.service");
 const clientes_master_service_1 = require("../users/clientes-master.service");
 const jwt_auth_guard_1 = require("./guards/jwt-auth.guard");
 const is_master_guard_1 = require("./guards/is-master.guard");
+const google_auth_guard_1 = require("./guards/google-auth.guard");
+const facebook_auth_guard_1 = require("./guards/facebook-auth.guard");
 let AuthController = class AuthController {
     authService;
     clientesMasterService;
-    constructor(authService, clientesMasterService) {
+    configService;
+    constructor(authService, clientesMasterService, configService) {
         this.authService = authService;
         this.clientesMasterService = clientesMasterService;
+        this.configService = configService;
+    }
+    getFrontendUrl() {
+        const isProd = this.configService.get('NODE_ENV') === 'production';
+        return isProd
+            ? this.configService.get('FRONTEND_URL_PROD', 'https://nodon.com.br')
+            : this.configService.get('FRONTEND_URL', 'http://localhost:3000');
     }
     async login(loginDto) {
         return this.authService.login(loginDto.email, loginDto.password);
@@ -61,9 +72,99 @@ let AuthController = class AuthController {
         }
         return this.authService.resendVerificationCode(body.email);
     }
+    async getMe(req) {
+        return this.authService.getMe(req.user.id);
+    }
     async getClientByToken(req) {
         const userBaseId = req.user.id;
         return this.authService.getClientMasterByUserBaseId(userBaseId);
+    }
+    async googleAuth() {
+    }
+    async googleAuthCallback(req, res) {
+        try {
+            console.log('Google Callback - req.user:', req.user);
+            const result = await this.authService.googleLogin(req.user);
+            console.log('Google Login Result:', result);
+            const frontendUrl = this.getFrontendUrl();
+            if (result.isNewUser) {
+                const params = new URLSearchParams({
+                    isNewUser: 'true',
+                    email: result.googleData?.email || '',
+                    nome: result.googleData?.nome || '',
+                    googleId: result.googleData?.googleId || '',
+                    foto: result.googleData?.foto || ''
+                });
+                return res.redirect(`${frontendUrl}/auth/google/callback?${params.toString()}`);
+            }
+            const userEncoded = encodeURIComponent(JSON.stringify(result.user));
+            const params = new URLSearchParams({
+                token: result.access_token || '',
+                isNewUser: 'false',
+                user: userEncoded
+            });
+            return res.redirect(`${frontendUrl}/auth/google/callback?${params.toString()}`);
+        }
+        catch (error) {
+            console.error('Erro no Google Callback:', error);
+            const frontendUrl = this.getFrontendUrl();
+            return res.redirect(`${frontendUrl}/auth/google/callback?error=${encodeURIComponent(error.message)}`);
+        }
+    }
+    async googleLoginWithToken(body) {
+        if (!body.googleId || !body.email || !body.nome) {
+            throw new common_1.BadRequestException('googleId, email e nome são obrigatórios');
+        }
+        return this.authService.googleLogin({
+            googleId: body.googleId,
+            email: body.email,
+            nome: body.nome,
+            foto: body.foto,
+        });
+    }
+    async facebookAuth() {
+    }
+    async facebookAuthCallback(req, res) {
+        try {
+            console.log('Facebook Callback - req.user:', req.user);
+            const result = await this.authService.facebookLogin(req.user);
+            console.log('Facebook Login Result:', result);
+            const frontendUrl = this.getFrontendUrl();
+            if (result.isNewUser) {
+                const params = new URLSearchParams({
+                    isNewUser: 'true',
+                    provider: 'facebook',
+                    email: result.facebookData?.email || '',
+                    nome: result.facebookData?.nome || '',
+                    facebookId: result.facebookData?.facebookId || '',
+                    foto: result.facebookData?.foto || ''
+                });
+                return res.redirect(`${frontendUrl}/auth/facebook/callback?${params.toString()}`);
+            }
+            const userEncoded = encodeURIComponent(JSON.stringify(result.user));
+            const params = new URLSearchParams({
+                token: result.access_token || '',
+                isNewUser: 'false',
+                user: userEncoded
+            });
+            return res.redirect(`${frontendUrl}/auth/facebook/callback?${params.toString()}`);
+        }
+        catch (error) {
+            console.error('Erro no Facebook Callback:', error);
+            const frontendUrl = this.getFrontendUrl();
+            return res.redirect(`${frontendUrl}/auth/facebook/callback?error=${encodeURIComponent(error.message)}`);
+        }
+    }
+    async facebookLoginWithToken(body) {
+        if (!body.facebookId || !body.email || !body.nome) {
+            throw new common_1.BadRequestException('facebookId, email e nome são obrigatórios');
+        }
+        return this.authService.facebookLogin({
+            facebookId: body.facebookId,
+            email: body.email,
+            nome: body.nome,
+            foto: body.foto,
+        });
     }
 };
 exports.AuthController = AuthController;
@@ -113,6 +214,14 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "resendVerificationCode", null);
 __decorate([
+    (0, common_1.Get)('me'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "getMe", null);
+__decorate([
     (0, common_1.Get)('get-client-token'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Request)()),
@@ -120,9 +229,56 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "getClientByToken", null);
+__decorate([
+    (0, common_1.Get)('google'),
+    (0, common_1.UseGuards)(google_auth_guard_1.GoogleAuthGuard),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "googleAuth", null);
+__decorate([
+    (0, common_1.Get)('google/callback'),
+    (0, common_1.UseGuards)(google_auth_guard_1.GoogleAuthGuard),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "googleAuthCallback", null);
+__decorate([
+    (0, common_1.Post)('google/token'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "googleLoginWithToken", null);
+__decorate([
+    (0, common_1.Get)('facebook'),
+    (0, common_1.UseGuards)(facebook_auth_guard_1.FacebookAuthGuard),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "facebookAuth", null);
+__decorate([
+    (0, common_1.Get)('facebook/callback'),
+    (0, common_1.UseGuards)(facebook_auth_guard_1.FacebookAuthGuard),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "facebookAuthCallback", null);
+__decorate([
+    (0, common_1.Post)('facebook/token'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "facebookLoginWithToken", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
     __metadata("design:paramtypes", [auth_service_1.AuthService,
-        clientes_master_service_1.ClientesMasterService])
+        clientes_master_service_1.ClientesMasterService,
+        config_1.ConfigService])
 ], AuthController);
 //# sourceMappingURL=auth.controller.js.map

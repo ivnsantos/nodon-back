@@ -1,15 +1,27 @@
-import { Controller, Post, Body, UseGuards, Request, Get, Query, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Query, BadRequestException, NotFoundException, Res } from '@nestjs/common';
+import type { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { IsMasterGuard } from './guards/is-master.guard';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { FacebookAuthGuard } from './guards/facebook-auth.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
     private clientesMasterService: ClientesMasterService,
+    private configService: ConfigService,
   ) {}
+
+  private getFrontendUrl(): string {
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+    return isProd
+      ? this.configService.get<string>('FRONTEND_URL_PROD', 'https://nodon.com.br')
+      : this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
+  }
 
   @Post('login')
   async login(@Body() loginDto: { email: string; password: string }) {
@@ -84,6 +96,13 @@ export class AuthController {
     return this.authService.resendVerificationCode(body.email);
   }
 
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getMe(@Request() req) {
+    // Retorna dados do usuário logado
+    return this.authService.getMe(req.user.id);
+  }
+
   @Get('get-client-token')
   @UseGuards(JwtAuthGuard)
   async getClientByToken(@Request() req) {
@@ -92,6 +111,141 @@ export class AuthController {
     
     // Usar o userBaseId do token para buscar os ClienteMaster associados
     return this.authService.getClientMasterByUserBaseId(userBaseId);
+  }
+
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  async googleAuth() {
+    // Este endpoint inicia o fluxo OAuth do Google
+    // O guard redireciona automaticamente para a página de login do Google
+  }
+
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  async googleAuthCallback(@Request() req, @Res() res: Response) {
+    try {
+      console.log('Google Callback - req.user:', req.user);
+      
+      const result = await this.authService.googleLogin(req.user);
+      
+      console.log('Google Login Result:', result);
+      
+      const frontendUrl = this.getFrontendUrl();
+      
+      // Verificar se é novo usuário
+      if (result.isNewUser) {
+        // Redirecionar para registro com dados do Google
+        const params = new URLSearchParams({
+          isNewUser: 'true',
+          email: result.googleData?.email || '',
+          nome: result.googleData?.nome || '',
+          googleId: result.googleData?.googleId || '',
+          foto: result.googleData?.foto || ''
+        });
+        return res.redirect(`${frontendUrl}/auth/google/callback?${params.toString()}`);
+      }
+      
+      // Usuário já existe - redirecionar com token e dados do usuário
+      const userEncoded = encodeURIComponent(JSON.stringify(result.user));
+      const params = new URLSearchParams({
+        token: result.access_token || '',
+        isNewUser: 'false',
+        user: userEncoded
+      });
+      
+      return res.redirect(`${frontendUrl}/auth/google/callback?${params.toString()}`);
+    } catch (error) {
+      console.error('Erro no Google Callback:', error);
+      const frontendUrl = this.getFrontendUrl();
+      return res.redirect(`${frontendUrl}/auth/google/callback?error=${encodeURIComponent(error.message)}`);
+    }
+  }
+
+  @Post('google/token')
+  async googleLoginWithToken(
+    @Body() body: { googleId: string; email: string; nome: string; foto?: string },
+  ) {
+    // Endpoint alternativo para login com Google usando token do frontend
+    // Útil quando o frontend já fez a autenticação com Google (ex: usando Google Sign-In)
+    if (!body.googleId || !body.email || !body.nome) {
+      throw new BadRequestException('googleId, email e nome são obrigatórios');
+    }
+    
+    return this.authService.googleLogin({
+      googleId: body.googleId,
+      email: body.email,
+      nome: body.nome,
+      foto: body.foto,
+    });
+  }
+
+  // ==================== FACEBOOK OAuth ====================
+
+  @Get('facebook')
+  @UseGuards(FacebookAuthGuard)
+  async facebookAuth() {
+    // Este endpoint inicia o fluxo OAuth do Facebook
+    // O guard redireciona automaticamente para a página de login do Facebook
+  }
+
+  @Get('facebook/callback')
+  @UseGuards(FacebookAuthGuard)
+  async facebookAuthCallback(@Request() req, @Res() res: Response) {
+    try {
+      console.log('Facebook Callback - req.user:', req.user);
+      
+      const result = await this.authService.facebookLogin(req.user);
+      
+      console.log('Facebook Login Result:', result);
+      
+      const frontendUrl = this.getFrontendUrl();
+      
+      // Verificar se é novo usuário
+      if (result.isNewUser) {
+        // Redirecionar para registro com dados do Facebook
+        const params = new URLSearchParams({
+          isNewUser: 'true',
+          provider: 'facebook',
+          email: result.facebookData?.email || '',
+          nome: result.facebookData?.nome || '',
+          facebookId: result.facebookData?.facebookId || '',
+          foto: result.facebookData?.foto || ''
+        });
+        return res.redirect(`${frontendUrl}/auth/facebook/callback?${params.toString()}`);
+      }
+      
+      // Usuário já existe - redirecionar com token e dados do usuário
+      const userEncoded = encodeURIComponent(JSON.stringify(result.user));
+      const params = new URLSearchParams({
+        token: result.access_token || '',
+        isNewUser: 'false',
+        user: userEncoded
+      });
+      
+      return res.redirect(`${frontendUrl}/auth/facebook/callback?${params.toString()}`);
+    } catch (error) {
+      console.error('Erro no Facebook Callback:', error);
+      const frontendUrl = this.getFrontendUrl();
+      return res.redirect(`${frontendUrl}/auth/facebook/callback?error=${encodeURIComponent(error.message)}`);
+    }
+  }
+
+  @Post('facebook/token')
+  async facebookLoginWithToken(
+    @Body() body: { facebookId: string; email: string; nome: string; foto?: string },
+  ) {
+    // Endpoint alternativo para login com Facebook usando token do frontend
+    // Útil quando o frontend já fez a autenticação com Facebook SDK
+    if (!body.facebookId || !body.email || !body.nome) {
+      throw new BadRequestException('facebookId, email e nome são obrigatórios');
+    }
+    
+    return this.authService.facebookLogin({
+      facebookId: body.facebookId,
+      email: body.email,
+      nome: body.nome,
+      foto: body.foto,
+    });
   }
 }
 

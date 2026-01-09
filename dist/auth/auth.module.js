@@ -14,6 +14,8 @@ const config_1 = require("@nestjs/config");
 const auth_service_1 = require("./auth.service");
 const auth_controller_1 = require("./auth.controller");
 const jwt_strategy_1 = require("./strategies/jwt.strategy");
+const google_strategy_1 = require("./strategies/google.strategy");
+const facebook_strategy_1 = require("./strategies/facebook.strategy");
 const users_module_1 = require("../users/users.module");
 const clientes_master_module_1 = require("../users/clientes-master.module");
 const assinaturas_module_1 = require("../assinaturas/assinaturas.module");
@@ -41,7 +43,7 @@ exports.AuthModule = AuthModule = __decorate([
             }),
         ],
         controllers: [auth_controller_1.AuthController],
-        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy],
+        providers: [auth_service_1.AuthService, jwt_strategy_1.JwtStrategy, google_strategy_1.GoogleStrategy, facebook_strategy_1.FacebookStrategy],
         exports: [auth_service_1.AuthService],
     })
 ], AuthModule);
