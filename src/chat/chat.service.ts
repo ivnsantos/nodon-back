@@ -1,6 +1,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { Readable } from 'stream';
 import { ChatMessageDto, ChatResponseDto } from './dto/chat-message.dto';
 
 @Injectable()
@@ -71,7 +72,7 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
   /**
    * Normaliza a resposta removendo espaçamentos excessivos entre linhas
    */
-  private normalizeResponse(text: string): string {
+  normalizeResponse(text: string): string {
     if (!text) return text;
 
     // Remove múltiplas quebras de linha consecutivas (mais de 2)
@@ -93,6 +94,79 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     return normalized;
   }
 
+  async sendMessageStream(chatMessageDto: ChatMessageDto): Promise<Readable> {
+    if (!this.apiKey) {
+      throw new InternalServerErrorException('API do DeepSeek não está configurada');
+    }
+
+    // Montar o array de mensagens
+    const messages: { role: string; content: string }[] = [
+      { role: 'system', content: this.systemPrompt },
+    ];
+
+    // Adicionar histórico de conversa se existir (limitado às últimas 5 mensagens para reduzir tokens)
+    if (chatMessageDto.history && chatMessageDto.history.length > 0) {
+      // Limitar histórico às últimas 5 mensagens (2.5 turnos de conversa)
+      const limitedHistory = chatMessageDto.history.slice(-5);
+      for (const msg of limitedHistory) {
+        messages.push({
+          role: msg.role,
+          content: msg.content,
+        });
+      }
+    }
+
+    // Adicionar a mensagem atual do usuário
+    messages.push({
+      role: 'user',
+      content: chatMessageDto.message,
+    });
+
+    console.log('Enviando mensagem para DeepSeek (streaming)...');
+
+    try {
+      const response = await axios.post(
+        this.apiUrl,
+        {
+          model: 'deepseek-chat',
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 2000,
+          top_p: 0.95,
+          stream: true, // Ativa streaming
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`,
+          },
+          responseType: 'stream',
+          timeout: 60000,
+        },
+      );
+
+      return response.data as Readable;
+    } catch (error: any) {
+      console.error('Erro ao chamar DeepSeek API:', error.response?.data || error.message);
+      
+      if (error.response?.status === 401) {
+        throw new InternalServerErrorException('Chave da API DeepSeek inválida');
+      }
+      
+      if (error.response?.status === 429) {
+        throw new InternalServerErrorException('Limite de requisições da API excedido. Tente novamente em alguns minutos.');
+      }
+
+      if (error.code === 'ECONNABORTED') {
+        throw new InternalServerErrorException('Timeout na requisição. A IA demorou muito para responder.');
+      }
+
+      throw new InternalServerErrorException(
+        `Erro ao processar mensagem: ${error.response?.data?.error?.message || error.message}`,
+      );
+    }
+  }
+
   async sendMessage(chatMessageDto: ChatMessageDto): Promise<ChatResponseDto> {
     if (!this.apiKey) {
       throw new InternalServerErrorException('API do DeepSeek não está configurada');
@@ -104,9 +178,11 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
         { role: 'system', content: this.systemPrompt },
       ];
 
-      // Adicionar histórico de conversa se existir
+      // Adicionar histórico de conversa se existir (limitado às últimas 5 mensagens para reduzir tokens)
       if (chatMessageDto.history && chatMessageDto.history.length > 0) {
-        for (const msg of chatMessageDto.history) {
+        // Limitar histórico às últimas 5 mensagens (2.5 turnos de conversa)
+        const limitedHistory = chatMessageDto.history.slice(-5);
+        for (const msg of limitedHistory) {
           messages.push({
             role: msg.role,
             content: msg.content,
