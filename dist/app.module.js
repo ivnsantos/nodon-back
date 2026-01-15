@@ -24,6 +24,7 @@ const health_module_1 = require("./health/health.module");
 const email_module_1 = require("./email/email.module");
 const storage_module_1 = require("./storage/storage.module");
 const chat_module_1 = require("./chat/chat.module");
+const pacientes_module_1 = require("./pacientes/pacientes.module");
 const typeorm_config_1 = require("./config/typeorm.config");
 const planos_service_1 = require("./planos/planos.service");
 let AppModule = class AppModule {
@@ -70,6 +71,7 @@ exports.AppModule = AppModule = __decorate([
             email_module_1.EmailModule,
             storage_module_1.StorageModule,
             chat_module_1.ChatModule,
+            pacientes_module_1.PacientesModule,
         ],
     }),
     __metadata("design:paramtypes", [planos_service_1.PlanosService])

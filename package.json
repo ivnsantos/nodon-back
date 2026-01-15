@@ -7,7 +7,9 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/main.js"
+    "start:prod": "node dist/main.js",
+    "migrate:pacientes": "node run-migration-pacientes.js",
+    "migrate:historico-pacientes": "node run-migration-historico-pacientes.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",

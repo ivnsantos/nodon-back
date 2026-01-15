@@ -12,6 +12,7 @@ import { HealthModule } from './health/health.module';
 import { EmailModule } from './email/email.module';
 import { StorageModule } from './storage/storage.module';
 import { ChatModule } from './chat/chat.module';
+import { PacientesModule } from './pacientes/pacientes.module';
 import { TypeOrmConfigService } from './config/typeorm.config';
 import { PlanosService } from './planos/planos.service';
 
@@ -42,6 +43,7 @@ import { PlanosService } from './planos/planos.service';
     EmailModule,
     StorageModule,
     ChatModule,
+    PacientesModule,
   ],
 })
 export class AppModule implements OnModuleInit {
