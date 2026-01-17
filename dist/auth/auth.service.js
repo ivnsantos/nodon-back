@@ -144,10 +144,16 @@ let AuthService = class AuthService {
                 };
             }
         }
+        const clientesMaster = await this.clientesMasterService.findByUserId(user.userId);
+        const clientesMasterIds = clientesMaster.map(cm => cm.id);
+        const usuariosComuns = await this.userComumService.findByUserId(user.userId);
+        const usuariosComunsIds = usuariosComuns.map(uc => uc.id);
         const payload = {
             id: user.userId,
             email: user.email,
             tipo: tipo,
+            clientesMasterIds: clientesMasterIds,
+            usuariosComunsIds: usuariosComunsIds,
         };
         return {
             access_token: this.jwtService.sign(payload),

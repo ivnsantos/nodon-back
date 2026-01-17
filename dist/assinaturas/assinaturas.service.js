@@ -609,6 +609,10 @@ let AssinaturasService = class AssinaturasService {
         if (!clienteMaster) {
             throw new common_1.NotFoundException('Cliente Master não encontrado');
         }
+        const userBase = await this.userBaseService.findById(userComum.userId);
+        if (!userBase) {
+            throw new common_1.NotFoundException('Usuário base não encontrado');
+        }
         const assinaturaEntity = await this.assinaturaRepository.findOne({
             where: { userId: clienteMaster.id },
             relations: ['plano'],
@@ -640,6 +644,13 @@ let AssinaturasService = class AssinaturasService {
             ? Math.min(100, Math.round((analisesFeitasMes / analisesLimite) * 100))
             : 0;
         return {
+            clienteMaster: {
+                id: clienteMaster.id,
+                nomeEmpresa: clienteMaster.nomeEmpresa,
+                cnpj: clienteMaster.cnpj,
+                logo: clienteMaster.logo,
+                cor: clienteMaster.cor,
+            },
             clienteMasterId: clienteMaster.id,
             usuarioId: userComum.id,
             tokensChat: {
@@ -653,10 +664,26 @@ let AssinaturasService = class AssinaturasService {
                 porcentagemUso: porcentagemUsoAnalises,
             },
             perfil: {
-                nome: userComum.user?.nome || null,
-                email: userComum.user?.email || null,
+                id: userBase.id,
+                nome: userBase.nome,
+                email: userBase.email,
+                cpf: userBase.cpf,
+                telefone: userBase.telefone,
+                cro: userBase.cro,
+                postalCode: userBase.postalCode,
+                address: userBase.address,
+                addressNumber: userBase.addressNumber,
+                complement: userBase.complement,
+                province: userBase.province,
+                city: userBase.city,
+                state: userBase.state,
+                isVerified: userBase.isVerified,
                 ativo: userComum.ativo,
+                status: userComum.status,
             },
+            assinatura: assinaturaEntity ? {
+                status: assinaturaEntity.status,
+            } : null,
         };
     }
     toResponseDto(subscription) {

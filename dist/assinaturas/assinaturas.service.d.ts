@@ -86,6 +86,13 @@ export declare class AssinaturasService {
         cartao: any;
     }>;
     getDashboardInfoUsuario(clienteMasterId: string, userComum: UserComum): Promise<{
+        clienteMaster: {
+            id: string;
+            nomeEmpresa: string;
+            cnpj: string;
+            logo: string;
+            cor: string;
+        };
         clienteMasterId: string;
         usuarioId: string;
         tokensChat: {
@@ -99,10 +106,26 @@ export declare class AssinaturasService {
             porcentagemUso: number;
         };
         perfil: {
-            nome: string | null;
-            email: string | null;
+            id: string;
+            nome: string;
+            email: string;
+            cpf: string;
+            telefone: string;
+            cro: string;
+            postalCode: string;
+            address: string;
+            addressNumber: string;
+            complement: string;
+            province: string;
+            city: string;
+            state: string;
+            isVerified: boolean;
             ativo: boolean;
+            status: "ativo" | "inativo";
         };
+        assinatura: {
+            status: string;
+        } | null;
     }>;
     private toResponseDto;
 }

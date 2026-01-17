@@ -20,6 +20,9 @@ const plano_entity_1 = require("../planos/entities/plano.entity");
 const cupom_entity_1 = require("../cupons/entities/cupom.entity");
 const assinatura_entity_1 = require("../assinaturas/entities/assinatura.entity");
 const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
+const tipo_consulta_entity_1 = require("../calendario/entities/tipo-consulta.entity");
+const consulta_entity_1 = require("../calendario/entities/consulta.entity");
+const paciente_entity_1 = require("../pacientes/entities/paciente.entity");
 (0, dotenv_1.config)();
 let TypeOrmConfigService = class TypeOrmConfigService {
     configService;
@@ -59,7 +62,7 @@ let TypeOrmConfigService = class TypeOrmConfigService {
             ssl: useSsl ? {
                 rejectUnauthorized: false,
             } : false,
-            entities: [user_base_entity_1.UserBase, user_comum_entity_1.UserComum, cliente_master_entity_1.ClienteMaster, plano_entity_1.Plano, cupom_entity_1.Cupom, assinatura_entity_1.Assinatura, historico_mensal_entity_1.HistoricoMensal],
+            entities: [user_base_entity_1.UserBase, user_comum_entity_1.UserComum, cliente_master_entity_1.ClienteMaster, plano_entity_1.Plano, cupom_entity_1.Cupom, assinatura_entity_1.Assinatura, historico_mensal_entity_1.HistoricoMensal, tipo_consulta_entity_1.TipoConsulta, consulta_entity_1.Consulta, paciente_entity_1.Paciente],
             synchronize: process.env.NODE_ENV !== 'production',
             logging: this.configService.get('NODE_ENV') === 'development',
             autoLoadEntities: true,

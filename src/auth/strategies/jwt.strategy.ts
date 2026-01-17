@@ -21,6 +21,8 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: payload.id, // ID do UserBase
       email: payload.email,
       tipo: payload.tipo,
+      clientesMasterIds: payload.clientesMasterIds || [], // Array de IDs de ClienteMaster
+      usuariosComunsIds: payload.usuariosComunsIds || [], // Array de IDs de UserComum
     };
   }
 }

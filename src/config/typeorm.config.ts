@@ -10,6 +10,9 @@ import { Plano } from '../planos/entities/plano.entity';
 import { Cupom } from '../cupons/entities/cupom.entity';
 import { Assinatura } from '../assinaturas/entities/assinatura.entity';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
+import { TipoConsulta } from '../calendario/entities/tipo-consulta.entity';
+import { Consulta } from '../calendario/entities/consulta.entity';
+import { Paciente } from '../pacientes/entities/paciente.entity';
 
 config();
 
@@ -60,7 +63,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       ssl: useSsl ? {
         rejectUnauthorized: false, // Necessário para alguns ambientes de hospedagem
       } : false,
-      entities: [UserBase, UserComum, ClienteMaster, Plano, Cupom, Assinatura, HistoricoMensal],
+      entities: [UserBase, UserComum, ClienteMaster, Plano, Cupom, Assinatura, HistoricoMensal, TipoConsulta, Consulta, Paciente],
       synchronize: process.env.NODE_ENV !== 'production',
       logging: this.configService.get<string>('NODE_ENV') === 'development',
       autoLoadEntities: true,

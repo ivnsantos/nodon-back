@@ -43,15 +43,15 @@ export declare class ClientesMasterController {
         } | null;
     }>;
     findOne(id: string): Promise<import("./entities/cliente-master.entity").ClienteMaster | null>;
-    getCompleteInfo(id: string, req: any): Promise<{
+    getCompleteInfo(clienteMasterIdHeader: string, req: any): Promise<{
         userComum: {
-            id: string;
-            userId: string;
-            clienteMasterId: string;
-            ativo: boolean;
-            status: "ativo" | "inativo";
-            createdAt: Date;
-            updatedAt: Date;
+            id: any;
+            userId: any;
+            clienteMasterId: any;
+            ativo: any;
+            status: any;
+            createdAt: any;
+            updatedAt: any;
         };
         clienteMasterId: string;
         assinatura: {
@@ -60,7 +60,7 @@ export declare class ClientesMasterController {
         relacionamento: {
             tipo: "usuario";
             id: string;
-            status: "ativo" | "inativo";
+            status: any;
         };
     } | {
         relacionamento: {

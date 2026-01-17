@@ -18,6 +18,7 @@ const assinaturas_service_1 = require("./assinaturas.service");
 const create_subscription_dto_1 = require("./dto/create-subscription.dto");
 const create_simple_subscription_dto_1 = require("./dto/create-simple-subscription.dto");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
+const validate_resource_access_guard_1 = require("../auth/guards/validate-resource-access.guard");
 const clientes_master_service_1 = require("../users/clientes-master.service");
 const user_comum_service_1 = require("../users/services/user-comum.service");
 let AssinaturasController = class AssinaturasController {
@@ -41,9 +42,10 @@ let AssinaturasController = class AssinaturasController {
     async findMy(req) {
         return this.assinaturasService.findByUserId(req.user.id);
     }
-    async getDashboard(req, clienteMasterId, usuario) {
-        if (usuario) {
-            const userComum = await this.userComumService.findById(usuario);
+    async getDashboard(req, userComumIdHeader, clienteMasterId, usuario) {
+        const userComumId = userComumIdHeader || usuario;
+        if (userComumId) {
+            const userComum = await this.userComumService.findById(userComumId);
             if (!userComum) {
                 throw new common_1.NotFoundException('Usuário não encontrado');
             }
@@ -114,12 +116,13 @@ __decorate([
 ], AssinaturasController.prototype, "findMy", null);
 __decorate([
     (0, common_1.Get)('dashboard'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, validate_resource_access_guard_1.ValidateResourceAccessGuard),
     __param(0, (0, common_1.Request)()),
-    __param(1, (0, common_1.Query)('clienteMasterId')),
-    __param(2, (0, common_1.Query)('usuario')),
+    __param(1, (0, common_1.Headers)('x-user-comum-id')),
+    __param(2, (0, common_1.Query)('clienteMasterId')),
+    __param(3, (0, common_1.Query)('usuario')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String]),
     __metadata("design:returntype", Promise)
 ], AssinaturasController.prototype, "getDashboard", null);
 __decorate([

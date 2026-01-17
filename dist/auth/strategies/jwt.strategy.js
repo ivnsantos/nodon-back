@@ -32,6 +32,8 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
             id: payload.id,
             email: payload.email,
             tipo: payload.tipo,
+            clientesMasterIds: payload.clientesMasterIds || [],
+            usuariosComunsIds: payload.usuariosComunsIds || [],
         };
     }
 };
