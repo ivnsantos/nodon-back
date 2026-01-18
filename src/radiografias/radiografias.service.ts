@@ -28,24 +28,24 @@ export class RadiografiasService {
     private analisesService: AnalisesService,
   ) {}
 
-  async create(createRadiografiaDto: CreateRadiografiaDto, userId: string, userTipo: string, masterClientId: string): Promise<Radiografia> {
+  async create(createRadiografiaDto: CreateRadiografiaDto, userId: string, userTipo: string, clienteMasterId: string): Promise<Radiografia> {
     try {
       console.log('🚀 RadiografiasService.create iniciado:', {
         userId,
         userTipo,
-        masterClientId,
-        nomePaciente: createRadiografiaDto.nomePaciente,
+        clienteMasterId,
+        nome: createRadiografiaDto.nome,
         imagensCount: createRadiografiaDto.imagens?.length,
       });
 
       // Verificar permissão
       console.log('🔐 Verificando permissões...');
-      await this.verificarPermissao(userId, userTipo, masterClientId);
+      await this.verificarPermissao(userId, userTipo, clienteMasterId);
       console.log('✅ Permissões verificadas');
 
       // Verificar limite de análises mensais
       console.log('📊 Verificando limite de análises...');
-      await this.verificarLimiteAnalises(masterClientId);
+      await this.verificarLimiteAnalises(clienteMasterId);
       console.log('✅ Limite de análises verificado');
 
       // Validar limite de imagens
@@ -153,23 +153,21 @@ export class RadiografiasService {
       }
 
       // Criar radiografia
-      // Usar valores do DTO se fornecidos, senão usar valores da análise da IA
+      // descricaoExame, achadosRadiograficos e necessidades são gerados pela IA e retornados na resposta
       const radiografia = this.radiografiaRepository.create({
-        masterClientId,
-        nomePaciente: createRadiografiaDto.nomePaciente,
+        masterClient: { id: clienteMasterId } as any,
+        nome: createRadiografiaDto.nome,
         emailPaciente: createRadiografiaDto.emailPaciente || null,
         radiografia: createRadiografiaDto.radiografia || null,
         data: new Date(createRadiografiaDto.data),
         tipoExame: createRadiografiaDto.tipoExame || null,
         tratamento: createRadiografiaDto.tratamento || null,
         imagens: imagensComUrls,
-        descricaoExame: createRadiografiaDto.descricaoExame || descricaoExame,
-        achadosRadiograficos: createRadiografiaDto.achadosRadiograficos && createRadiografiaDto.achadosRadiograficos.length > 0 
-          ? createRadiografiaDto.achadosRadiograficos 
-          : achadosRadiograficos,
-        necessidades: createRadiografiaDto.necessidades && createRadiografiaDto.necessidades.length > 0
-          ? createRadiografiaDto.necessidades
-          : necessidades,
+        descricaoExame: descricaoExame,
+        achadosRadiograficos: achadosRadiograficos,
+        necessidades: necessidades,
+        responsavelId: createRadiografiaDto.responsavel || null,
+        pacienteId: createRadiografiaDto.pacienteId || null,
       });
 
       const radiografiaSalva = await this.radiografiaRepository.save(radiografia);
@@ -190,7 +188,7 @@ export class RadiografiasService {
         error: error?.message || error,
         stack: error?.stack,
         createRadiografiaDto: {
-          nomePaciente: createRadiografiaDto.nomePaciente,
+          nome: createRadiografiaDto.nome,
           imagensCount: createRadiografiaDto.imagens?.length,
         },
       });
@@ -205,12 +203,12 @@ export class RadiografiasService {
     }
   }
 
-  async findAll(masterClientId: string, userId: string, userTipo: string): Promise<Radiografia[]> {
+  async findAll(clienteMasterId: string, userId: string, userTipo: string): Promise<Radiografia[]> {
     // Verificar permissão
-    await this.verificarPermissao(userId, userTipo, masterClientId);
+    await this.verificarPermissao(userId, userTipo, clienteMasterId);
 
     return this.radiografiaRepository.find({
-      where: { masterClientId },
+      where: { masterClient: { id: clienteMasterId } },
       relations: ['masterClient', 'desenhosProfissionais'],
       order: { createdAt: 'DESC' },
     });
@@ -219,7 +217,7 @@ export class RadiografiasService {
   async findOne(id: string, userId: string, userTipo: string): Promise<Radiografia> {
     const radiografia = await this.radiografiaRepository.findOne({
       where: { id },
-      relations: ['masterClient', 'desenhosProfissionais'],
+      relations: ['masterClient'],
     });
 
     if (!radiografia) {
@@ -227,7 +225,7 @@ export class RadiografiasService {
     }
 
     // Verificar permissão
-    await this.verificarPermissao(userId, userTipo, radiografia.masterClientId);
+    await this.verificarPermissao(userId, userTipo, radiografia.masterClient?.id);
 
     return radiografia;
   }
@@ -245,10 +243,10 @@ export class RadiografiasService {
     console.log(`✅ Radiografia ${id} deletada com sucesso`);
   }
 
-  private async verificarPermissao(userId: string, userTipo: string, masterClientId: string): Promise<void> {
+  private async verificarPermissao(userId: string, userTipo: string, clienteMasterId: string): Promise<void> {
     if (userTipo === 'master') {
       const clientesMaster = await this.clientesMasterService.findByUserId(userId);
-      const temAcesso = clientesMaster.some(cm => cm.id === masterClientId);
+      const temAcesso = clientesMaster.some(cm => cm.id === clienteMasterId);
       if (!temAcesso) {
         throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
       }
@@ -258,16 +256,16 @@ export class RadiografiasService {
         throw new ForbiddenException('Usuário comum não encontrado');
       }
       
-      const temAcesso = usuariosComuns.some(uc => uc.clienteMasterId === masterClientId);
+      const temAcesso = usuariosComuns.some(uc => uc.clienteMasterId === clienteMasterId);
       if (!temAcesso) {
         throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
       }
     }
   }
 
-  private async verificarLimiteAnalises(masterClientId: string): Promise<void> {
+  private async verificarLimiteAnalises(clienteMasterId: string): Promise<void> {
     // Buscar informações do dashboard para verificar limite
-    const dashboardInfo = await this.assinaturasService.getDashboardInfo(masterClientId, 'master');
+    const dashboardInfo = await this.assinaturasService.getDashboardInfo(clienteMasterId, 'master');
     
     const analisesFeitasMes = dashboardInfo.analises?.analisesFeitasMes || 0;
     const limitePlano = dashboardInfo.analises?.limitePlano || 0;
@@ -304,8 +302,8 @@ export class RadiografiasService {
       const updateData: Partial<Radiografia> = {};
 
       // Atualizar campos básicos se fornecidos
-      if (updateRadiografiaDto.nomePaciente !== undefined) {
-        updateData.nomePaciente = updateRadiografiaDto.nomePaciente;
+      if (updateRadiografiaDto.nome !== undefined) {
+        updateData.nome = updateRadiografiaDto.nome;
       }
 
       if (updateRadiografiaDto.emailPaciente !== undefined) {

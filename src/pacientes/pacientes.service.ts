@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef, Optional } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Paciente } from './entities/paciente.entity';
@@ -24,57 +24,133 @@ export class PacientesService {
   ) {}
 
   async create(createPacienteDto: CreatePacienteDto, userId: string, userTipo: string): Promise<Paciente> {
-    // Validar masterClientId
-    const masterClient = await this.clientesMasterService.findById(createPacienteDto.masterClientId);
-    if (!masterClient) {
-      throw new NotFoundException('Cliente Master não encontrado');
+    try {
+      // Validar clienteMasterId
+      const masterClient = await this.clientesMasterService.findById(createPacienteDto.clienteMasterId);
+      if (!masterClient) {
+        throw new NotFoundException('Cliente Master não encontrado');
+      }
+
+      // Verificar permissão: usuário deve ser o dono do masterClient ou estar vinculado a ele
+      await this.verificarPermissao(userId, userTipo, createPacienteDto.clienteMasterId);
+
+      // Converter dataNascimento de string para Date
+      const dataNascimento = createPacienteDto.dadosPessoais?.dataNascimento
+        ? new Date(createPacienteDto.dadosPessoais.dataNascimento)
+        : null;
+
+      const paciente = new Paciente();
+      paciente.clienteMasterId = createPacienteDto.clienteMasterId;
+      paciente.nome = createPacienteDto.dadosPessoais?.nome || null;
+      paciente.cpf = createPacienteDto.dadosPessoais?.cpf || null;
+      paciente.dataNascimento = dataNascimento;
+      paciente.email = createPacienteDto.dadosPessoais?.email || null;
+      paciente.telefone = createPacienteDto.dadosPessoais?.telefone || null;
+      paciente.status = createPacienteDto.dadosPessoais?.status || null;
+      paciente.cep = createPacienteDto.endereco?.cep || null;
+      paciente.rua = createPacienteDto.endereco?.rua || null;
+      paciente.numero = createPacienteDto.endereco?.numero || null;
+      paciente.complemento = createPacienteDto.endereco?.complemento || null;
+      paciente.bairro = createPacienteDto.endereco?.bairro || null;
+      paciente.cidade = createPacienteDto.endereco?.cidade || null;
+      paciente.estado = createPacienteDto.endereco?.estado || null;
+      paciente.necessidades = createPacienteDto.informacoesClinicas?.necessidades || null;
+      paciente.observacoes = createPacienteDto.informacoesClinicas?.observacoes || null;
+
+      return await this.pacienteRepository.save(paciente);
+    } catch (error) {
+      console.error('❌ Erro ao criar paciente:', {
+        error: error?.message || error,
+        stack: error?.stack,
+        createPacienteDto: {
+          clienteMasterId: createPacienteDto.clienteMasterId,
+          nome: createPacienteDto.dadosPessoais?.nome,
+        },
+      });
+      throw error;
     }
-
-    // Verificar permissão: usuário deve ser o dono do masterClient ou estar vinculado a ele
-    await this.verificarPermissao(userId, userTipo, createPacienteDto.masterClientId);
-
-    // Converter dataNascimento de string para Date
-    const dataNascimento = createPacienteDto.dadosPessoais.dataNascimento
-      ? new Date(createPacienteDto.dadosPessoais.dataNascimento)
-      : null;
-
-    const paciente = this.pacienteRepository.create({
-      masterClientId: createPacienteDto.masterClientId,
-      nomePaciente: createPacienteDto.dadosPessoais.nomePaciente,
-      cpf: createPacienteDto.dadosPessoais.cpf,
-      dataNascimento: dataNascimento,
-      email: createPacienteDto.dadosPessoais.email,
-      telefone: createPacienteDto.dadosPessoais.telefone,
-      status: createPacienteDto.dadosPessoais.status || null,
-      cep: createPacienteDto.endereco?.cep || null,
-      rua: createPacienteDto.endereco?.rua || null,
-      numero: createPacienteDto.endereco?.numero || null,
-      complemento: createPacienteDto.endereco?.complemento || null,
-      bairro: createPacienteDto.endereco?.bairro || null,
-      cidade: createPacienteDto.endereco?.cidade || null,
-      estado: createPacienteDto.endereco?.estado || null,
-      necessidades: createPacienteDto.informacoesClinicas?.necessidades || null,
-      observacoes: createPacienteDto.informacoesClinicas?.observacoes || null,
-    });
-
-    return this.pacienteRepository.save(paciente);
   }
 
-  async findAll(masterClientId: string, userId: string, userTipo: string): Promise<Paciente[]> {
-    // Verificar permissão
-    await this.verificarPermissao(userId, userTipo, masterClientId);
+  async findAll(clienteMasterId: string, userId: string, userTipo: string): Promise<Paciente[]> {
+    try {
+      console.log('🔍 Buscando pacientes:', { clienteMasterId, userId, userTipo });
+      
+      // Verificar permissão
+      await this.verificarPermissao(userId, userTipo, clienteMasterId);
+      console.log('✅ Permissão verificada');
 
-    return this.pacienteRepository.find({
-      where: { masterClientId },
-      relations: ['masterClient'],
-      order: { createdAt: 'DESC' },
-    });
+      // Tentar buscar pacientes - usar query raw como fallback se a coluna não existir
+      let pacientes: Paciente[];
+      try {
+        // Primeiro tentar com find normal
+        pacientes = await this.pacienteRepository.find({
+          where: { clienteMasterId },
+          relations: ['masterClient', 'radiografias'],
+          order: { createdAt: 'DESC' },
+        });
+      } catch (error: any) {
+        // Se falhar (provavelmente porque a coluna não existe), usar query raw
+        if (error?.message?.includes('cliente_master_id') || error?.message?.includes('não existe')) {
+          console.warn('⚠️ Coluna cliente_master_id não encontrada, usando query raw...');
+          console.warn('💡 Execute o SQL em sql/fix-pacientes-cliente-master-id.sql para criar a coluna');
+          
+          // Verificar se existe cliente_master_id como alternativa
+          try {
+            const rawPacientes = await this.pacienteRepository.query(
+              'SELECT * FROM pacientes WHERE cliente_master_id = $1 ORDER BY created_at DESC',
+              [clienteMasterId]
+            );
+            pacientes = rawPacientes.map((row: any) => {
+              const paciente = new Paciente();
+              // Mapear cliente_master_id para clienteMasterId
+              paciente.clienteMasterId = row.cliente_master_id || row.cliente_master_id;
+              paciente.id = row.id;
+              paciente.nome = row.nome;
+              paciente.cpf = row.cpf;
+              paciente.dataNascimento = row.data_nascimento;
+              paciente.email = row.email;
+              paciente.telefone = row.telefone;
+              paciente.status = row.status;
+              paciente.cep = row.cep;
+              paciente.rua = row.rua;
+              paciente.numero = row.numero;
+              paciente.complemento = row.complemento;
+              paciente.bairro = row.bairro;
+              paciente.cidade = row.cidade;
+              paciente.estado = row.estado;
+              paciente.necessidades = row.necessidades;
+              paciente.observacoes = row.observacoes;
+              paciente.createdAt = row.created_at;
+              paciente.updatedAt = row.updated_at;
+              return paciente;
+            });
+          } catch (rawError) {
+            console.error('❌ Erro também na query raw:', rawError?.message);
+            throw new Error(`Coluna cliente_master_id não existe na tabela pacientes. Execute o SQL em sql/fix-pacientes-cliente-master-id.sql para criar a coluna. Erro original: ${error?.message}`);
+          }
+        } else {
+          throw error;
+        }
+      }
+      
+      console.log(`✅ Encontrados ${pacientes.length} pacientes`);
+      return pacientes;
+    } catch (error) {
+      console.error('❌ Erro ao buscar pacientes:', {
+        clienteMasterId,
+        userId,
+        userTipo,
+        error: error?.message || error,
+        stack: error?.stack,
+      });
+      throw error;
+    }
   }
 
   async findOne(id: string, userId: string, userTipo: string): Promise<Paciente> {
     const paciente = await this.pacienteRepository.findOne({
       where: { id },
-      relations: ['masterClient'],
+      relations: ['masterClient', 'radiografias'],
     });
 
     if (!paciente) {
@@ -82,7 +158,7 @@ export class PacientesService {
     }
 
     // Verificar permissão
-    await this.verificarPermissao(userId, userTipo, paciente.masterClientId);
+    await this.verificarPermissao(userId, userTipo, paciente.clienteMasterId);
 
     return paciente;
   }
@@ -91,35 +167,35 @@ export class PacientesService {
     try {
       const paciente = await this.findOne(id, userId, userTipo);
 
-      // Se está mudando o masterClientId, verificar permissão no novo também
-      if (updatePacienteDto.masterClientId && updatePacienteDto.masterClientId !== paciente.masterClientId) {
-        await this.verificarPermissao(userId, userTipo, updatePacienteDto.masterClientId);
+      // Se está mudando o clienteMasterId, verificar permissão no novo também
+      if (updatePacienteDto.clienteMasterId && updatePacienteDto.clienteMasterId !== paciente.clienteMasterId) {
+        await this.verificarPermissao(userId, userTipo, updatePacienteDto.clienteMasterId);
       }
 
     // Preparar dados para atualização e registrar histórico
     const updateData: any = {};
     const alteracoes: Array<{ campo: string; valorAnterior: any; valorNovo: any }> = [];
 
-    if (updatePacienteDto.masterClientId) {
-      const valorAnterior = paciente.masterClientId;
-      const valorNovo = updatePacienteDto.masterClientId;
+    if (updatePacienteDto.clienteMasterId) {
+      const valorAnterior = paciente.clienteMasterId;
+      const valorNovo = updatePacienteDto.clienteMasterId;
       if (valorAnterior !== valorNovo) {
         alteracoes.push({
-          campo: 'masterClientId',
+          campo: 'clienteMasterId',
           valorAnterior: valorAnterior,
           valorNovo: valorNovo,
         });
       }
-      updateData.masterClientId = valorNovo;
+      updateData.clienteMasterId = valorNovo;
     }
     if (updatePacienteDto.dadosPessoais) {
-      if (updatePacienteDto.dadosPessoais.nomePaciente !== undefined && updatePacienteDto.dadosPessoais.nomePaciente !== paciente.nomePaciente) {
+      if (updatePacienteDto.dadosPessoais.nome !== undefined && updatePacienteDto.dadosPessoais.nome !== paciente.nome) {
         alteracoes.push({
-          campo: 'nomePaciente',
-          valorAnterior: paciente.nomePaciente,
-          valorNovo: updatePacienteDto.dadosPessoais.nomePaciente,
+          campo: 'nome',
+          valorAnterior: paciente.nome,
+          valorNovo: updatePacienteDto.dadosPessoais.nome,
         });
-        updateData.nomePaciente = updatePacienteDto.dadosPessoais.nomePaciente;
+        updateData.nome = updatePacienteDto.dadosPessoais.nome;
       }
       if (updatePacienteDto.dadosPessoais.cpf !== undefined && updatePacienteDto.dadosPessoais.cpf !== paciente.cpf) {
         alteracoes.push({
@@ -295,25 +371,36 @@ export class PacientesService {
     console.log(`✅ Paciente ${id} deletado com sucesso`);
   }
 
-  private async verificarPermissao(userId: string, userTipo: string, masterClientId: string): Promise<void> {
-    if (userTipo === 'master') {
-      // Se for master, verificar se é dono do masterClient
-      const clientesMaster = await this.clientesMasterService.findByUserId(userId);
-      const temAcesso = clientesMaster.some(cm => cm.id === masterClientId);
-      if (!temAcesso) {
-        throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+  private async verificarPermissao(userId: string, userTipo: string, clienteMasterId: string): Promise<void> {
+    try {
+      if (userTipo === 'master') {
+        // Se for master, verificar se é dono do masterClient
+        const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+        const temAcesso = clientesMaster.some(cm => cm.id === clienteMasterId);
+        if (!temAcesso) {
+          throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+        }
+      } else {
+        // Se for usuário comum, verificar se está vinculado ao masterClient
+        const usuariosComuns = await this.userComumService.findByUserId(userId);
+        if (!usuariosComuns || usuariosComuns.length === 0) {
+          throw new ForbiddenException('Usuário comum não encontrado');
+        }
+        
+        const temAcesso = usuariosComuns.some(uc => uc.clienteMasterId === clienteMasterId);
+        if (!temAcesso) {
+          throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+        }
       }
-    } else {
-      // Se for usuário comum, verificar se está vinculado ao masterClient
-      const usuariosComuns = await this.userComumService.findByUserId(userId);
-      if (!usuariosComuns || usuariosComuns.length === 0) {
-        throw new ForbiddenException('Usuário comum não encontrado');
-      }
-      
-      const temAcesso = usuariosComuns.some(uc => uc.clienteMasterId === masterClientId);
-      if (!temAcesso) {
-        throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
-      }
+    } catch (error) {
+      console.error('❌ Erro ao verificar permissão:', {
+        userId,
+        userTipo,
+        clienteMasterId,
+        error: error?.message || error,
+        stack: error?.stack,
+      });
+      throw error;
     }
   }
 }

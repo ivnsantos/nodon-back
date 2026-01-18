@@ -9,7 +9,7 @@ class ImagemDto {
 export class UpdateRadiografiaDto {
   @IsString()
   @IsOptional()
-  nomePaciente?: string;
+  nome?: string;
 
   @IsString()
   @IsOptional()

@@ -148,7 +148,7 @@ CREATE TABLE IF NOT EXISTS historico_mensal (
 -- Tabela pacientes
 CREATE TABLE IF NOT EXISTS pacientes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  master_client_id UUID NOT NULL,
+  cliente_master_id UUID NOT NULL,
   nome VARCHAR(255) NULL,
   cpf VARCHAR(14) NULL,
   data_nascimento DATE NULL,
@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS pacientes (
   observacoes TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_paciente_master_client FOREIGN KEY (master_client_id) REFERENCES clientes_master(id) ON DELETE CASCADE
+  CONSTRAINT fk_paciente_master_client FOREIGN KEY (cliente_master_id) REFERENCES clientes_master(id) ON DELETE CASCADE
 );
 
 -- Tabela historico_pacientes
@@ -192,7 +192,7 @@ CREATE TABLE IF NOT EXISTS historico_pacientes (
 -- Tabela radiografias
 CREATE TABLE IF NOT EXISTS radiografias (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  master_client_id UUID NOT NULL,
+  cliente_master_id UUID NOT NULL,
   nome_paciente VARCHAR(255) NOT NULL,
   email_paciente VARCHAR(255) NULL,
   radiografia VARCHAR(255) NULL,
@@ -205,13 +205,13 @@ CREATE TABLE IF NOT EXISTS radiografias (
   necessidades JSONB NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_radiografia_master_client FOREIGN KEY (master_client_id) REFERENCES clientes_master(id) ON DELETE CASCADE
+  CONSTRAINT fk_radiografia_master_client FOREIGN KEY (cliente_master_id) REFERENCES clientes_master(id) ON DELETE CASCADE
 );
 
 -- Tabela desenhos_profissionais
 CREATE TABLE IF NOT EXISTS desenhos_profissionais (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  master_client_id UUID NOT NULL,
+  cliente_master_id UUID NOT NULL,
   radiografia_id UUID NULL,
   titulo_desenho VARCHAR(255) NOT NULL,
   imagem_desenhada JSONB NOT NULL,
@@ -220,7 +220,7 @@ CREATE TABLE IF NOT EXISTS desenhos_profissionais (
   observacoes TEXT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_desenho_profissional_master_client FOREIGN KEY (master_client_id) REFERENCES clientes_master(id) ON DELETE CASCADE,
+  CONSTRAINT fk_desenho_profissional_master_client FOREIGN KEY (cliente_master_id) REFERENCES clientes_master(id) ON DELETE CASCADE,
   CONSTRAINT fk_desenho_profissional_radiografia FOREIGN KEY (radiografia_id) REFERENCES radiografias(id) ON DELETE SET NULL
 );
 
@@ -252,7 +252,7 @@ CREATE INDEX IF NOT EXISTS idx_historico_mensal_cliente_master_id ON historico_m
 CREATE INDEX IF NOT EXISTS idx_historico_mensal_ano_mes ON historico_mensal(ano, mes);
 
 -- Índices para pacientes
-CREATE INDEX IF NOT EXISTS idx_pacientes_master_client_id ON pacientes(master_client_id);
+CREATE INDEX IF NOT EXISTS idx_pacientes_cliente_master_id ON pacientes(cliente_master_id);
 CREATE INDEX IF NOT EXISTS idx_pacientes_cpf ON pacientes(cpf);
 CREATE INDEX IF NOT EXISTS idx_pacientes_status ON pacientes(status);
 
@@ -263,12 +263,12 @@ CREATE INDEX IF NOT EXISTS idx_historico_cliente_master_id ON historico_paciente
 CREATE INDEX IF NOT EXISTS idx_historico_created_at ON historico_pacientes(created_at DESC);
 
 -- Índices para radiografias
-CREATE INDEX IF NOT EXISTS idx_radiografias_master_client_id ON radiografias(master_client_id);
+CREATE INDEX IF NOT EXISTS idx_radiografias_cliente_master_id ON radiografias(cliente_master_id);
 CREATE INDEX IF NOT EXISTS idx_radiografias_data ON radiografias(data DESC);
 CREATE INDEX IF NOT EXISTS idx_radiografias_nome_paciente ON radiografias(nome_paciente);
 
 -- Índices para desenhos_profissionais
-CREATE INDEX IF NOT EXISTS idx_desenhos_profissionais_master_client_id ON desenhos_profissionais(master_client_id);
+CREATE INDEX IF NOT EXISTS idx_desenhos_profissionais_cliente_master_id ON desenhos_profissionais(cliente_master_id);
 CREATE INDEX IF NOT EXISTS idx_desenhos_profissionais_radiografia_id ON desenhos_profissionais(radiografia_id);
 CREATE INDEX IF NOT EXISTS idx_desenhos_profissionais_created_at ON desenhos_profissionais(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_desenhos_profissionais_titulo_desenho ON desenhos_profissionais(titulo_desenho);

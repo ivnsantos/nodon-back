@@ -140,7 +140,7 @@ export class PacientesHistoricoService {
 
   private criarDescricaoAlteracao(campoAlterado: string, valorAnterior: string | null, valorNovo: string | null): string {
     const camposAmigaveis: Record<string, string> = {
-      nomePaciente: 'Nome do paciente',
+      nome: 'Nome do paciente',
       cpf: 'CPF',
       dataNascimento: 'Data de nascimento',
       email: 'E-mail',

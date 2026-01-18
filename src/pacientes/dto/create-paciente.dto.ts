@@ -1,10 +1,10 @@
-import { IsString, IsOptional, IsObject, ValidateNested, IsNotEmpty, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsObject, ValidateNested, IsArray, IsNotEmpty } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class DadosPessoaisDto {
   @IsString()
-  @IsNotEmpty()
-  nomePaciente: string;
+  @IsOptional()
+  nome?: string;
 
   @IsString()
   @IsOptional()
@@ -71,7 +71,7 @@ class InformacoesClinicasDto {
 export class CreatePacienteDto {
   @IsString()
   @IsNotEmpty()
-  masterClientId: string;
+  clienteMasterId: string;
 
   @IsObject()
   @ValidateNested()

@@ -16,15 +16,19 @@ export class Radiografia {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'master_client_id', type: 'uuid' })
-  masterClientId: string;
-
   @ManyToOne(() => ClienteMaster)
-  @JoinColumn({ name: 'master_client_id' })
+  @JoinColumn({ name: 'cliente_master_id' })
   masterClient: ClienteMaster;
 
+  @Column({ name: 'paciente_id', type: 'uuid', nullable: true })
+  pacienteId: string | null;
+
+  @ManyToOne('Paciente', 'radiografias')
+  @JoinColumn({ name: 'paciente_id' })
+  paciente: any;
+
   @Column({ name: 'nome_paciente', type: 'varchar' })
-  nomePaciente: string;
+  nome: string;
 
   @Column({ name: 'email_paciente', type: 'varchar', nullable: true })
   emailPaciente: string | null;
@@ -52,6 +56,9 @@ export class Radiografia {
 
   @Column({ name: 'necessidades', type: 'jsonb', nullable: true })
   necessidades: string[] | null;
+
+  @Column({ name: 'responsavel_id', type: 'uuid', nullable: true })
+  responsavelId: string | null;
 
   @OneToMany(() => DesenhoProfissional, (desenho) => desenho.radiografia)
   desenhosProfissionais: DesenhoProfissional[];

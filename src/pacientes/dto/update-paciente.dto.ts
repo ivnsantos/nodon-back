@@ -4,7 +4,7 @@ import { Type } from 'class-transformer';
 class DadosPessoaisDto {
   @IsString()
   @IsOptional()
-  nomePaciente?: string;
+  nome?: string;
 
   @IsString()
   @IsOptional()
@@ -71,7 +71,7 @@ class InformacoesClinicasDto {
 export class UpdatePacienteDto {
   @IsString()
   @IsOptional()
-  masterClientId?: string;
+  clienteMasterId?: string;
 
   @IsObject()
   @ValidateNested()

@@ -15,11 +15,11 @@ export class DesenhoProfissional {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'master_client_id', type: 'uuid' })
-  masterClientId: string;
+  @Column({ name: 'cliente_master_id', type: 'uuid' })
+  clienteMasterId: string;
 
   @ManyToOne(() => ClienteMaster)
-  @JoinColumn({ name: 'master_client_id' })
+  @JoinColumn({ name: 'cliente_master_id' })
   masterClient: ClienteMaster;
 
   @Column({ name: 'radiografia_id', type: 'uuid', nullable: true })

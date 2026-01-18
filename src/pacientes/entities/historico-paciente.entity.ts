@@ -37,7 +37,7 @@ export class HistoricoPaciente {
   clienteMaster: ClienteMaster | null;
 
   @Column({ name: 'campo_alterado' })
-  campoAlterado: string; // Nome do campo que foi alterado (ex: "nomePaciente", "status", "email")
+  campoAlterado: string; // Nome do campo que foi alterado (ex: "nome", "status", "email")
 
   @Column({ name: 'valor_anterior', type: 'text', nullable: true })
   valorAnterior: string | null;

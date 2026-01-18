@@ -19,20 +19,49 @@ export class PlanosService {
     descricao?: string;
     acesso?: string; // 'all' ou 'calendario,chat' (separado por vírgula)
   }): Promise<Plano> {
-    // Se acesso não for fornecido, usar 'all' como padrão
-    const planoData = {
-      ...data,
-      acesso: data.acesso || 'all',
-    };
+    // Remover acesso temporariamente até a coluna ser criada no banco
+    const { acesso, ...planoData } = data;
     const plano = this.planoRepository.create(planoData);
-    return this.planoRepository.save(plano);
+    const saved = await this.planoRepository.save(plano);
+    // Adicionar acesso como propriedade virtual
+    return { ...saved, acesso: acesso || 'all' } as Plano;
   }
 
   async findAll(): Promise<Plano[]> {
-    return this.planoRepository.find({
-      where: { ativo: true },
-      order: { valorOriginal: 'ASC' },
-    });
+    try {
+      // Usar query builder para selecionar apenas colunas que existem
+      const planos = await this.planoRepository
+        .createQueryBuilder('plano')
+        .select([
+          'plano.id',
+          'plano.nome',
+          'plano.valorOriginal',
+          'plano.valorPromocional',
+          'plano.limiteAnalises',
+          'plano.tokenChat',
+          'plano.ativo',
+          'plano.descricao',
+          // 'plano.acesso', // Comentado temporariamente até a coluna ser criada
+          'plano.createdAt',
+          'plano.updatedAt',
+        ])
+        .where('plano.ativo = :ativo', { ativo: true })
+        .orderBy('plano.valorOriginal', 'ASC')
+        .getMany();
+      
+      // Adicionar valor padrão para acesso se não existir
+      return planos.map(plano => ({
+        ...plano,
+        acesso: plano.acesso || 'all',
+      }));
+    } catch (error) {
+      console.error('❌ Erro ao buscar planos:', error);
+      console.error('❌ Detalhes do erro:', {
+        message: error?.message,
+        stack: error?.stack,
+      });
+      throw error;
+    }
   }
 
   async findById(id: string): Promise<Plano | null> {

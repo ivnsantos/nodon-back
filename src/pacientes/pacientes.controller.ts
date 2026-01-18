@@ -19,11 +19,22 @@ export class PacientesController {
   }
 
   @Get()
-  async findAll(@Query('masterClientId') masterClientId: string, @Request() req) {
-    if (!masterClientId) {
-      throw new BadRequestException('masterClientId é obrigatório');
+  async findAll(@Query('clienteMasterId') clienteMasterId: string, @Request() req) {
+    try {
+      if (!clienteMasterId) {
+        throw new BadRequestException('clienteMasterId é obrigatório');
+      }
+      return await this.pacientesService.findAll(clienteMasterId, req.user.id, req.user.tipo);
+    } catch (error) {
+      console.error('❌ Erro no controller de pacientes (findAll):', {
+        clienteMasterId,
+        userId: req.user?.id,
+        userTipo: req.user?.tipo,
+        error: error?.message || error,
+        stack: error?.stack,
+      });
+      throw error;
     }
-    return this.pacientesService.findAll(masterClientId, req.user.id, req.user.tipo);
   }
 
   @Get(':id')

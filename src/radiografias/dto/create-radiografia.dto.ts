@@ -10,7 +10,7 @@ class ImagemDto {
 export class CreateRadiografiaDto {
   @IsString()
   @IsNotEmpty()
-  nomePaciente: string;
+  nome: string;
 
   @IsString()
   @IsOptional()
@@ -40,15 +40,9 @@ export class CreateRadiografiaDto {
 
   @IsString()
   @IsOptional()
-  descricaoExame?: string;
+  responsavel?: string; // ID do responsável pelo exame
 
-  @IsArray()
-  @IsString({ each: true })
+  @IsString()
   @IsOptional()
-  achadosRadiograficos?: string[];
-
-  @IsArray()
-  @IsString({ each: true })
-  @IsOptional()
-  necessidades?: string[];
+  pacienteId?: string; // ID do paciente vinculado
 }

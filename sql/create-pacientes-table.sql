@@ -2,7 +2,7 @@
 
 CREATE TABLE IF NOT EXISTS pacientes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  master_client_id UUID NOT NULL,
+  cliente_master_id UUID NOT NULL,
   
   -- Dados pessoais
   nome_paciente VARCHAR(255) NOT NULL,
@@ -28,10 +28,10 @@ CREATE TABLE IF NOT EXISTS pacientes (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   
-  CONSTRAINT fk_paciente_master_client FOREIGN KEY (master_client_id) REFERENCES clientes_master(id) ON DELETE CASCADE
+  CONSTRAINT fk_paciente_master_client FOREIGN KEY (cliente_master_id) REFERENCES clientes_master(id) ON DELETE CASCADE
 );
 
 -- Criar índices para melhor performance
-CREATE INDEX IF NOT EXISTS idx_pacientes_master_client_id ON pacientes(master_client_id);
+CREATE INDEX IF NOT EXISTS idx_pacientes_cliente_master_id ON pacientes(cliente_master_id);
 CREATE INDEX IF NOT EXISTS idx_pacientes_cpf ON pacientes(cpf);
 CREATE INDEX IF NOT EXISTS idx_pacientes_status ON pacientes(status);

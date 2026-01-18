@@ -23,9 +23,12 @@ import { PlanosService } from './planos/planos.service';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [
+        join(process.cwd(), '.env.local'), // Prioridade para desenvolvimento local
+        join(__dirname, '..', '.env.local'),
         join(__dirname, '..', '.env'),
         join(process.cwd(), '.env'),
         join(process.cwd(), 'server-nestjs', '.env'),
+        '.env.local',
         '.env',
         '../.env',
       ],

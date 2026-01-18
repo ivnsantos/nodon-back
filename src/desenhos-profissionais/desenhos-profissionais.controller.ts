@@ -46,7 +46,7 @@ export class DesenhosProfissionaisController {
 
   @Get()
   async findAll(
-    @Query('masterClientId') masterClientId: string,
+    @Query('clienteMasterId') clienteMasterId: string,
     @Query('radiografiaId') radiografiaId: string,
     @Request() req,
   ) {
@@ -55,11 +55,11 @@ export class DesenhosProfissionaisController {
       return this.desenhosProfissionaisService.findByRadiografiaId(radiografiaId, req.user.id, req.user.tipo);
     }
 
-    if (!masterClientId) {
-      throw new BadRequestException('masterClientId ou radiografiaId é obrigatório');
+    if (!clienteMasterId) {
+      throw new BadRequestException('clienteMasterId ou radiografiaId é obrigatório');
     }
 
-    return this.desenhosProfissionaisService.findAll(masterClientId, req.user.id, req.user.tipo);
+    return this.desenhosProfissionaisService.findAll(clienteMasterId, req.user.id, req.user.tipo);
   }
 
   @Get(':id')

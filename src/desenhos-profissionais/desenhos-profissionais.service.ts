@@ -35,20 +35,21 @@ export class DesenhosProfissionaisService {
         tituloDesenho: createDesenhoProfissionalDto.tituloDesenho,
       });
 
-      // Buscar radiografia para obter masterClientId
+      // Buscar radiografia para obter clienteMasterId
       const radiografia = await this.radiografiaRepository.findOne({
         where: { id: createDesenhoProfissionalDto.radiografiaId },
+        relations: ['masterClient'],
       });
 
       if (!radiografia) {
         throw new NotFoundException('Radiografia não encontrada');
       }
 
-      const masterClientId = radiografia.masterClientId;
+      const clienteMasterId = radiografia.masterClient?.id;
 
-      // Verificar permissão usando o masterClientId da radiografia
+      // Verificar permissão usando o clienteMasterId da radiografia
       console.log('🔐 Verificando permissões...');
-      await this.verificarPermissao(userId, userTipo, masterClientId);
+      await this.verificarPermissao(userId, userTipo, clienteMasterId);
       console.log('✅ Permissões verificadas');
 
       // Processar upload da imagem para S3
@@ -125,7 +126,7 @@ export class DesenhosProfissionaisService {
 
       // Criar desenho profissional
       const desenhoProfissional = this.desenhoProfissionalRepository.create({
-        masterClientId,
+        clienteMasterId,
         tituloDesenho: createDesenhoProfissionalDto.tituloDesenho,
         imagemDesenhada: imagemDesenhadaComUrl,
         dentesAnotacoes: createDesenhoProfissionalDto.dentesAnotacoes,
@@ -160,29 +161,30 @@ export class DesenhosProfissionaisService {
     }
   }
 
-  async findAll(masterClientId: string, userId: string, userTipo: string): Promise<DesenhoProfissional[]> {
+  async findAll(clienteMasterId: string, userId: string, userTipo: string): Promise<DesenhoProfissional[]> {
     // Verificar permissão
-    await this.verificarPermissao(userId, userTipo, masterClientId);
+    await this.verificarPermissao(userId, userTipo, clienteMasterId);
 
     return this.desenhoProfissionalRepository.find({
-      where: { masterClientId },
+      where: { clienteMasterId },
       relations: ['masterClient', 'radiografia'],
       order: { createdAt: 'DESC' },
     });
   }
 
   async findByRadiografiaId(radiografiaId: string, userId: string, userTipo: string): Promise<DesenhoProfissional[]> {
-    // Buscar radiografia para obter masterClientId e verificar permissão
+    // Buscar radiografia para obter clienteMasterId e verificar permissão
     const radiografia = await this.radiografiaRepository.findOne({
       where: { id: radiografiaId },
+      relations: ['masterClient'],
     });
 
     if (!radiografia) {
       throw new NotFoundException('Radiografia não encontrada');
     }
 
-    // Verificar permissão usando o masterClientId da radiografia
-    await this.verificarPermissao(userId, userTipo, radiografia.masterClientId);
+    // Verificar permissão usando o clienteMasterId da radiografia
+    await this.verificarPermissao(userId, userTipo, radiografia.masterClient?.id);
 
     return this.desenhoProfissionalRepository.find({
       where: { radiografiaId },
@@ -202,7 +204,7 @@ export class DesenhosProfissionaisService {
     }
 
     // Verificar permissão
-    await this.verificarPermissao(userId, userTipo, desenhoProfissional.masterClientId);
+    await this.verificarPermissao(userId, userTipo, desenhoProfissional.clienteMasterId);
 
     return desenhoProfissional;
   }
@@ -288,10 +290,10 @@ export class DesenhosProfissionaisService {
     await this.desenhoProfissionalRepository.remove(desenhoProfissional);
   }
 
-  private async verificarPermissao(userId: string, userTipo: string, masterClientId: string): Promise<void> {
+  private async verificarPermissao(userId: string, userTipo: string, clienteMasterId: string): Promise<void> {
     if (userTipo === 'master') {
       const clientesMaster = await this.clientesMasterService.findByUserId(userId);
-      const temAcesso = clientesMaster.some(cm => cm.id === masterClientId);
+      const temAcesso = clientesMaster.some(cm => cm.id === clienteMasterId);
       if (!temAcesso) {
         throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
       }
@@ -301,7 +303,7 @@ export class DesenhosProfissionaisService {
         throw new ForbiddenException('Usuário comum não encontrado');
       }
       
-      const temAcesso = usuariosComuns.some(uc => uc.clienteMasterId === masterClientId);
+      const temAcesso = usuariosComuns.some(uc => uc.clienteMasterId === clienteMasterId);
       if (!temAcesso) {
         throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
       }

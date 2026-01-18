@@ -25,4 +25,8 @@ import { AnalisesModule } from '../analises/analises.module';
   providers: [RadiografiasService],
   exports: [RadiografiasService],
 })
-export class RadiografiasModule {}
+export class RadiografiasModule {
+  constructor() {
+    console.log('✅ RadiografiasModule carregado');
+  }
+}

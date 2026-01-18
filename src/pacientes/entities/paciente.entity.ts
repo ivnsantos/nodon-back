@@ -6,36 +6,41 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  OneToMany,
 } from 'typeorm';
 import { ClienteMaster } from '../../users/entities/cliente-master.entity';
+import { Radiografia } from '../../radiografias/entities/radiografia.entity';
 
 @Entity('pacientes')
 export class Paciente {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'master_client_id' })
-  masterClientId: string;
+  @Column({ name: 'cliente_master_id', type: 'uuid' })
+  clienteMasterId: string;
 
   @ManyToOne(() => ClienteMaster)
-  @JoinColumn({ name: 'master_client_id' })
+  @JoinColumn({ name: 'cliente_master_id' })
   masterClient: ClienteMaster;
 
-  // Dados pessoais
-  @Column({ name: 'nome', nullable: true })
-  nomePaciente: string;
+  @OneToMany(() => Radiografia, (radiografia) => radiografia.paciente)
+  radiografias: Radiografia[];
 
-  @Column({ nullable: true })
-  cpf: string;
+  // Dados pessoais
+  @Column({ name: 'nome', type: 'varchar', nullable: true })
+  nome: string | null;
+
+  @Column({ name: 'cpf', type: 'varchar', nullable: true })
+  cpf: string | null;
 
   @Column({ name: 'data_nascimento', type: 'date', nullable: true })
   dataNascimento: Date | null;
 
-  @Column({ nullable: true })
-  email: string;
+  @Column({ name: 'email', type: 'varchar', nullable: true })
+  email: string | null;
 
-  @Column({ nullable: true })
-  telefone: string;
+  @Column({ name: 'telefone', type: 'varchar', nullable: true })
+  telefone: string | null;
 
   @Column({ name: 'status', type: 'varchar', nullable: true })
   status: string | null;

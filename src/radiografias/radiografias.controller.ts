@@ -7,28 +7,30 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 @Controller('radiografias')
 @UseGuards(JwtAuthGuard)
 export class RadiografiasController {
-  constructor(private readonly radiografiasService: RadiografiasService) {}
+  constructor(private readonly radiografiasService: RadiografiasService) {
+    console.log('✅ RadiografiasController inicializado');
+  }
 
   @Post()
-  async create(@Body() createRadiografiaDto: CreateRadiografiaDto, @Request() req, @Query('masterClientId') masterClientId: string) {
+  async create(@Body() createRadiografiaDto: CreateRadiografiaDto, @Request() req, @Query('clienteMasterId') clienteMasterId: string) {
     try {
       console.log('📥 POST /api/radiografias recebido:', {
-        masterClientId,
+        clienteMasterId,
         userId: req.user?.id,
         userTipo: req.user?.tipo,
-        nomePaciente: createRadiografiaDto.nomePaciente,
+        nome: createRadiografiaDto.nome,
         imagensCount: createRadiografiaDto.imagens?.length,
       });
 
-      if (!masterClientId) {
-        throw new BadRequestException('masterClientId é obrigatório');
+      if (!clienteMasterId) {
+        throw new BadRequestException('clienteMasterId é obrigatório');
       }
 
       if (!req.user?.id || !req.user?.tipo) {
         throw new BadRequestException('Usuário não autenticado');
       }
 
-      return await this.radiografiasService.create(createRadiografiaDto, req.user.id, req.user.tipo, masterClientId);
+      return await this.radiografiasService.create(createRadiografiaDto, req.user.id, req.user.tipo, clienteMasterId);
     } catch (error: any) {
       console.error('❌ Erro no controller de radiografias:', {
         error: error?.message || error,
@@ -39,16 +41,44 @@ export class RadiografiasController {
   }
 
   @Get()
-  async findAll(@Query('masterClientId') masterClientId: string, @Request() req) {
-    if (!masterClientId) {
-      throw new BadRequestException('masterClientId é obrigatório');
+  async findAll(@Query('clienteMasterId') clienteMasterId: string, @Request() req) {
+    try {
+      if (!clienteMasterId) {
+        throw new BadRequestException('clienteMasterId é obrigatório');
+      }
+      if (!req.user?.id || !req.user?.tipo) {
+        throw new BadRequestException('Usuário não autenticado');
+      }
+      return await this.radiografiasService.findAll(clienteMasterId, req.user.id, req.user.tipo);
+    } catch (error: any) {
+      console.error('❌ Erro no controller de radiografias (GET):', {
+        clienteMasterId,
+        userId: req.user?.id,
+        userTipo: req.user?.tipo,
+        error: error?.message || error,
+        stack: error?.stack,
+      });
+      throw error;
     }
-    return this.radiografiasService.findAll(masterClientId, req.user.id, req.user.tipo);
   }
 
   @Get(':id')
   async findOne(@Param('id') id: string, @Request() req) {
-    return this.radiografiasService.findOne(id, req.user.id, req.user.tipo);
+    try {
+      if (!req.user?.id || !req.user?.tipo) {
+        throw new BadRequestException('Usuário não autenticado');
+      }
+      return await this.radiografiasService.findOne(id, req.user.id, req.user.tipo);
+    } catch (error: any) {
+      console.error('❌ Erro no controller de radiografias (GET :id):', {
+        id,
+        userId: req.user?.id,
+        userTipo: req.user?.tipo,
+        error: error?.message || error,
+        stack: error?.stack,
+      });
+      throw error;
+    }
   }
 
   @Put(':id')
