@@ -6,6 +6,8 @@ import { ClienteMaster } from './entities/cliente-master.entity';
 import { UserBase } from './entities/user-base.entity';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
+import { UserComumService } from './services/user-comum.service';
+import { UserBaseService } from './services/user-base.service';
 
 @Injectable()
 export class ClientesMasterService {
@@ -17,6 +19,10 @@ export class ClientesMasterService {
     @Inject(forwardRef(() => AssinaturasService))
     private assinaturasService: AssinaturasService,
     private planosService: PlanosService,
+    @Inject(forwardRef(() => UserComumService))
+    private userComumService: UserComumService,
+    @Inject(forwardRef(() => UserBaseService))
+    private userBaseService: UserBaseService,
   ) {}
 
   async create(data: {
@@ -129,6 +135,43 @@ export class ClientesMasterService {
     // 3. Buscar Assinatura
     const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
 
+    // 3.5. Buscar Usuários vinculados ao ClienteMaster (sempre buscar)
+    const usuarios = await this.userComumService.findByClienteMasterId(clienteMasterId);
+    const usuariosCompletos = await Promise.all(
+      usuarios.map(async (usuario) => {
+        const userBase = await this.userBaseService.findById(usuario.userId);
+        return {
+          id: usuario.id,
+          userId: usuario.userId,
+          clienteMasterId: usuario.clienteMasterId,
+          ativo: usuario.ativo,
+          status: usuario.status,
+          createdAt: usuario.createdAt,
+          updatedAt: usuario.updatedAt,
+          user: userBase
+            ? {
+                id: userBase.id,
+                nome: userBase.nome,
+                email: userBase.email,
+                cpf: userBase.cpf,
+                telefone: userBase.telefone,
+                cro: userBase.cro,
+                postalCode: userBase.postalCode,
+                address: userBase.address,
+                addressNumber: userBase.addressNumber,
+                complement: userBase.complement,
+                province: userBase.province,
+                city: userBase.city,
+                state: userBase.state,
+                isVerified: userBase.isVerified,
+                createdAt: userBase.createdAt,
+                updatedAt: userBase.updatedAt,
+              }
+            : null,
+        };
+      }),
+    );
+
     // 4. Se a assinatura estiver PENDING, retornar apenas o status
     if (assinatura && assinatura.status === 'PENDING') {
       return {
@@ -170,6 +213,7 @@ export class ClientesMasterService {
           status: assinatura.status,
         },
         plano: null,
+        usuarios: usuariosCompletos,
       };
     }
 
@@ -179,7 +223,7 @@ export class ClientesMasterService {
       plano = await this.planosService.findById(assinatura.planoId);
     }
 
-    // 6. Montar resposta completa
+    // 7. Montar resposta completa
     return {
       clienteMaster: {
         id: clienteMaster.id,
@@ -249,11 +293,13 @@ export class ClientesMasterService {
             valorPromocional: plano.valorPromocional,
             tokenChat: plano.tokenChat,
             limiteAnalises: plano.limiteAnalises,
+            acesso: plano.acesso,
             ativo: plano.ativo,
             createdAt: plano.createdAt,
             updatedAt: plano.updatedAt,
           }
         : null,
+      usuarios: usuariosCompletos,
     };
   }
 

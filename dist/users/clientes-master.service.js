@@ -21,16 +21,22 @@ const cliente_master_entity_1 = require("./entities/cliente-master.entity");
 const user_base_entity_1 = require("./entities/user-base.entity");
 const assinaturas_service_1 = require("../assinaturas/assinaturas.service");
 const planos_service_1 = require("../planos/planos.service");
+const user_comum_service_1 = require("./services/user-comum.service");
+const user_base_service_1 = require("./services/user-base.service");
 let ClientesMasterService = class ClientesMasterService {
     clienteMasterRepository;
     userBaseRepository;
     assinaturasService;
     planosService;
-    constructor(clienteMasterRepository, userBaseRepository, assinaturasService, planosService) {
+    userComumService;
+    userBaseService;
+    constructor(clienteMasterRepository, userBaseRepository, assinaturasService, planosService, userComumService, userBaseService) {
         this.clienteMasterRepository = clienteMasterRepository;
         this.userBaseRepository = userBaseRepository;
         this.assinaturasService = assinaturasService;
         this.planosService = planosService;
+        this.userComumService = userComumService;
+        this.userBaseService = userBaseService;
     }
     async create(data) {
         let hash;
@@ -113,6 +119,39 @@ let ClientesMasterService = class ClientesMasterService {
             throw new common_1.NotFoundException('Usuário base não encontrado para este Cliente Master');
         }
         const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
+        const usuarios = await this.userComumService.findByClienteMasterId(clienteMasterId);
+        const usuariosCompletos = await Promise.all(usuarios.map(async (usuario) => {
+            const userBase = await this.userBaseService.findById(usuario.userId);
+            return {
+                id: usuario.id,
+                userId: usuario.userId,
+                clienteMasterId: usuario.clienteMasterId,
+                ativo: usuario.ativo,
+                status: usuario.status,
+                createdAt: usuario.createdAt,
+                updatedAt: usuario.updatedAt,
+                user: userBase
+                    ? {
+                        id: userBase.id,
+                        nome: userBase.nome,
+                        email: userBase.email,
+                        cpf: userBase.cpf,
+                        telefone: userBase.telefone,
+                        cro: userBase.cro,
+                        postalCode: userBase.postalCode,
+                        address: userBase.address,
+                        addressNumber: userBase.addressNumber,
+                        complement: userBase.complement,
+                        province: userBase.province,
+                        city: userBase.city,
+                        state: userBase.state,
+                        isVerified: userBase.isVerified,
+                        createdAt: userBase.createdAt,
+                        updatedAt: userBase.updatedAt,
+                    }
+                    : null,
+            };
+        }));
         if (assinatura && assinatura.status === 'PENDING') {
             return {
                 clienteMaster: {
@@ -153,6 +192,7 @@ let ClientesMasterService = class ClientesMasterService {
                     status: assinatura.status,
                 },
                 plano: null,
+                usuarios: usuariosCompletos,
             };
         }
         let plano = null;
@@ -228,11 +268,13 @@ let ClientesMasterService = class ClientesMasterService {
                     valorPromocional: plano.valorPromocional,
                     tokenChat: plano.tokenChat,
                     limiteAnalises: plano.limiteAnalises,
+                    acesso: plano.acesso,
                     ativo: plano.ativo,
                     createdAt: plano.createdAt,
                     updatedAt: plano.updatedAt,
                 }
                 : null,
+            usuarios: usuariosCompletos,
         };
     }
 };
@@ -242,9 +284,13 @@ exports.ClientesMasterService = ClientesMasterService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(cliente_master_entity_1.ClienteMaster)),
     __param(1, (0, typeorm_1.InjectRepository)(user_base_entity_1.UserBase)),
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => assinaturas_service_1.AssinaturasService))),
+    __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => user_comum_service_1.UserComumService))),
+    __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => user_base_service_1.UserBaseService))),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         assinaturas_service_1.AssinaturasService,
-        planos_service_1.PlanosService])
+        planos_service_1.PlanosService,
+        user_comum_service_1.UserComumService,
+        user_base_service_1.UserBaseService])
 ], ClientesMasterService);
 //# sourceMappingURL=clientes-master.service.js.map

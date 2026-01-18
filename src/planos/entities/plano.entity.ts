@@ -32,6 +32,9 @@ export class Plano {
   @Column({ nullable: true })
   descricao: string;
 
+  @Column({ nullable: true, default: 'all' })
+  acesso: string; // 'all' ou 'calendario,chat' (separado por vírgula)
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

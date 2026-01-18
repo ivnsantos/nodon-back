@@ -32,6 +32,7 @@ export interface ClienteMasterInfo {
       valor: number;
       tokenChat: number;
       analises: number;
+      acesso: string;
     };
   } | null;
   // Dados da empresa
@@ -143,6 +144,7 @@ export class AuthService {
           limiteAnalises: plano.limiteAnalises,
           tokenChat: Number(plano.tokenChat),
           descricao: plano.descricao,
+          acesso: plano.acesso || 'all',
         };
       }
     }
@@ -489,6 +491,7 @@ export class AuthService {
           valor: number;
           tokenChat: number;
           analises: number;
+          acesso: string;
         } | undefined = undefined;
         if (assinatura && assinatura.planoId) {
           const plano = await this.planosService.findById(assinatura.planoId);
@@ -499,6 +502,7 @@ export class AuthService {
               valor: plano.valorPromocional || plano.valorOriginal,
               tokenChat: plano.tokenChat,
               analises: plano.limiteAnalises,
+              acesso: plano.acesso || 'all',
             };
           }
         }
@@ -596,6 +600,7 @@ export class AuthService {
             valor: number;
             tokenChat: number;
             analises: number;
+            acesso: string;
           } | undefined = undefined;
           if (assinatura && assinatura.planoId) {
             const plano = await this.planosService.findById(assinatura.planoId);
@@ -606,6 +611,7 @@ export class AuthService {
                 valor: plano.valorPromocional || plano.valorOriginal,
                 tokenChat: plano.tokenChat,
                 analises: plano.limiteAnalises,
+                acesso: plano.acesso || 'all',
               };
             }
           }
@@ -710,6 +716,7 @@ export class AuthService {
         valor: number;
         tokenChat: number;
         analises: number;
+        acesso: string;
       } | undefined = undefined;
       if (assinatura && assinatura.planoId) {
         const plano = await this.planosService.findById(assinatura.planoId);
@@ -720,6 +727,7 @@ export class AuthService {
             valor: plano.valorPromocional || plano.valorOriginal,
             tokenChat: plano.tokenChat,
             analises: plano.limiteAnalises,
+            acesso: plano.acesso || 'all',
           };
         }
       }
@@ -788,6 +796,7 @@ export class AuthService {
             valor: number;
             tokenChat: number;
             analises: number;
+            acesso: string;
           } | undefined = undefined;
           if (assinatura && assinatura.planoId) {
             const plano = await this.planosService.findById(assinatura.planoId);
@@ -798,6 +807,7 @@ export class AuthService {
                 valor: plano.valorPromocional || plano.valorOriginal,
                 tokenChat: plano.tokenChat,
                 analises: plano.limiteAnalises,
+                acesso: plano.acesso || 'all',
               };
             }
           }

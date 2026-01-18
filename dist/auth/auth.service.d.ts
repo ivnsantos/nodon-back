@@ -28,6 +28,7 @@ export interface ClienteMasterInfo {
             valor: number;
             tokenChat: number;
             analises: number;
+            acesso: string;
         };
     } | null;
     nomeEmpresa: string | null;

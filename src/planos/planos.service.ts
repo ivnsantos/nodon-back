@@ -17,8 +17,14 @@ export class PlanosService {
     limiteAnalises: number;
     tokenChat?: number;
     descricao?: string;
+    acesso?: string; // 'all' ou 'calendario,chat' (separado por vírgula)
   }): Promise<Plano> {
-    const plano = this.planoRepository.create(data);
+    // Se acesso não for fornecido, usar 'all' como padrão
+    const planoData = {
+      ...data,
+      acesso: data.acesso || 'all',
+    };
+    const plano = this.planoRepository.create(planoData);
     return this.planoRepository.save(plano);
   }
 

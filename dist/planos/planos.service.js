@@ -23,7 +23,11 @@ let PlanosService = class PlanosService {
         this.planoRepository = planoRepository;
     }
     async create(data) {
-        const plano = this.planoRepository.create(data);
+        const planoData = {
+            ...data,
+            acesso: data.acesso || 'all',
+        };
+        const plano = this.planoRepository.create(planoData);
         return this.planoRepository.save(plano);
     }
     async findAll() {
