@@ -1,4 +1,93 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreatePacienteDto } from './create-paciente.dto';
+import { IsString, IsOptional, IsObject, ValidateNested, IsArray } from 'class-validator';
+import { Type } from 'class-transformer';
 
-export class UpdatePacienteDto extends PartialType(CreatePacienteDto) {}
+class DadosPessoaisDto {
+  @IsString()
+  @IsOptional()
+  nomePaciente?: string;
+
+  @IsString()
+  @IsOptional()
+  cpf?: string;
+
+  @IsString()
+  @IsOptional()
+  dataNascimento?: string;
+
+  @IsString()
+  @IsOptional()
+  email?: string;
+
+  @IsString()
+  @IsOptional()
+  telefone?: string;
+
+  @IsString()
+  @IsOptional()
+  status?: string;
+}
+
+class EnderecoDto {
+  @IsString()
+  @IsOptional()
+  cep?: string;
+
+  @IsString()
+  @IsOptional()
+  rua?: string;
+
+  @IsString()
+  @IsOptional()
+  numero?: string;
+
+  @IsString()
+  @IsOptional()
+  complemento?: string;
+
+  @IsString()
+  @IsOptional()
+  bairro?: string;
+
+  @IsString()
+  @IsOptional()
+  cidade?: string;
+
+  @IsString()
+  @IsOptional()
+  estado?: string;
+}
+
+class InformacoesClinicasDto {
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  necessidades?: string[];
+
+  @IsString()
+  @IsOptional()
+  observacoes?: string;
+}
+
+export class UpdatePacienteDto {
+  @IsString()
+  @IsOptional()
+  masterClientId?: string;
+
+  @IsObject()
+  @ValidateNested()
+  @Type(() => DadosPessoaisDto)
+  @IsOptional()
+  dadosPessoais?: DadosPessoaisDto;
+
+  @IsObject()
+  @ValidateNested()
+  @Type(() => EnderecoDto)
+  @IsOptional()
+  endereco?: EnderecoDto;
+
+  @IsObject()
+  @ValidateNested()
+  @Type(() => InformacoesClinicasDto)
+  @IsOptional()
+  informacoesClinicas?: InformacoesClinicasDto;
+}

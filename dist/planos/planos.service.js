@@ -27,10 +27,16 @@ let PlanosService = class PlanosService {
         return this.planoRepository.save(plano);
     }
     async findAll() {
-        return this.planoRepository.find({
-            where: { ativo: true },
-            order: { valorOriginal: 'ASC' },
-        });
+        try {
+            return await this.planoRepository.find({
+                where: { ativo: true },
+                order: { valorOriginal: 'ASC' },
+            });
+        }
+        catch (error) {
+            console.error('❌ Erro ao buscar planos:', error);
+            throw error;
+        }
     }
     async findById(id) {
         return this.planoRepository.findOne({ where: { id } });

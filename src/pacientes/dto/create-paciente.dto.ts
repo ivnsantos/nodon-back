@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsObject, ValidateNested, IsNotEmpty } from 'class-validator';
+import { IsString, IsOptional, IsObject, ValidateNested, IsNotEmpty, IsArray } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class DadosPessoaisDto {
@@ -58,9 +58,10 @@ class EnderecoDto {
 }
 
 class InformacoesClinicasDto {
-  @IsString()
+  @IsArray()
+  @IsString({ each: true })
   @IsOptional()
-  necessidades?: string;
+  necessidades?: string[];
 
   @IsString()
   @IsOptional()
@@ -68,10 +69,6 @@ class InformacoesClinicasDto {
 }
 
 export class CreatePacienteDto {
-  @IsString()
-  @IsOptional()
-  dentistId?: string | null;
-
   @IsString()
   @IsNotEmpty()
   masterClientId: string;

@@ -2,9 +2,9 @@ import { Injectable, NotFoundException, ForbiddenException, Inject, forwardRef, 
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Paciente } from './entities/paciente.entity';
+import { HistoricoPaciente } from './entities/historico-paciente.entity';
 import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
-import { UserBaseService } from '../users/services/user-base.service';
 import { UserComumService } from '../users/services/user-comum.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { PacientesHistoricoService } from './pacientes-historico.service';
@@ -14,7 +14,8 @@ export class PacientesService {
   constructor(
     @InjectRepository(Paciente)
     private pacienteRepository: Repository<Paciente>,
-    private userBaseService: UserBaseService,
+    @InjectRepository(HistoricoPaciente)
+    private historicoPacienteRepository: Repository<HistoricoPaciente>,
     private userComumService: UserComumService,
     private clientesMasterService: ClientesMasterService,
     @Optional()
@@ -32,37 +33,28 @@ export class PacientesService {
     // Verificar permissão: usuário deve ser o dono do masterClient ou estar vinculado a ele
     await this.verificarPermissao(userId, userTipo, createPacienteDto.masterClientId);
 
-    // Validar dentistId se fornecido
-    if (createPacienteDto.dentistId) {
-      const dentist = await this.userBaseService.findById(createPacienteDto.dentistId);
-      if (!dentist) {
-        throw new NotFoundException('Dentista não encontrado');
-      }
-    }
-
     // Converter dataNascimento de string para Date
     const dataNascimento = createPacienteDto.dadosPessoais.dataNascimento
       ? new Date(createPacienteDto.dadosPessoais.dataNascimento)
       : null;
 
     const paciente = this.pacienteRepository.create({
-      dentistId: createPacienteDto.dentistId || null,
       masterClientId: createPacienteDto.masterClientId,
       nomePaciente: createPacienteDto.dadosPessoais.nomePaciente,
       cpf: createPacienteDto.dadosPessoais.cpf,
       dataNascimento: dataNascimento,
       email: createPacienteDto.dadosPessoais.email,
       telefone: createPacienteDto.dadosPessoais.telefone,
-      status: createPacienteDto.dadosPessoais.status || 'ativo',
-      cep: createPacienteDto.endereco?.cep,
-      rua: createPacienteDto.endereco?.rua,
-      numero: createPacienteDto.endereco?.numero,
-      complemento: createPacienteDto.endereco?.complemento,
-      bairro: createPacienteDto.endereco?.bairro,
-      cidade: createPacienteDto.endereco?.cidade,
-      estado: createPacienteDto.endereco?.estado,
-      necessidades: createPacienteDto.informacoesClinicas?.necessidades,
-      observacoes: createPacienteDto.informacoesClinicas?.observacoes,
+      status: createPacienteDto.dadosPessoais.status || null,
+      cep: createPacienteDto.endereco?.cep || null,
+      rua: createPacienteDto.endereco?.rua || null,
+      numero: createPacienteDto.endereco?.numero || null,
+      complemento: createPacienteDto.endereco?.complemento || null,
+      bairro: createPacienteDto.endereco?.bairro || null,
+      cidade: createPacienteDto.endereco?.cidade || null,
+      estado: createPacienteDto.endereco?.estado || null,
+      necessidades: createPacienteDto.informacoesClinicas?.necessidades || null,
+      observacoes: createPacienteDto.informacoesClinicas?.observacoes || null,
     });
 
     return this.pacienteRepository.save(paciente);
@@ -74,7 +66,7 @@ export class PacientesService {
 
     return this.pacienteRepository.find({
       where: { masterClientId },
-      relations: ['dentist', 'masterClient'],
+      relations: ['masterClient'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -82,7 +74,7 @@ export class PacientesService {
   async findOne(id: string, userId: string, userTipo: string): Promise<Paciente> {
     const paciente = await this.pacienteRepository.findOne({
       where: { id },
-      relations: ['dentist', 'masterClient'],
+      relations: ['masterClient'],
     });
 
     if (!paciente) {
@@ -104,30 +96,10 @@ export class PacientesService {
         await this.verificarPermissao(userId, userTipo, updatePacienteDto.masterClientId);
       }
 
-      // Validar dentistId se fornecido
-      if (updatePacienteDto.dentistId) {
-        const dentist = await this.userBaseService.findById(updatePacienteDto.dentistId);
-        if (!dentist) {
-          throw new NotFoundException('Dentista não encontrado');
-        }
-      }
-
     // Preparar dados para atualização e registrar histórico
     const updateData: any = {};
     const alteracoes: Array<{ campo: string; valorAnterior: any; valorNovo: any }> = [];
 
-    if (updatePacienteDto.dentistId !== undefined) {
-      const valorAnterior = paciente.dentistId;
-      const valorNovo = updatePacienteDto.dentistId;
-      if (valorAnterior !== valorNovo) {
-        alteracoes.push({
-          campo: 'dentistId',
-          valorAnterior: valorAnterior,
-          valorNovo: valorNovo,
-        });
-      }
-      updateData.dentistId = valorNovo;
-    }
     if (updatePacienteDto.masterClientId) {
       const valorAnterior = paciente.masterClientId;
       const valorNovo = updatePacienteDto.masterClientId;
@@ -295,7 +267,32 @@ export class PacientesService {
 
   async remove(id: string, userId: string, userTipo: string): Promise<void> {
     const paciente = await this.findOne(id, userId, userTipo);
+    
+    // Deletar todos os registros de histórico relacionados ao paciente primeiro
+    console.log(`🗑️ Deletando histórico relacionado ao paciente ${id}...`);
+    await this.historicoPacienteRepository.delete({ pacienteId: id });
+    console.log(`✅ Histórico deletado`);
+    
+    // Deletar consultas relacionadas ao paciente (se a tabela existir)
+    try {
+      console.log(`🗑️ Deletando consultas relacionadas ao paciente ${id}...`);
+      await this.pacienteRepository.query(
+        'DELETE FROM consultas WHERE paciente_id = $1',
+        [id]
+      );
+      console.log(`✅ Consultas deletadas`);
+    } catch (error: any) {
+      // Se a tabela não existir ou não houver consultas, apenas logar e continuar
+      if (error.message && error.message.includes('does not exist')) {
+        console.log(`ℹ️ Tabela consultas não encontrada, pulando...`);
+      } else {
+        console.warn(`⚠️ Erro ao deletar consultas (não bloqueante):`, error.message);
+      }
+    }
+    
+    // Agora pode deletar o paciente sem violar foreign key constraint
     await this.pacienteRepository.remove(paciente);
+    console.log(`✅ Paciente ${id} deletado com sucesso`);
   }
 
   private async verificarPermissao(userId: string, userTipo: string, masterClientId: string): Promise<void> {

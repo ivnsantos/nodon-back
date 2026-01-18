@@ -1,7 +1,7 @@
 /* eslint-disable */
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, BadRequestException } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
@@ -20,6 +20,11 @@ async function createApp() {
   try {
     // Criar app Express para Vercel
     const expressApp = express();
+    
+    // Aumentar limite de tamanho do body para suportar imagens base64 (50MB)
+    expressApp.use(express.json({ limit: '50mb' }));
+    expressApp.use(express.urlencoded({ extended: true, limit: '50mb' }));
+    
     const app = await NestFactory.create(AppModule, new ExpressAdapter(expressApp));
 
     // Habilitar cookie parser
@@ -40,6 +45,19 @@ async function createApp() {
         whitelist: true,
         forbidNonWhitelisted: true,
         transform: true,
+        exceptionFactory: (errors) => {
+          const messages = errors.map(error => {
+            return Object.values(error.constraints || {}).join(', ');
+          });
+          console.error('❌ Erro de validação:', {
+            errors: errors.map(e => ({
+              property: e.property,
+              constraints: e.constraints,
+            })),
+            messages,
+          });
+          return new BadRequestException(messages.join('; '));
+        },
       }),
     );
 

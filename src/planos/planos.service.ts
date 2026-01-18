@@ -23,10 +23,15 @@ export class PlanosService {
   }
 
   async findAll(): Promise<Plano[]> {
-    return this.planoRepository.find({
-      where: { ativo: true },
-      order: { valorOriginal: 'ASC' },
-    });
+    try {
+      return await this.planoRepository.find({
+        where: { ativo: true },
+        order: { valorOriginal: 'ASC' },
+      });
+    } catch (error) {
+      console.error('❌ Erro ao buscar planos:', error);
+      throw error;
+    }
   }
 
   async findById(id: string): Promise<Plano | null> {

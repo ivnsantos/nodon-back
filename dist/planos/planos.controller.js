@@ -22,7 +22,13 @@ let PlanosController = class PlanosController {
         this.planosService = planosService;
     }
     async findAll() {
-        return this.planosService.findAll();
+        try {
+            return await this.planosService.findAll();
+        }
+        catch (error) {
+            console.error('❌ Erro no controller de planos:', error);
+            throw error;
+        }
     }
     async findOne(id) {
         return this.planosService.findById(id);

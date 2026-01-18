@@ -155,7 +155,6 @@ export class PacientesHistoricoService {
       estado: 'Estado',
       necessidades: 'Necessidades',
       observacoes: 'Observações',
-      dentistId: 'Dentista responsável',
     };
 
     const nomeCampo = camposAmigaveis[campoAlterado] || campoAlterado;

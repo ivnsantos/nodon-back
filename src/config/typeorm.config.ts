@@ -3,6 +3,8 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmOptionsFactory, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { config } from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
 import { UserBase } from '../users/entities/user-base.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
 import { ClienteMaster } from '../users/entities/cliente-master.entity';
@@ -12,8 +14,19 @@ import { Assinatura } from '../assinaturas/entities/assinatura.entity';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { Paciente } from '../pacientes/entities/paciente.entity';
 import { HistoricoPaciente } from '../pacientes/entities/historico-paciente.entity';
+import { Radiografia } from '../radiografias/entities/radiografia.entity';
 
-config();
+// Carregar .env.local primeiro (se existir), depois .env como fallback
+const envLocalPath = path.join(process.cwd(), '.env.local');
+const envPath = path.join(process.cwd(), '.env');
+
+if (fs.existsSync(envLocalPath)) {
+  config({ path: envLocalPath });
+} else if (fs.existsSync(envPath)) {
+  config({ path: envPath });
+} else {
+  config(); // Usar .env padrão ou variáveis de ambiente do sistema
+}
 
 @Injectable()
 export class TypeOrmConfigService implements TypeOrmOptionsFactory {
@@ -46,11 +59,14 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
     console.log('  - Port:', dbPort);
     console.log('  - Username:', dbUsername);
     console.log('  - Database:', dbName);
-    console.log('  - SSL:', dbSsl === 'true' || process.env.VERCEL ? 'Habilitado' : 'Desabilitado');
-
+    
     // SSL é obrigatório para conexões externas (Vercel) ou quando DB_SSL=true
-    // No Vercel, sempre usar SSL
-    const useSsl = true;
+    // Em ambiente local, SSL geralmente não é necessário
+    const isLocal = dbHost === 'localhost' || dbHost === '127.0.0.1';
+    const useSsl = dbSsl === 'true' || process.env.VERCEL || (!isLocal && dbSsl !== 'false');
+    
+    console.log('  - SSL:', useSsl ? 'Habilitado' : 'Desabilitado');
+    console.log('  - Ambiente:', isLocal ? 'Local' : 'Remoto');
 
     return {
       type: 'postgres',
@@ -62,8 +78,8 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       ssl: useSsl ? {
         rejectUnauthorized: false, // Necessário para alguns ambientes de hospedagem
       } : false,
-      entities: [UserBase, UserComum, ClienteMaster, Plano, Cupom, Assinatura, HistoricoMensal, Paciente, HistoricoPaciente],
-      synchronize: process.env.NODE_ENV !== 'production',
+      entities: [UserBase, UserComum, ClienteMaster, Plano, Cupom, Assinatura, HistoricoMensal, Paciente, HistoricoPaciente, Radiografia],
+      synchronize: false, // Desabilitar synchronize - usar migrations manuais
       logging: this.configService.get<string>('NODE_ENV') === 'development',
       autoLoadEntities: true,
       extra: useSsl ? {

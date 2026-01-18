@@ -15,13 +15,6 @@ export class Paciente {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'dentist_id', nullable: true })
-  dentistId: string | null;
-
-  @ManyToOne(() => UserBase, { nullable: true })
-  @JoinColumn({ name: 'dentist_id' })
-  dentist: UserBase | null;
-
   @Column({ name: 'master_client_id' })
   masterClientId: string;
 
@@ -30,7 +23,7 @@ export class Paciente {
   masterClient: ClienteMaster;
 
   // Dados pessoais
-  @Column({ name: 'nome_paciente' })
+  @Column({ name: 'nome', nullable: true })
   nomePaciente: string;
 
   @Column({ nullable: true })
@@ -45,34 +38,34 @@ export class Paciente {
   @Column({ nullable: true })
   telefone: string;
 
-  @Column({ default: 'ativo' })
-  status: string;
+  @Column({ name: 'status', type: 'varchar', nullable: true })
+  status: string | null;
 
   // Endereço
-  @Column({ name: 'cep', nullable: true })
-  cep: string;
+  @Column({ name: 'cep', type: 'varchar', nullable: true })
+  cep: string | null;
 
-  @Column({ name: 'rua', nullable: true })
-  rua: string;
+  @Column({ name: 'rua', type: 'varchar', nullable: true })
+  rua: string | null;
 
-  @Column({ name: 'numero', nullable: true })
-  numero: string;
+  @Column({ name: 'numero', type: 'varchar', nullable: true })
+  numero: string | null;
 
-  @Column({ name: 'complemento', nullable: true })
-  complemento: string;
+  @Column({ name: 'complemento', type: 'varchar', nullable: true })
+  complemento: string | null;
 
-  @Column({ name: 'bairro', nullable: true })
-  bairro: string;
+  @Column({ name: 'bairro', type: 'varchar', nullable: true })
+  bairro: string | null;
 
-  @Column({ name: 'cidade', nullable: true })
-  cidade: string;
+  @Column({ name: 'cidade', type: 'varchar', nullable: true })
+  cidade: string | null;
 
-  @Column({ name: 'estado', nullable: true })
-  estado: string;
+  @Column({ name: 'estado', type: 'varchar', nullable: true })
+  estado: string | null;
 
   // Informações clínicas
-  @Column({ name: 'necessidades', type: 'text', nullable: true })
-  necessidades: string | null;
+  @Column({ name: 'necessidades', type: 'jsonb', nullable: true })
+  necessidades: string[] | null;
 
   @Column({ name: 'observacoes', type: 'text', nullable: true })
   observacoes: string | null;

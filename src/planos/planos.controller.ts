@@ -8,7 +8,12 @@ export class PlanosController {
 
   @Get()
   async findAll() {
-    return this.planosService.findAll();
+    try {
+      return await this.planosService.findAll();
+    } catch (error) {
+      console.error('❌ Erro no controller de planos:', error);
+      throw error;
+    }
   }
 
   @Get(':id')

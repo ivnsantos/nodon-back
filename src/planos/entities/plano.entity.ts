@@ -14,13 +14,13 @@ export class Plano {
   @Column()
   nome: string;
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column('decimal', { precision: 10, scale: 2, name: 'valor_original' })
   valorOriginal: number;
 
-  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  @Column('decimal', { precision: 10, scale: 2, nullable: true, name: 'valor_promocional' })
   valorPromocional: number;
 
-  @Column()
+  @Column({ name: 'limite_analises' })
   limiteAnalises: number;
 
   @Column({ name: 'token_chat', type: 'bigint', default: 1500000 })

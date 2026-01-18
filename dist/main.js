@@ -20,6 +20,8 @@ async function createApp() {
     }
     try {
         const expressApp = express();
+        expressApp.use(express.json({ limit: '50mb' }));
+        expressApp.use(express.urlencoded({ extended: true, limit: '50mb' }));
         const app = await core_1.NestFactory.create(app_module_1.AppModule, new platform_express_1.ExpressAdapter(expressApp));
         app.use((0, cookie_parser_1.default)());
         app.enableCors({
@@ -31,6 +33,19 @@ async function createApp() {
             whitelist: true,
             forbidNonWhitelisted: true,
             transform: true,
+            exceptionFactory: (errors) => {
+                const messages = errors.map(error => {
+                    return Object.values(error.constraints || {}).join(', ');
+                });
+                console.error('❌ Erro de validação:', {
+                    errors: errors.map(e => ({
+                        property: e.property,
+                        constraints: e.constraints,
+                    })),
+                    messages,
+                });
+                return new common_1.BadRequestException(messages.join('; '));
+            },
         }));
         app.useGlobalFilters(new http_exception_filter_1.HttpExceptionFilter());
         app.useGlobalInterceptors(new transform_interceptor_1.TransformInterceptor());
