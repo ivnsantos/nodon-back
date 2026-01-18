@@ -9,9 +9,6 @@ import {
 } from 'typeorm';
 import { ClienteMaster } from '../../users/entities/cliente-master.entity';
 
-/**
- * Representa um Paciente vinculado a um ClienteMaster.
- */
 @Entity('pacientes')
 export class Paciente {
   @PrimaryGeneratedColumn('uuid')
