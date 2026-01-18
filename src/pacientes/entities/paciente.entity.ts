@@ -7,7 +7,6 @@ import {
   ManyToOne,
   JoinColumn,
 } from 'typeorm';
-import { UserBase } from '../../users/entities/user-base.entity';
 import { ClienteMaster } from '../../users/entities/cliente-master.entity';
 
 @Entity('pacientes')
