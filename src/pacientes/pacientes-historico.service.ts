@@ -163,6 +163,19 @@ export class PacientesHistoricoService {
       return `Status alterado para "${valorNovo || 'N/A'}"`;
     }
 
+    // Tratamento especial para necessidades (alterações individuais)
+    if (campoAlterado === 'necessidades') {
+      if ((valorAnterior === null || valorAnterior === 'null' || valorAnterior === '') && valorNovo) {
+        return `Necessidade adicionada: "${valorNovo}"`;
+      }
+      if (valorAnterior && (valorNovo === null || valorNovo === 'null' || valorNovo === '')) {
+        return `Necessidade removida: "${valorAnterior}"`;
+      }
+      if (valorAnterior && valorNovo) {
+        return `Necessidade alterada de "${valorAnterior}" para "${valorNovo}"`;
+      }
+    }
+
     if (valorAnterior === null || valorAnterior === '') {
       return `${nomeCampo} definido como "${valorNovo || 'N/A'}"`;
     }

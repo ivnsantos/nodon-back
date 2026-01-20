@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Paciente } from './entities/paciente.entity';
 import { HistoricoPaciente } from './entities/historico-paciente.entity';
+import { Radiografia } from '../radiografias/entities/radiografia.entity';
 import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
 import { UserComumService } from '../users/services/user-comum.service';
@@ -16,6 +17,8 @@ export class PacientesService {
     private pacienteRepository: Repository<Paciente>,
     @InjectRepository(HistoricoPaciente)
     private historicoPacienteRepository: Repository<HistoricoPaciente>,
+    @InjectRepository(Radiografia)
+    private radiografiaRepository: Repository<Radiografia>,
     private userComumService: UserComumService,
     private clientesMasterService: ClientesMasterService,
     @Optional()
@@ -167,6 +170,24 @@ export class PacientesService {
     try {
       const paciente = await this.findOne(id, userId, userTipo);
 
+      // Verificar se está editando apenas necessidades, apenas status, ou outros campos
+      const apenasNecessidades = this.isApenasNecessidades(updatePacienteDto);
+      const apenasStatus = this.isApenasStatus(updatePacienteDto);
+      
+      if (apenasNecessidades) {
+        // Para necessidades: responsável por radiografia do paciente OU cliente master
+        const podeEditar = await this.podeEditarNecessidades(userId, id, paciente.clienteMasterId);
+        if (!podeEditar) {
+          throw new ForbiddenException('Apenas o responsável por uma radiografia do paciente ou o proprietário do consultório podem editar necessidades');
+        }
+      } else if (apenasStatus) {
+        // Para status: qualquer usuário vinculado ao cliente master pode alterar
+        // A verificação de acesso já foi feita no findOne acima
+      } else {
+        // Para outros campos: apenas cliente master
+        await this.verificarPermissaoEdicaoExclusao(userId, paciente.clienteMasterId);
+      }
+
       // Se está mudando o clienteMasterId, verificar permissão no novo também
       if (updatePacienteDto.clienteMasterId && updatePacienteDto.clienteMasterId !== paciente.clienteMasterId) {
         await this.verificarPermissao(userId, userTipo, updatePacienteDto.clienteMasterId);
@@ -289,13 +310,25 @@ export class PacientesService {
       }
     }
     if (updatePacienteDto.informacoesClinicas) {
-      if (updatePacienteDto.informacoesClinicas.necessidades !== undefined && updatePacienteDto.informacoesClinicas.necessidades !== paciente.necessidades) {
-        alteracoes.push({
-          campo: 'necessidades',
-          valorAnterior: paciente.necessidades,
-          valorNovo: updatePacienteDto.informacoesClinicas.necessidades,
-        });
-        updateData.necessidades = updatePacienteDto.informacoesClinicas.necessidades;
+      if (updatePacienteDto.informacoesClinicas.necessidades !== undefined) {
+        // Comparar necessidades individualmente
+        const necessidadesAntigas: string[] = this.parseNecessidades(paciente.necessidades);
+        const necessidadesNovas: string[] = updatePacienteDto.informacoesClinicas.necessidades || [];
+        
+        // Detectar alterações individuais nas necessidades
+        const alteracoesNecessidades = this.detectarAlteracoesNecessidades(necessidadesAntigas, necessidadesNovas);
+        
+        if (alteracoesNecessidades.length > 0) {
+          // Adicionar cada alteração individual ao histórico
+          for (const alt of alteracoesNecessidades) {
+            alteracoes.push({
+              campo: 'necessidades',
+              valorAnterior: alt.valorAnterior,
+              valorNovo: alt.valorNovo,
+            });
+          }
+          updateData.necessidades = updatePacienteDto.informacoesClinicas.necessidades;
+        }
       }
       if (updatePacienteDto.informacoesClinicas.observacoes !== undefined && updatePacienteDto.informacoesClinicas.observacoes !== paciente.observacoes) {
         alteracoes.push({
@@ -343,6 +376,9 @@ export class PacientesService {
 
   async remove(id: string, userId: string, userTipo: string): Promise<void> {
     const paciente = await this.findOne(id, userId, userTipo);
+    
+    // Verificar se o usuário é o dono do Cliente Master (apenas dono pode deletar)
+    await this.verificarPermissaoEdicaoExclusao(userId, paciente.clienteMasterId);
     
     // Deletar todos os registros de histórico relacionados ao paciente primeiro
     console.log(`🗑️ Deletando histórico relacionado ao paciente ${id}...`);
@@ -402,5 +438,207 @@ export class PacientesService {
       });
       throw error;
     }
+  }
+
+  /**
+   * Verifica se o usuário logado é o dono do Cliente Master (user_id da tabela clientes_master).
+   * Apenas o dono pode editar ou deletar pacientes.
+   */
+  private async verificarPermissaoEdicaoExclusao(userId: string, clienteMasterId: string): Promise<void> {
+    const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
+    
+    if (!clienteMaster) {
+      throw new NotFoundException('Cliente Master não encontrado');
+    }
+
+    // Verifica se o userId logado é o mesmo que o userId do clienteMaster
+    if (clienteMaster.userId !== userId) {
+      throw new ForbiddenException('Apenas o proprietário do consultório pode editar ou deletar pacientes');
+    }
+  }
+
+  /**
+   * Verifica se o usuário é o dono do Cliente Master.
+   * Retorna true se for, false caso contrário (não lança exceção).
+   */
+  private async isClienteMaster(userId: string, clienteMasterId: string): Promise<boolean> {
+    const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
+    if (!clienteMaster) {
+      return false;
+    }
+    return clienteMaster.userId === userId;
+  }
+
+  /**
+   * Verifica se o usuário é responsável por alguma radiografia do paciente.
+   * Retorna true se for, false caso contrário.
+   */
+  private async isResponsavelRadiografiaPaciente(userId: string, pacienteId: string): Promise<boolean> {
+    const radiografia = await this.radiografiaRepository.findOne({
+      where: {
+        pacienteId: pacienteId,
+        responsavelId: userId,
+      },
+    });
+    return radiografia !== null;
+  }
+
+  /**
+   * Verifica se o usuário pode editar necessidades do paciente.
+   * Permitido se: é responsável por alguma radiografia do paciente OU é o cliente master.
+   */
+  private async podeEditarNecessidades(userId: string, pacienteId: string, clienteMasterId: string): Promise<boolean> {
+    // Verifica se é cliente master
+    const isMaster = await this.isClienteMaster(userId, clienteMasterId);
+    if (isMaster) {
+      return true;
+    }
+
+    // Verifica se é responsável por alguma radiografia do paciente
+    const isResponsavel = await this.isResponsavelRadiografiaPaciente(userId, pacienteId);
+    return isResponsavel;
+  }
+
+  /**
+   * Verifica se o DTO de atualização contém apenas alterações de necessidades.
+   */
+  private isApenasNecessidades(dto: UpdatePacienteDto): boolean {
+    // Se tem clienteMasterId, não é apenas necessidades
+    if (dto.clienteMasterId) {
+      return false;
+    }
+
+    // Se tem dadosPessoais com algum campo preenchido, não é apenas necessidades
+    if (dto.dadosPessoais) {
+      const { nome, cpf, dataNascimento, email, telefone, status } = dto.dadosPessoais;
+      if (nome !== undefined || cpf !== undefined || dataNascimento !== undefined || 
+          email !== undefined || telefone !== undefined || status !== undefined) {
+        return false;
+      }
+    }
+
+    // Se tem endereco com algum campo preenchido, não é apenas necessidades
+    if (dto.endereco) {
+      const { cep, rua, numero, complemento, bairro, cidade, estado } = dto.endereco;
+      if (cep !== undefined || rua !== undefined || numero !== undefined || 
+          complemento !== undefined || bairro !== undefined || cidade !== undefined || estado !== undefined) {
+        return false;
+      }
+    }
+
+    // Se tem observacoes em informacoesClinicas, não é apenas necessidades
+    if (dto.informacoesClinicas?.observacoes !== undefined) {
+      return false;
+    }
+
+    // Se chegou aqui e tem necessidades, é apenas necessidades
+    return dto.informacoesClinicas?.necessidades !== undefined;
+  }
+
+  /**
+   * Verifica se o DTO de atualização contém apenas alterações de status.
+   * Qualquer usuário vinculado ao cliente master pode alterar apenas o status.
+   */
+  private isApenasStatus(dto: UpdatePacienteDto): boolean {
+    // Se tem clienteMasterId, não é apenas status
+    if (dto.clienteMasterId) {
+      return false;
+    }
+
+    // Se tem dadosPessoais com outros campos além de status, não é apenas status
+    if (dto.dadosPessoais) {
+      const { nome, cpf, dataNascimento, email, telefone } = dto.dadosPessoais;
+      if (nome !== undefined || cpf !== undefined || dataNascimento !== undefined || 
+          email !== undefined || telefone !== undefined) {
+        return false;
+      }
+    }
+
+    // Se tem endereco com algum campo preenchido, não é apenas status
+    if (dto.endereco) {
+      const { cep, rua, numero, complemento, bairro, cidade, estado } = dto.endereco;
+      if (cep !== undefined || rua !== undefined || numero !== undefined || 
+          complemento !== undefined || bairro !== undefined || cidade !== undefined || estado !== undefined) {
+        return false;
+      }
+    }
+
+    // Se tem informacoesClinicas com algum campo preenchido, não é apenas status
+    if (dto.informacoesClinicas) {
+      const { necessidades, observacoes } = dto.informacoesClinicas;
+      if (necessidades !== undefined || observacoes !== undefined) {
+        return false;
+      }
+    }
+
+    // Se chegou aqui e tem status, é apenas status
+    return dto.dadosPessoais?.status !== undefined;
+  }
+
+  /**
+   * Converte o valor de necessidades para array de strings.
+   * Necessidades podem vir como string JSON, array ou null.
+   */
+  private parseNecessidades(necessidades: any): string[] {
+    if (!necessidades) {
+      return [];
+    }
+    
+    if (Array.isArray(necessidades)) {
+      return necessidades;
+    }
+    
+    if (typeof necessidades === 'string') {
+      try {
+        const parsed = JSON.parse(necessidades);
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [necessidades];
+      }
+    }
+    
+    return [];
+  }
+
+  /**
+   * Detecta alterações individuais entre duas listas de necessidades.
+   * Compara por posição para detectar edições, adições e remoções.
+   */
+  private detectarAlteracoesNecessidades(
+    antigas: string[],
+    novas: string[],
+  ): Array<{ valorAnterior: string | null; valorNovo: string | null }> {
+    const alteracoes: Array<{ valorAnterior: string | null; valorNovo: string | null }> = [];
+    
+    const maxLength = Math.max(antigas.length, novas.length);
+    
+    for (let i = 0; i < maxLength; i++) {
+      const valorAntigo = antigas[i] || null;
+      const valorNovo = novas[i] || null;
+      
+      // Se ambos existem e são diferentes = edição
+      if (valorAntigo !== null && valorNovo !== null && valorAntigo !== valorNovo) {
+        alteracoes.push({
+          valorAnterior: valorAntigo,
+          valorNovo: valorNovo,
+        });
+      }
+      // Se só tinha o antigo = remoção
+      else if (valorAntigo !== null && valorNovo === null) {
+        alteracoes.push({
+          valorAnterior: valorAntigo,
+          valorNovo: null,
+        });
+      }
+      // Se só tem o novo = adição
+      else if (valorAntigo === null && valorNovo !== null) {
+        alteracoes.push({
+          valorAnterior: null,
+          valorNovo: valorNovo,
+        });
+      }
+    }
+    
+    return alteracoes;
   }
 }

@@ -50,6 +50,11 @@ export class DesenhosProfissionaisService {
       // Verificar permissão usando o clienteMasterId da radiografia
       console.log('🔐 Verificando permissões...');
       await this.verificarPermissao(userId, userTipo, clienteMasterId);
+      
+      // Verificar se o usuário pode criar desenhos nesta radiografia
+      // Apenas o responsável pela radiografia ou o dono do consultório podem criar
+      console.log('🔐 Verificando permissão para criar desenho na radiografia...');
+      await this.verificarPermissaoRadiografia(userId, radiografia);
       console.log('✅ Permissões verificadas');
 
       // Processar upload da imagem para S3
@@ -308,6 +313,32 @@ export class DesenhosProfissionaisService {
         throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
       }
     }
+  }
+
+  /**
+   * Verifica se o usuário pode criar/editar/excluir desenhos em uma radiografia.
+   * Apenas o responsável pela radiografia (quem criou) ou o dono do Cliente Master podem realizar essas ações.
+   */
+  private async verificarPermissaoRadiografia(userId: string, radiografia: Radiografia): Promise<void> {
+    // Verifica se o usuário é o responsável pela radiografia (quem criou)
+    if (radiografia.responsavelId === userId) {
+      return; // Permitido
+    }
+
+    // Busca o clienteMaster para verificar se o usuário é o dono
+    const clienteMaster = await this.clientesMasterService.findById(radiografia.masterClient?.id);
+    
+    if (!clienteMaster) {
+      throw new NotFoundException('Cliente Master não encontrado');
+    }
+
+    // Verifica se o userId logado é o dono do consultório
+    if (clienteMaster.userId === userId) {
+      return; // Permitido
+    }
+
+    // Se não é nem o responsável nem o dono, bloquear
+    throw new ForbiddenException('Apenas o responsável pela radiografia ou o proprietário do consultório podem criar desenhos nesta radiografia');
   }
 
   private getExtensionFromContentType(contentType: string): string {

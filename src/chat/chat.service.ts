@@ -1,8 +1,12 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import axios from 'axios';
 import { Readable } from 'stream';
 import { ChatMessageDto, ChatResponseDto } from './dto/chat-message.dto';
+import { ChatConversation } from './entities/chat-conversation.entity';
+import { ChatMessageEntity } from './entities/chat-message.entity';
 
 @Injectable()
 export class ChatService {
@@ -61,7 +65,13 @@ NÃO tente responder, NÃO dê dicas, NÃO seja prestativo em assuntos fora da o
 
 Responda sempre em português brasileiro, de forma clara, organizada e profissional.`;
 
-  constructor(private configService: ConfigService) {
+  constructor(
+    private configService: ConfigService,
+    @InjectRepository(ChatConversation)
+    private conversationRepository: Repository<ChatConversation>,
+    @InjectRepository(ChatMessageEntity)
+    private messageRepository: Repository<ChatMessageEntity>,
+  ) {
     this.apiKey = this.configService.get<string>('DEEPSEEK_API_KEY') || '';
     this.openAiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
     
@@ -76,6 +86,134 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     } else {
       console.log('✅ OpenAI API configurada (para análise de imagens)');
     }
+  }
+
+  // ========== Métodos de Histórico ==========
+
+  async createConversation(userId: string, clienteMasterId?: string): Promise<ChatConversation> {
+    const conversation = this.conversationRepository.create({
+      userId,
+      clienteMasterId: clienteMasterId || null,
+      title: null,
+    });
+    return this.conversationRepository.save(conversation);
+  }
+
+  async getConversation(conversationId: string): Promise<ChatConversation | null> {
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: conversationId },
+    });
+
+    if (!conversation) {
+      return null;
+    }
+
+    // Buscar mensagens separadamente para garantir ordem correta
+    const messages = await this.messageRepository.find({
+      where: { conversationId },
+      order: { createdAt: 'ASC' },
+    });
+
+    conversation.messages = messages;
+    return conversation;
+  }
+
+  async getConversationsByUser(userId: string): Promise<ChatConversation[]> {
+    const conversations = await this.conversationRepository.find({
+      where: { userId },
+      order: { updatedAt: 'DESC' },
+    });
+    return conversations;
+  }
+
+  async getConversationsByUserInPeriod(userId: string, dataInicio: Date): Promise<ChatConversation[]> {
+    const conversations = await this.conversationRepository
+      .createQueryBuilder('c')
+      .where('c.user_id = :userId', { userId })
+      .andWhere('c.created_at >= :dataInicio', { dataInicio })
+      .orderBy('c.updated_at', 'DESC')
+      .getMany();
+    return conversations;
+  }
+
+  async getTotalTokensByUser(userId: string): Promise<number> {
+    const result = await this.conversationRepository
+      .createQueryBuilder('c')
+      .select('SUM(c.total_tokens)', 'total')
+      .where('c.user_id = :userId', { userId })
+      .getRawOne();
+    return Number(result?.total || 0);
+  }
+
+  async getTotalTokensByUserInPeriod(userId: string, dataInicio: Date): Promise<number> {
+    const result = await this.conversationRepository
+      .createQueryBuilder('c')
+      .select('SUM(c.total_tokens)', 'total')
+      .where('c.user_id = :userId', { userId })
+      .andWhere('c.created_at >= :dataInicio', { dataInicio })
+      .getRawOne();
+    return Number(result?.total || 0);
+  }
+
+  async getTotalTokensByClienteMaster(clienteMasterId: string): Promise<number> {
+    const result = await this.conversationRepository
+      .createQueryBuilder('c')
+      .select('SUM(c.total_tokens)', 'total')
+      .where('c.cliente_master_id = :clienteMasterId', { clienteMasterId })
+      .getRawOne();
+    return Number(result?.total || 0);
+  }
+
+  async getTotalTokensByClienteMasterInPeriod(clienteMasterId: string, dataInicio: Date): Promise<number> {
+    const result = await this.conversationRepository
+      .createQueryBuilder('c')
+      .select('SUM(c.total_tokens)', 'total')
+      .where('c.cliente_master_id = :clienteMasterId', { clienteMasterId })
+      .andWhere('c.created_at >= :dataInicio', { dataInicio })
+      .getRawOne();
+    return Number(result?.total || 0);
+  }
+
+  async saveMessage(
+    conversationId: string,
+    role: 'user' | 'assistant',
+    content: string,
+    tokensUsed?: number,
+  ): Promise<ChatMessageEntity> {
+    const message = this.messageRepository.create({
+      conversationId,
+      role,
+      content,
+      tokensUsed: tokensUsed || null,
+    });
+
+    const conversation = await this.conversationRepository.findOne({
+      where: { id: conversationId },
+    });
+
+    if (conversation) {
+      // Atualizar título da conversa com a primeira mensagem do usuário
+      if (role === 'user' && !conversation.title) {
+        conversation.title = content.substring(0, 100);
+      }
+
+      // Atualizar total de tokens da conversa
+      if (tokensUsed && tokensUsed > 0) {
+        conversation.totalTokens = (conversation.totalTokens || 0) + tokensUsed;
+      }
+
+      await this.conversationRepository.save(conversation);
+    }
+
+    return this.messageRepository.save(message);
+  }
+
+  async getHistory(conversationId: string): Promise<{ role: 'user' | 'assistant'; content: string }[]> {
+    const messages = await this.messageRepository.find({
+      where: { conversationId },
+      order: { createdAt: 'ASC' },
+    });
+    return messages.map((m) => ({ role: m.role, content: m.content }));
   }
 
   /**
@@ -131,7 +269,7 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
       content: chatMessageDto.message,
     });
 
-    console.log('Enviando mensagem para DeepSeek (streaming)...');
+    console.log('📤 Enviando mensagem para DeepSeek (streaming)...');
 
     try {
       const response = await axios.post(
@@ -142,7 +280,7 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
           temperature: 0.7,
           max_tokens: 2000,
           top_p: 0.95,
-          stream: true, // Ativa streaming
+          stream: true,
         },
         {
           headers: {
@@ -150,13 +288,14 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
             'Authorization': `Bearer ${this.apiKey}`,
           },
           responseType: 'stream',
-          timeout: 60000,
+          timeout: 30000,
         },
       );
 
+      console.log('✅ Stream DeepSeek iniciado');
       return response.data as Readable;
     } catch (error: any) {
-      console.error('Erro ao chamar DeepSeek API:', error.response?.data || error.message);
+      console.error('❌ Erro ao chamar DeepSeek API:', error.response?.data || error.message);
       
       if (error.response?.status === 401) {
         throw new InternalServerErrorException('Chave da API DeepSeek inválida');
@@ -265,6 +404,7 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     descricaoExame: string;
     achadosRadiograficos: string[];
     necessidades: string[];
+    tokensUsed: number;
   }> {
     if (!this.apiKey) {
       throw new InternalServerErrorException('API do DeepSeek não está configurada');
@@ -443,6 +583,7 @@ IMPORTANTE:
                 descricaoExame: 'Análise automática de imagens não está disponível no momento. Por favor, preencha manualmente.',
                 achadosRadiograficos: ['Análise automática de imagens não está disponível no momento. Por favor, preencha manualmente.'],
                 necessidades: ['Análise automática de imagens não está disponível no momento. Por favor, preencha manualmente.'],
+                tokensUsed: 0,
               };
             }
             
@@ -458,10 +599,12 @@ IMPORTANTE:
           descricaoExame: 'Análise automática de imagens não está disponível. Configure OPENAI_API_KEY para melhor suporte. Por favor, preencha manualmente.',
           achadosRadiograficos: ['Análise automática de imagens não está disponível. Configure OPENAI_API_KEY para melhor suporte. Por favor, preencha manualmente.'],
           necessidades: ['Análise automática de imagens não está disponível. Configure OPENAI_API_KEY para melhor suporte. Por favor, preencha manualmente.'],
+          tokensUsed: 0,
         };
       }
 
       const assistantMessage = response.data.choices[0]?.message?.content;
+      const tokensUsed = response.data.usage?.total_tokens || 0;
       const apiUsed = usedOpenAI ? 'OpenAI GPT-4 Vision' : 'DeepSeek VL';
       console.log(`📋 Resposta recebida da ${apiUsed} (modelo: ${modelTried}) para análise de radiografias`);
 
@@ -513,6 +656,7 @@ IMPORTANTE:
         descricaoExame: this.normalizeResponse(resultado.descricaoExame || ''),
         achadosRadiograficos: normalizeArray(resultado.achadosRadiograficos),
         necessidades: normalizeArray(resultado.necessidades),
+        tokensUsed,
       };
     } catch (error: any) {
       console.error('Erro ao chamar DeepSeek API para análise de radiografias:', error.response?.data || error.message);
@@ -528,6 +672,7 @@ IMPORTANTE:
           descricaoExame: 'Análise automática de imagens não está disponível no momento. Por favor, preencha manualmente.',
           achadosRadiograficos: ['Análise automática de imagens não está disponível no momento. Por favor, preencha manualmente.'],
           necessidades: ['Análise automática de imagens não está disponível no momento. Por favor, preencha manualmente.'],
+          tokensUsed: 0,
         };
       }
       
@@ -550,6 +695,7 @@ IMPORTANTE:
         descricaoExame: 'Não foi possível realizar análise automática. Por favor, preencha manualmente.',
         achadosRadiograficos: ['Não foi possível realizar análise automática. Por favor, preencha manualmente.'],
         necessidades: ['Não foi possível realizar análise automática. Por favor, preencha manualmente.'],
+        tokensUsed: 0,
       };
     }
   }

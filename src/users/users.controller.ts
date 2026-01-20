@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request, Headers } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Request, Headers, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UserComumService } from './services/user-comum.service';
 import { ClientesMasterService } from './clientes-master.service';
@@ -18,39 +18,183 @@ export class UsersController {
   ) {}
 
   @Get()
-  @UseGuards(IsMasterGuard)
-  async findAll(@Request() req) {
-    // req.user.id agora é o ID do UserBase
-    // Buscar ClienteMaster pelo userId
-    const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
-    if (!clientesMaster || clientesMaster.length === 0) {
-      throw new Error('Cliente Master não encontrado');
+  async findAll(@Query('clienteMasterId') clienteMasterId: string, @Request() req) {
+    if (!clienteMasterId) {
+      throw new BadRequestException('clienteMasterId é obrigatório');
     }
-    // Por enquanto, usar o primeiro ClienteMaster
-    const clienteMasterId = clientesMaster[0].id;
-    return this.usersService.findAllByClienteMaster(clienteMasterId);
+
+    // Verificar se o ClienteMaster existe
+    const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
+    if (!clienteMaster) {
+      throw new NotFoundException('Cliente Master não encontrado');
+    }
+
+    // Verificar se o usuário logado tem acesso a este ClienteMaster
+    const userBaseId = req.user.id;
+    const possuiClienteMaster = (await this.clientesMasterService.findByUserId(userBaseId))
+      .some(cm => String(cm.id) === String(clienteMasterId));
+
+    if (!possuiClienteMaster) {
+      // Verificar se é um usuário comum vinculado
+      const userComumVinculado = await this.userComumService.findByUserAndClienteMaster(
+        userBaseId,
+        clienteMasterId,
+      );
+      
+      if (!userComumVinculado) {
+        throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+      }
+    }
+
+    // Montar lista de todos os usuários que têm acesso ao ClienteMaster
+    const usuarios: Array<{
+      id: string;
+      nome: string;
+      email: string;
+      tipo: 'master' | 'comum';
+      ativo: boolean;
+    }> = [];
+
+    // 1. Adicionar o dono do ClienteMaster (master)
+    const donoUserBase = await this.userBaseService.findById(clienteMaster.userId);
+    if (donoUserBase) {
+      usuarios.push({
+        id: donoUserBase.id,
+        nome: donoUserBase.nome,
+        email: donoUserBase.email,
+        tipo: 'master',
+        ativo: true,
+      });
+    }
+
+    // 2. Adicionar todos os usuários comuns vinculados
+    const usuariosComuns = await this.userComumService.findByClienteMasterId(clienteMasterId);
+    for (const userComum of usuariosComuns) {
+      const userBase = await this.userBaseService.findById(userComum.userId);
+      if (userBase) {
+        usuarios.push({
+          id: userBase.id,
+          nome: userBase.nome,
+          email: userBase.email,
+          tipo: 'comum',
+          ativo: userComum.ativo,
+        });
+      }
+    }
+
+    return {
+      statusCode: 200,
+      message: 'Usuários listados com sucesso',
+      data: usuarios,
+    };
+  }
+
+  @Get('base/:id')
+  async findUserBase(@Param('id') id: string) {
+    const userBase = await this.userBaseService.findById(id);
+    if (!userBase) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+    
+    // Retornar dados sem informações sensíveis
+    const { password, verificationToken, tokenExpiresAt, ...userData } = userBase;
+    return userData;
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string, @Request() req) {
+  async findOne(@Param('id') id: string, @Query('clienteMasterId') clienteMasterId: string, @Request() req) {
+    if (!clienteMasterId) {
+      throw new BadRequestException('clienteMasterId é obrigatório');
+    }
+
+    // Verificar se o ClienteMaster existe
+    const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
+    if (!clienteMaster) {
+      throw new NotFoundException('Cliente Master não encontrado');
+    }
+
+    // Verificar se o usuário logado tem acesso a este ClienteMaster
+    const userBaseId = req.user.id;
+    const possuiClienteMaster = (await this.clientesMasterService.findByUserId(userBaseId))
+      .some(cm => String(cm.id) === String(clienteMasterId));
+
+    if (!possuiClienteMaster) {
+      // Verificar se é um usuário comum vinculado
+      const userComumVinculado = await this.userComumService.findByUserAndClienteMaster(
+        userBaseId,
+        clienteMasterId,
+      );
+      
+      if (!userComumVinculado) {
+        throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+      }
+    }
+
+    // Verificar se o ID é do dono do ClienteMaster (UserBase)
+    if (clienteMaster.userId === id) {
+      const donoUserBase = await this.userBaseService.findById(id);
+      if (!donoUserBase) {
+        throw new NotFoundException('Usuário não encontrado');
+      }
+      
+      return {
+        statusCode: 200,
+        message: 'Usuário encontrado',
+        data: {
+          id: donoUserBase.id,
+          nome: donoUserBase.nome,
+          email: donoUserBase.email,
+          tipo: 'master',
+          ativo: true,
+        },
+      };
+    }
+
+    // Buscar UserBase pelo ID (pode ser um usuário comum buscado pelo userId)
+    const userBaseById = await this.userBaseService.findById(id);
+    if (userBaseById) {
+      // Verificar se esse UserBase tem um UserComum vinculado ao ClienteMaster
+      const userComumByUserBase = await this.userComumService.findByUserAndClienteMaster(id, clienteMasterId);
+      if (userComumByUserBase) {
+        return {
+          statusCode: 200,
+          message: 'Usuário encontrado',
+          data: {
+            id: userBaseById.id,
+            nome: userBaseById.nome,
+            email: userBaseById.email,
+            tipo: 'comum',
+            ativo: userComumByUserBase.ativo,
+          },
+        };
+      }
+    }
+
+    // Buscar UserComum pelo ID (caso o ID seja do UserComum)
     const userComum = await this.userComumService.findById(id);
     if (!userComum) {
-      throw new Error('Usuário não encontrado');
+      throw new NotFoundException('Usuário não encontrado');
     }
-    
-    // Se for master, buscar ClienteMaster pelo userId
-    if (req.user.tipo === 'master') {
-      const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
-      if (!clientesMaster || clientesMaster.length === 0) {
-        throw new Error('Cliente Master não encontrado');
-      }
-      const clienteMasterId = clientesMaster[0].id;
-      if (userComum.clienteMasterId !== clienteMasterId) {
-        throw new Error('Acesso negado');
-      }
+
+    // Verificar se o UserComum pertence ao ClienteMaster
+    if (userComum.clienteMasterId !== clienteMasterId) {
+      throw new ForbiddenException('Usuário não pertence a este Cliente Master');
     }
+
+    // Buscar dados do UserBase
+    const userBase = await this.userBaseService.findById(userComum.userId);
     
-    return userComum;
+    return {
+      statusCode: 200,
+      message: 'Usuário encontrado',
+      data: {
+        id: userBase?.id,
+        nome: userBase?.nome || 'Nome não disponível',
+        email: userBase?.email || 'Email não disponível',
+        tipo: 'comum',
+        ativo: userComum.ativo,
+      },
+    };
   }
 
   @Put(':id')

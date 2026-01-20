@@ -14,6 +14,7 @@ import { UserComumService } from '../users/services/user-comum.service';
 import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
+import { ChatService } from '../chat/chat.service';
 export declare class AssinaturasService {
     private readonly assinaturaRepository;
     private readonly cupomRepository;
@@ -26,7 +27,8 @@ export declare class AssinaturasService {
     private readonly userBaseService;
     private readonly userComumService;
     private readonly emailService;
-    constructor(assinaturaRepository: Repository<Assinatura>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, emailService: EmailService);
+    private readonly chatService;
+    constructor(assinaturaRepository: Repository<Assinatura>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, emailService: EmailService, chatService: ChatService);
     create(createSubscriptionDto: CreateSubscriptionDto): Promise<SubscriptionResponseDto>;
     createSimple(createSimpleSubscriptionDto: CreateSimpleSubscriptionDto, user: {
         id: string;

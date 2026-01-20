@@ -25,6 +25,7 @@ import { UserComumService } from '../users/services/user-comum.service';
 import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
+import { ChatService } from '../chat/chat.service';
 
 @Injectable()
 export class AssinaturasService {
@@ -44,6 +45,8 @@ export class AssinaturasService {
     private readonly userBaseService: UserBaseService,
     private readonly userComumService: UserComumService,
     private readonly emailService: EmailService,
+    @Inject(forwardRef(() => ChatService))
+    private readonly chatService: ChatService,
   ) {}
 
   async create(
@@ -618,8 +621,32 @@ export class AssinaturasService {
       quantidadeUsuarios = usuarios.length;
     }
 
-    // Busca histórico do mês atual
+    // Calcula o ciclo de faturamento atual baseado na data de criação da assinatura
     const agora = new Date();
+    let dataInicioFaturamento: Date | null = null;
+    let proximaRenovacao: string | null = null;
+
+    if (assinaturaEntity && assinaturaEntity.createdAt) {
+      const dataInicio = new Date(assinaturaEntity.createdAt);
+      const diaFaturamento = dataInicio.getDate();
+      
+      // Calcula a data de início do ciclo atual
+      const inicioCicloAtual = new Date(agora.getFullYear(), agora.getMonth(), diaFaturamento);
+      
+      // Se ainda não chegou o dia de faturamento neste mês, o ciclo começou no mês anterior
+      if (agora.getDate() < diaFaturamento) {
+        inicioCicloAtual.setMonth(inicioCicloAtual.getMonth() - 1);
+      }
+      
+      dataInicioFaturamento = inicioCicloAtual;
+      
+      // Próxima renovação é 1 mês após o início do ciclo atual
+      const proxima = new Date(inicioCicloAtual);
+      proxima.setMonth(proxima.getMonth() + 1);
+      proximaRenovacao = proxima.toISOString().split('T')[0];
+    }
+
+    // Busca histórico do mês atual (calendário)
     const ano = agora.getFullYear();
     const mes = agora.getMonth() + 1;
 
@@ -636,8 +663,33 @@ export class AssinaturasService {
       where: { clienteMasterId: clienteMaster.id },
     });
 
-    const tokensChatUsados = todosHistoricos.reduce((sum, h) => sum + Number(h.tokensUtilizados || 0), 0);
-    const tokensChatUsadosMes = Number(historicoAtual?.tokensUtilizados || 0);
+    // Busca tokens do chat da tabela chat_conversations
+    const tokensChatUsados = await this.chatService.getTotalTokensByClienteMaster(clienteMaster.id);
+    
+    // Calcula tokens do ciclo de faturamento atual
+    let tokensChatUsadosMes = 0;
+    let analisesFeitasCiclo = 0;
+    
+    if (dataInicioFaturamento) {
+      // Busca tokens do chat no período do ciclo de faturamento
+      tokensChatUsadosMes = await this.chatService.getTotalTokensByClienteMasterInPeriod(clienteMaster.id, dataInicioFaturamento);
+      
+      // Filtra históricos de análises que estão dentro do ciclo de faturamento atual
+      for (const h of todosHistoricos) {
+        const dataHistorico = new Date(h.ano, h.mes - 1, 1); // Primeiro dia do mês do histórico
+        const fimMesHistorico = new Date(h.ano, h.mes, 0); // Último dia do mês do histórico
+        
+        // Se o mês do histórico está no ciclo de faturamento atual
+        if (fimMesHistorico >= dataInicioFaturamento && dataHistorico <= agora) {
+          analisesFeitasCiclo += Number(h.analisesFeitas || 0);
+        }
+      }
+    } else {
+      // Se não tem assinatura, usa total do chat e mês atual do calendário
+      tokensChatUsadosMes = tokensChatUsados;
+      analisesFeitasCiclo = Number(historicoAtual?.analisesFeitas || 0);
+    }
+
     const tokensChatLimite = plano ? Number(plano.tokenChat) : 0;
     const porcentagemUsoTokens = tokensChatLimite > 0 
       ? Math.min(100, Math.round((tokensChatUsadosMes / tokensChatLimite) * 100)) 
@@ -645,21 +697,12 @@ export class AssinaturasService {
 
     // Calcula informações de análises
     const analisesFeitas = todosHistoricos.reduce((sum, h) => sum + Number(h.analisesFeitas || 0), 0);
-    const analisesFeitasMes = Number(historicoAtual?.analisesFeitas || 0);
+    const analisesFeitasMes = analisesFeitasCiclo; // Análises do ciclo de faturamento atual
     const analisesLimite = plano ? Number(plano.limiteAnalises) : 0;
     const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasMes);
     const porcentagemUsoAnalises = analisesLimite > 0 
       ? Math.min(100, Math.round((analisesFeitasMes / analisesLimite) * 100)) 
       : 0;
-
-    // Calcula próxima renovação (30 dias após criação da assinatura)
-    let proximaRenovacao: string | null = null;
-    if (assinaturaEntity && assinaturaEntity.createdAt) {
-      const dataInicio = new Date(assinaturaEntity.createdAt);
-      const proxima = new Date(dataInicio);
-      proxima.setMonth(proxima.getMonth() + 1);
-      proximaRenovacao = proxima.toISOString().split('T')[0];
-    }
 
     // Informações do cartão
     let cartao: any = null;

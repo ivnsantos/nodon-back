@@ -28,7 +28,7 @@ export class RadiografiasService {
     private analisesService: AnalisesService,
   ) {}
 
-  async create(createRadiografiaDto: CreateRadiografiaDto, userId: string, userTipo: string, clienteMasterId: string): Promise<Radiografia> {
+  async create(createRadiografiaDto: CreateRadiografiaDto, userId: string, userTipo: string, clienteMasterId: string): Promise<Radiografia & { tokensUsed: number }> {
     try {
       console.log('🚀 RadiografiasService.create iniciado:', {
         userId,
@@ -136,6 +136,7 @@ export class RadiografiasService {
       let descricaoExame: string | null = null;
       let achadosRadiograficos: string[] | null = null;
       let necessidades: string[] | null = null;
+      let tokensUsed = 0;
 
       try {
         const urlsDasImagens = imagensComUrls.map(img => img.url);
@@ -144,8 +145,9 @@ export class RadiografiasService {
         descricaoExame = analise.descricaoExame;
         achadosRadiograficos = analise.achadosRadiograficos.length > 0 ? analise.achadosRadiograficos : null;
         necessidades = analise.necessidades.length > 0 ? analise.necessidades : null;
+        tokensUsed = analise.tokensUsed || 0;
         
-        console.log('✅ Análise de radiografias concluída com sucesso');
+        console.log(`✅ Análise de radiografias concluída com sucesso (${tokensUsed} tokens utilizados)`);
       } catch (error: any) {
         console.error('⚠️ Erro ao analisar radiografias com DeepSeek:', error.message);
         // Não bloquear a criação da radiografia se a análise falhar
@@ -182,7 +184,8 @@ export class RadiografiasService {
         // Não bloquear a criação da radiografia se o registro de análise falhar
       }
 
-      return radiografiaSalva;
+      // Retornar radiografia com tokens utilizados na análise
+      return Object.assign(radiografiaSalva, { tokensUsed }) as Radiografia & { tokensUsed: number };
     } catch (error: any) {
       console.error('❌ Erro ao criar radiografia:', {
         error: error?.message || error,
@@ -233,6 +236,9 @@ export class RadiografiasService {
   async remove(id: string, userId: string, userTipo: string): Promise<void> {
     const radiografia = await this.findOne(id, userId, userTipo);
     
+    // Verificar se o usuário pode excluir (responsável ou dono do consultório)
+    await this.verificarPermissaoEdicaoExclusao(userId, radiografia);
+    
     // Deletar todos os desenhos profissionais relacionados à radiografia primeiro
     console.log(`🗑️ Deletando desenhos profissionais relacionados à radiografia ${id}...`);
     await this.desenhoProfissionalRepository.delete({ radiografiaId: id });
@@ -261,6 +267,32 @@ export class RadiografiasService {
         throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
       }
     }
+  }
+
+  /**
+   * Verifica se o usuário pode editar/excluir a radiografia ou criar desenhos nela.
+   * Apenas o responsável (quem criou) ou o dono do Cliente Master podem realizar essas ações.
+   */
+  async verificarPermissaoEdicaoExclusao(userId: string, radiografia: Radiografia): Promise<void> {
+    // Verifica se o usuário é o responsável pela radiografia (quem criou)
+    if (radiografia.responsavelId === userId) {
+      return; // Permitido
+    }
+
+    // Busca o clienteMaster para verificar se o usuário é o dono
+    const clienteMaster = await this.clientesMasterService.findById(radiografia.masterClient?.id);
+    
+    if (!clienteMaster) {
+      throw new NotFoundException('Cliente Master não encontrado');
+    }
+
+    // Verifica se o userId logado é o dono do consultório
+    if (clienteMaster.userId === userId) {
+      return; // Permitido
+    }
+
+    // Se não é nem o responsável nem o dono, bloquear
+    throw new ForbiddenException('Apenas o responsável pela radiografia ou o proprietário do consultório podem realizar esta ação');
   }
 
   private async verificarLimiteAnalises(clienteMasterId: string): Promise<void> {
@@ -297,6 +329,9 @@ export class RadiografiasService {
 
       // Buscar radiografia existente
       const radiografia = await this.findOne(id, userId, userTipo);
+
+      // Verificar se o usuário pode editar (responsável ou dono do consultório)
+      await this.verificarPermissaoEdicaoExclusao(userId, radiografia);
 
       // Preparar dados para atualização
       const updateData: Partial<Radiografia> = {};

@@ -8,6 +8,14 @@ export class ChatMessageDto {
   @IsOptional()
   @IsArray()
   history?: { role: 'user' | 'assistant'; content: string }[];
+
+  @IsString()
+  @IsOptional()
+  conversationId?: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'O clienteMasterId é obrigatório' })
+  clienteMasterId: string;
 }
 
 export class ChatResponseDto {
