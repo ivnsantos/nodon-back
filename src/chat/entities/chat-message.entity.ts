@@ -29,6 +29,9 @@ export class ChatMessageEntity {
   @Column({ name: 'tokens_used', type: 'int', nullable: true })
   tokensUsed: number | null;
 
+  @Column({ name: 'image_urls', type: 'jsonb', nullable: true })
+  imageUrls: string[] | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 }

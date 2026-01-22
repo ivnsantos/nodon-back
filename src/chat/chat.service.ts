@@ -4,9 +4,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
 import { Readable } from 'stream';
+import FormData from 'form-data';
 import { ChatMessageDto, ChatResponseDto } from './dto/chat-message.dto';
 import { ChatConversation } from './entities/chat-conversation.entity';
 import { ChatMessageEntity } from './entities/chat-message.entity';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class ChatService {
@@ -71,6 +73,7 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     private conversationRepository: Repository<ChatConversation>,
     @InjectRepository(ChatMessageEntity)
     private messageRepository: Repository<ChatMessageEntity>,
+    private storageService: StorageService,
   ) {
     this.apiKey = this.configService.get<string>('DEEPSEEK_API_KEY') || '';
     this.openAiApiKey = this.configService.get<string>('OPENAI_API_KEY') || '';
@@ -179,12 +182,14 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     role: 'user' | 'assistant',
     content: string,
     tokensUsed?: number,
+    imageUrls?: string[],
   ): Promise<ChatMessageEntity> {
     const message = this.messageRepository.create({
       conversationId,
       role,
       content,
       tokensUsed: tokensUsed || null,
+      imageUrls: imageUrls && imageUrls.length > 0 ? imageUrls : null,
     });
 
     const conversation = await this.conversationRepository.findOne({
@@ -241,10 +246,340 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     return normalized;
   }
 
-  async sendMessageStream(chatMessageDto: ChatMessageDto): Promise<Readable> {
+  /**
+   * Faz upload de uma imagem para S3 e retorna a URL
+   */
+  async uploadImageToS3(imageData: string, userId: string): Promise<string> {
+    try {
+      // Se já é uma URL do S3/R2, retornar diretamente
+      if (imageData.startsWith('http') && imageData.includes('r2.dev')) {
+        return imageData;
+      }
+
+      let buffer: Buffer;
+      let contentType = 'image/jpeg';
+
+      if (imageData.startsWith('data:')) {
+        // É base64 data URI
+        const matches = imageData.match(/^data:([^;]+);base64,(.+)$/);
+        if (!matches) {
+          throw new Error('Formato de imagem base64 inválido');
+        }
+        contentType = matches[1];
+        buffer = Buffer.from(matches[2], 'base64');
+      } else if (imageData.startsWith('http')) {
+        // É URL externa - baixar
+        console.log('📥 Baixando imagem da URL externa...');
+        const response = await axios.get(imageData, {
+          responseType: 'arraybuffer',
+          timeout: 30000,
+        });
+        buffer = Buffer.from(response.data);
+        contentType = response.headers['content-type'] || 'image/jpeg';
+      } else {
+        // Assumir que é base64 puro
+        buffer = Buffer.from(imageData, 'base64');
+      }
+
+      // Gerar caminho único para o arquivo
+      const path = this.storageService.generateFilePath('chat-images', `${userId}.jpg`);
+      
+      console.log(`📤 Fazendo upload da imagem do chat para S3: ${path}`);
+      
+      // Fazer upload para S3
+      const url = await this.storageService.uploadImage(buffer, path, contentType);
+      
+      console.log(`✅ Upload concluído: ${url}`);
+      
+      return url;
+    } catch (error: any) {
+      console.error('❌ Erro ao fazer upload da imagem:', error.message);
+      throw new InternalServerErrorException(`Erro ao fazer upload da imagem: ${error.message}`);
+    }
+  }
+
+  /**
+   * Faz upload de múltiplas imagens para S3
+   */
+  async uploadImagesToS3(images: string[], userId: string): Promise<string[]> {
+    const uploadedUrls: string[] = [];
+    
+    for (let i = 0; i < images.length; i++) {
+      try {
+        const url = await this.uploadImageToS3(images[i], `${userId}-${i}`);
+        uploadedUrls.push(url);
+      } catch (error: any) {
+        console.warn(`⚠️ Erro ao fazer upload da imagem ${i + 1}:`, error.message);
+        // Continuar com outras imagens mesmo se uma falhar
+      }
+    }
+    
+    return uploadedUrls;
+  }
+
+  /**
+   * Transcreve áudio usando OpenAI Whisper API
+   */
+  async transcribeAudio(audioData: string): Promise<string> {
+    if (!this.openAiApiKey) {
+      throw new InternalServerErrorException('OPENAI_API_KEY não configurada para transcrição de áudio');
+    }
+
+    try {
+      console.log('🎤 Transcrevendo áudio com OpenAI Whisper...');
+      
+      let audioBuffer: Buffer;
+      let filename = 'audio.webm';
+      
+      // Verificar se é base64 ou URL
+      if (audioData.startsWith('data:')) {
+        // É base64 data URI
+        const matches = audioData.match(/^data:([^;]+);base64,(.+)$/);
+        if (!matches) {
+          throw new Error('Formato de áudio base64 inválido');
+        }
+        const mimeType = matches[1];
+        const base64Content = matches[2];
+        audioBuffer = Buffer.from(base64Content, 'base64');
+        
+        // Determinar extensão pelo mime type
+        const extMap: Record<string, string> = {
+          'audio/webm': 'webm',
+          'audio/mp3': 'mp3',
+          'audio/mpeg': 'mp3',
+          'audio/wav': 'wav',
+          'audio/ogg': 'ogg',
+          'audio/m4a': 'm4a',
+          'audio/mp4': 'm4a',
+        };
+        const ext = extMap[mimeType] || 'webm';
+        filename = `audio.${ext}`;
+      } else if (audioData.startsWith('http')) {
+        // É URL - baixar o áudio
+        console.log('📥 Baixando áudio da URL...');
+        const response = await axios.get(audioData, {
+          responseType: 'arraybuffer',
+          timeout: 30000,
+        });
+        audioBuffer = Buffer.from(response.data);
+        
+        // Tentar determinar extensão pela URL
+        const urlExt = audioData.split('.').pop()?.split('?')[0] || 'webm';
+        filename = `audio.${urlExt}`;
+      } else {
+        // Assumir que é base64 puro
+        audioBuffer = Buffer.from(audioData, 'base64');
+      }
+
+      console.log(`📁 Arquivo de áudio: ${filename}, tamanho: ${audioBuffer.length} bytes`);
+
+      // Criar FormData para enviar ao Whisper
+      const formData = new FormData();
+      formData.append('file', audioBuffer, {
+        filename,
+        contentType: 'audio/webm',
+      });
+      formData.append('model', 'whisper-1');
+      formData.append('language', 'pt');
+
+      const response = await axios.post(
+        'https://api.openai.com/v1/audio/transcriptions',
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.openAiApiKey}`,
+            ...formData.getHeaders(),
+          },
+          timeout: 60000,
+        },
+      );
+
+      const transcription = response.data.text;
+      console.log('✅ Transcrição concluída:', transcription.substring(0, 100) + '...');
+      
+      return transcription;
+    } catch (error: any) {
+      console.error('❌ Erro ao transcrever áudio:', error.response?.data || error.message);
+      throw new InternalServerErrorException(
+        `Erro ao transcrever áudio: ${error.response?.data?.error?.message || error.message}`,
+      );
+    }
+  }
+
+  /**
+   * Envia mensagem com suporte a imagens usando OpenAI GPT-4o
+   */
+  async sendMessageWithImages(
+    message: string,
+    images: string[],
+    history?: { role: 'user' | 'assistant'; content: string }[],
+  ): Promise<{ response: string; tokensUsed: number }> {
+    if (!this.openAiApiKey) {
+      throw new InternalServerErrorException('OPENAI_API_KEY não configurada para análise de imagens');
+    }
+
+    try {
+      console.log(`🖼️ Processando mensagem com ${images.length} imagem(ns)...`);
+
+      // Montar conteúdo da mensagem com imagens
+      const userContent: any[] = [];
+      
+      // Adicionar texto da mensagem
+      if (message) {
+        userContent.push({
+          type: 'text',
+          text: message,
+        });
+      }
+
+      // Processar e adicionar imagens
+      for (const imageData of images) {
+        try {
+          let imageUrl: string;
+          
+          if (imageData.startsWith('data:')) {
+            // Já é base64 data URI
+            imageUrl = imageData;
+          } else if (imageData.startsWith('http')) {
+            // É URL - baixar e converter para base64
+            console.log('📥 Baixando imagem da URL...');
+            const response = await axios.get(imageData, {
+              responseType: 'arraybuffer',
+              timeout: 30000,
+            });
+            const base64 = Buffer.from(response.data).toString('base64');
+            const contentType = response.headers['content-type'] || 'image/jpeg';
+            imageUrl = `data:${contentType};base64,${base64}`;
+          } else {
+            // Assumir que é base64 puro - adicionar prefixo
+            imageUrl = `data:image/jpeg;base64,${imageData}`;
+          }
+
+          userContent.push({
+            type: 'image_url',
+            image_url: {
+              url: imageUrl,
+              detail: 'high',
+            },
+          });
+        } catch (imgError: any) {
+          console.warn('⚠️ Erro ao processar imagem:', imgError.message);
+        }
+      }
+
+      // Montar mensagens
+      const messages: any[] = [
+        { role: 'system', content: this.systemPrompt },
+      ];
+
+      // Adicionar histórico
+      if (history && history.length > 0) {
+        const limitedHistory = history.slice(-5);
+        for (const msg of limitedHistory) {
+          messages.push({
+            role: msg.role,
+            content: msg.content,
+          });
+        }
+      }
+
+      // Adicionar mensagem atual com imagens
+      messages.push({
+        role: 'user',
+        content: userContent,
+      });
+
+      console.log('📤 Enviando para OpenAI GPT-4o...');
+
+      const response = await axios.post(
+        this.openAiApiUrl,
+        {
+          model: 'gpt-4o',
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 2000,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.openAiApiKey}`,
+          },
+          timeout: 120000,
+        },
+      );
+
+      const assistantMessage = response.data.choices[0]?.message?.content || '';
+      const tokensUsed = response.data.usage?.total_tokens || 0;
+
+      console.log('✅ Resposta recebida do GPT-4o');
+
+      return {
+        response: this.normalizeResponse(assistantMessage),
+        tokensUsed,
+      };
+    } catch (error: any) {
+      console.error('❌ Erro ao processar imagens:', error.response?.data || error.message);
+      throw new InternalServerErrorException(
+        `Erro ao processar imagens: ${error.response?.data?.error?.message || error.message}`,
+      );
+    }
+  }
+
+  async sendMessageStream(chatMessageDto: ChatMessageDto): Promise<Readable | { response: string; tokensUsed: number; transcription?: string; imageUrls?: string[] }> {
+    // Verificar se tem áudio - transcrever primeiro
+    let messageText = chatMessageDto.message || '';
+    let transcription: string | undefined;
+    
+    if (chatMessageDto.audio) {
+      console.log('🎤 Áudio detectado, transcrevendo...');
+      transcription = await this.transcribeAudio(chatMessageDto.audio);
+      messageText = transcription;
+    }
+
+    // Verificar se tem imagens - fazer upload para S3 e usar OpenAI GPT-4o
+    if (chatMessageDto.images && chatMessageDto.images.length > 0) {
+      console.log('🖼️ Imagens detectadas, fazendo upload para S3...');
+      
+      if (!messageText && !chatMessageDto.images.length) {
+        throw new InternalServerErrorException('É necessário enviar uma mensagem ou imagem');
+      }
+      
+      // Fazer upload das imagens para S3
+      const uploadedImageUrls = await this.uploadImagesToS3(
+        chatMessageDto.images,
+        chatMessageDto.clienteMasterId || 'anonymous',
+      );
+      
+      if (uploadedImageUrls.length === 0) {
+        throw new InternalServerErrorException('Não foi possível fazer upload das imagens');
+      }
+      
+      console.log(`✅ ${uploadedImageUrls.length} imagem(ns) enviada(s) para S3`);
+      
+      const result = await this.sendMessageWithImages(
+        messageText || 'Analise esta(s) imagem(ns) odontológica(s) e forneça informações relevantes.',
+        uploadedImageUrls,
+        chatMessageDto.history,
+      );
+      
+      return {
+        ...result,
+        transcription,
+        imageUrls: uploadedImageUrls, // Retornar URLs das imagens no S3
+      };
+    }
+
+    // Se não tem imagens, usar DeepSeek com streaming
     if (!this.apiKey) {
       throw new InternalServerErrorException('API do DeepSeek não está configurada');
     }
+
+    if (!messageText) {
+      throw new InternalServerErrorException('É necessário enviar uma mensagem, áudio ou imagem');
+    }
+
+    // Atualizar a mensagem no DTO para uso posterior
+    chatMessageDto.message = messageText;
 
     // Montar o array de mensagens
     const messages: { role: string; content: string }[] = [
@@ -266,7 +601,7 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     // Adicionar a mensagem atual do usuário
     messages.push({
       role: 'user',
-      content: chatMessageDto.message,
+      content: messageText,
     });
 
     console.log('📤 Enviando mensagem para DeepSeek (streaming)...');
@@ -293,6 +628,12 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
       );
 
       console.log('✅ Stream DeepSeek iniciado');
+      
+      // Se teve transcrição, retornar junto com o stream
+      if (transcription) {
+        (response.data as any).transcription = transcription;
+      }
+      
       return response.data as Readable;
     } catch (error: any) {
       console.error('❌ Erro ao chamar DeepSeek API:', error.response?.data || error.message);
@@ -341,7 +682,7 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
       // Adicionar a mensagem atual do usuário
       messages.push({
         role: 'user',
-        content: chatMessageDto.message,
+        content: chatMessageDto.message || '',
       });
 
       console.log('Enviando mensagem para DeepSeek...');

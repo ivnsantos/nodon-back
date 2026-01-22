@@ -50,6 +50,7 @@ export class ChatController {
           id: m.id,
           role: m.role,
           content: m.content,
+          imageUrls: m.imageUrls || null,
           createdAt: m.createdAt,
         })) || [],
       },
@@ -82,6 +83,7 @@ export class ChatController {
           id: m.id,
           role: m.role,
           content: m.content,
+          imageUrls: m.imageUrls || null,
           createdAt: m.createdAt,
         })) || [],
       },
@@ -165,6 +167,13 @@ export class ChatController {
     const clienteMasterId = chatMessageDto.clienteMasterId;
 
     try {
+      // Validar que tem pelo menos uma entrada (mensagem, áudio ou imagem)
+      if (!chatMessageDto.message && !chatMessageDto.audio && (!chatMessageDto.images || chatMessageDto.images.length === 0)) {
+        res.write(`data: ${JSON.stringify({ type: 'error', message: 'É necessário enviar uma mensagem, áudio ou imagem' })}\n\n`);
+        res.end();
+        return;
+      }
+
       // Verificar limite de tokens do mês
       if (clienteMasterId) {
         try {
@@ -195,19 +204,61 @@ export class ChatController {
         conversationId = conversation.id;
       }
 
-      // Salvar mensagem do usuário
-      await this.chatService.saveMessage(conversationId, 'user', chatMessageDto.message);
-
       // Buscar histórico da conversa para enviar à API
       const history = await this.chatService.getHistory(conversationId);
       chatMessageDto.history = history.slice(-10); // Últimas 10 mensagens
 
-      const stream = await this.chatService.sendMessageStream(chatMessageDto);
-      let fullResponse = '';
-      let tokensUsed = 0;
+      const result = await this.chatService.sendMessageStream(chatMessageDto);
 
       // Enviar conversationId no início
       res.write(`data: ${JSON.stringify({ type: 'conversationId', conversationId })}\n\n`);
+
+      // Verificar se é um stream ou resposta direta (quando tem imagens)
+      if ('response' in result) {
+        // Resposta direta (imagens processadas com GPT-4o)
+        const { response, tokensUsed, transcription, imageUrls } = result as any;
+        
+        // Determinar a mensagem do usuário para salvar
+        const userMessage = transcription || chatMessageDto.message || '[Imagem enviada]';
+        
+        // Salvar mensagem do usuário com as imagens
+        await this.chatService.saveMessage(conversationId, 'user', userMessage, undefined, imageUrls);
+        
+        // Salvar resposta do assistente
+        await this.chatService.saveMessage(conversationId, 'assistant', response, tokensUsed);
+        
+        // Enviar transcrição se houver
+        if (transcription) {
+          res.write(`data: ${JSON.stringify({ type: 'transcription', content: transcription })}\n\n`);
+        }
+        
+        // Enviar URLs das imagens se houver
+        if (imageUrls && imageUrls.length > 0) {
+          res.write(`data: ${JSON.stringify({ type: 'imageUrls', urls: imageUrls })}\n\n`);
+        }
+        
+        // Enviar resposta completa
+        res.write(`data: ${JSON.stringify({ type: 'done', tokensUsed, response, conversationId, transcription, imageUrls })}\n\n`);
+        res.end();
+        return;
+      }
+
+      // É um stream (DeepSeek)
+      const stream = result;
+      let fullResponse = '';
+      let tokensUsed = 0;
+      const transcription = (stream as any).transcription;
+
+      // Determinar a mensagem do usuário para salvar
+      const userMessage = transcription || chatMessageDto.message || '';
+      
+      // Salvar mensagem do usuário
+      await this.chatService.saveMessage(conversationId, 'user', userMessage);
+
+      // Enviar transcrição se houver
+      if (transcription) {
+        res.write(`data: ${JSON.stringify({ type: 'transcription', content: transcription })}\n\n`);
+      }
 
       stream.on('data', (chunk: Buffer) => {
         const lines = chunk.toString().split('\n');
@@ -220,7 +271,7 @@ export class ChatController {
               const normalizedResponse = this.chatService.normalizeResponse(fullResponse);
               // Salvar resposta do assistente
               this.chatService.saveMessage(conversationId!, 'assistant', normalizedResponse, tokensUsed);
-              res.write(`data: ${JSON.stringify({ type: 'done', tokensUsed, response: normalizedResponse, conversationId })}\n\n`);
+              res.write(`data: ${JSON.stringify({ type: 'done', tokensUsed, response: normalizedResponse, conversationId, transcription })}\n\n`);
               res.end();
               return;
             }
@@ -255,7 +306,7 @@ export class ChatController {
           const normalizedResponse = this.chatService.normalizeResponse(fullResponse);
           // Salvar resposta do assistente
           this.chatService.saveMessage(conversationId!, 'assistant', normalizedResponse, tokensUsed);
-          res.write(`data: ${JSON.stringify({ type: 'done', tokensUsed, response: normalizedResponse, conversationId })}\n\n`);
+          res.write(`data: ${JSON.stringify({ type: 'done', tokensUsed, response: normalizedResponse, conversationId, transcription })}\n\n`);
           res.end();
         }
       });
@@ -301,7 +352,7 @@ export class ChatController {
     }
 
     // Salvar mensagem do usuário
-    await this.chatService.saveMessage(conversationId, 'user', chatMessageDto.message);
+    await this.chatService.saveMessage(conversationId, 'user', chatMessageDto.message || '');
 
     // Buscar histórico
     const history = await this.chatService.getHistory(conversationId);
