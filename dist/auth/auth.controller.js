@@ -80,6 +80,11 @@ let AuthController = class AuthController {
         return this.authService.getClientMasterByUserBaseId(userBaseId);
     }
     async googleAuth() {
+        const clientID = this.configService.get('GOOGLE_CLIENT_ID');
+        const clientSecret = this.configService.get('GOOGLE_CLIENT_SECRET');
+        if (!clientID || !clientSecret) {
+            throw new common_1.BadRequestException('Google OAuth não está configurado. Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no arquivo .env');
+        }
     }
     async googleAuthCallback(req, res) {
         try {

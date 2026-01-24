@@ -34,6 +34,9 @@ export declare class UsersController {
         city: string;
         state: string;
         isVerified: boolean;
+        googleId: string | null;
+        facebookId: string | null;
+        foto: string | null;
         createdAt: Date;
         updatedAt: Date;
         clientesMaster: import("./entities/cliente-master.entity").ClienteMaster[];

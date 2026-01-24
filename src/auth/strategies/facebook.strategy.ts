@@ -19,13 +19,28 @@ export class FacebookStrategy extends PassportStrategy(Strategy, 'facebook') {
     console.log('  - App Secret:', clientSecret ? '****configurado****' : 'NÃO CONFIGURADO');
     console.log('  - Callback URL:', callbackURL);
 
-    super({
-      clientID: clientID,
-      clientSecret: clientSecret,
-      callbackURL: callbackURL,
-      scope: ['email', 'public_profile'],
-      profileFields: ['id', 'emails', 'name', 'displayName', 'photos'],
-    });
+    // Validar se as credenciais estão configuradas
+    if (!clientID || !clientSecret) {
+      console.warn('⚠️ Facebook OAuth não configurado. FACEBOOK_APP_ID e FACEBOOK_APP_SECRET são necessários.');
+      console.warn('⚠️ O login com Facebook não estará disponível até que as credenciais sejam configuradas.');
+      // Fornecer valores válidos mas que não funcionarão para evitar erro de inicialização
+      // O guard verificará se as credenciais estão configuradas antes de usar
+      super({
+        clientID: clientID || 'not-configured',
+        clientSecret: clientSecret || 'not-configured',
+        callbackURL: callbackURL,
+        scope: ['email', 'public_profile'],
+        profileFields: ['id', 'emails', 'name', 'displayName', 'photos'],
+      });
+    } else {
+      super({
+        clientID: clientID,
+        clientSecret: clientSecret,
+        callbackURL: callbackURL,
+        scope: ['email', 'public_profile'],
+        profileFields: ['id', 'emails', 'name', 'displayName', 'photos'],
+      });
+    }
   }
 
   validate(

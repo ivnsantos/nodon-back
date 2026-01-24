@@ -116,6 +116,14 @@ export class AuthController {
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   async googleAuth() {
+    // Verificar se as credenciais estão configuradas
+    const clientID = this.configService.get<string>('GOOGLE_CLIENT_ID');
+    const clientSecret = this.configService.get<string>('GOOGLE_CLIENT_SECRET');
+    
+    if (!clientID || !clientSecret) {
+      throw new BadRequestException('Google OAuth não está configurado. Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no arquivo .env');
+    }
+    
     // Este endpoint inicia o fluxo OAuth do Google
     // O guard redireciona automaticamente para a página de login do Google
   }
@@ -186,6 +194,7 @@ export class AuthController {
   async facebookAuth() {
     // Este endpoint inicia o fluxo OAuth do Facebook
     // O guard redireciona automaticamente para a página de login do Facebook
+    // O guard valida se as credenciais estão configuradas antes de prosseguir
   }
 
   @Get('facebook/callback')

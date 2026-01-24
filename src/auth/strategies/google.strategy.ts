@@ -19,12 +19,26 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     console.log('  - Client Secret:', clientSecret ? '****configurado****' : 'NÃO CONFIGURADO');
     console.log('  - Callback URL:', callbackURL);
 
-    super({
-      clientID: clientID,
-      clientSecret: clientSecret,
-      callbackURL: callbackURL,
-      scope: ['email', 'profile'],
-    });
+    // Validar se as credenciais estão configuradas
+    if (!clientID || !clientSecret) {
+      console.warn('⚠️ Google OAuth não configurado. GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET são necessários.');
+      console.warn('⚠️ O login com Google não estará disponível até que as credenciais sejam configuradas.');
+      // Fornecer valores válidos mas que não funcionarão para evitar erro de inicialização
+      // O guard verificará se as credenciais estão configuradas antes de usar
+      super({
+        clientID: clientID || 'not-configured',
+        clientSecret: clientSecret || 'not-configured',
+        callbackURL: callbackURL,
+        scope: ['email', 'profile'],
+      });
+    } else {
+      super({
+        clientID: clientID,
+        clientSecret: clientSecret,
+        callbackURL: callbackURL,
+        scope: ['email', 'profile'],
+      });
+    }
   }
 
   validate(
