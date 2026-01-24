@@ -20,6 +20,7 @@ let Plano = class Plano {
     tokenChat;
     ativo;
     descricao;
+    acesso;
     createdAt;
     updatedAt;
 };
@@ -29,19 +30,19 @@ __decorate([
     __metadata("design:type", String)
 ], Plano.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)(),
+    (0, typeorm_1.Column)({ name: 'nome', type: 'varchar', nullable: false }),
     __metadata("design:type", String)
 ], Plano.prototype, "nome", void 0);
 __decorate([
-    (0, typeorm_1.Column)('decimal', { precision: 10, scale: 2 }),
+    (0, typeorm_1.Column)({ name: 'valor_original', type: 'decimal', precision: 10, scale: 2 }),
     __metadata("design:type", Number)
 ], Plano.prototype, "valorOriginal", void 0);
 __decorate([
-    (0, typeorm_1.Column)('decimal', { precision: 10, scale: 2, nullable: true }),
+    (0, typeorm_1.Column)({ name: 'valor_promocional', type: 'decimal', precision: 10, scale: 2, nullable: true }),
     __metadata("design:type", Number)
 ], Plano.prototype, "valorPromocional", void 0);
 __decorate([
-    (0, typeorm_1.Column)(),
+    (0, typeorm_1.Column)({ name: 'limite_analises' }),
     __metadata("design:type", Number)
 ], Plano.prototype, "limiteAnalises", void 0);
 __decorate([
@@ -49,11 +50,11 @@ __decorate([
     __metadata("design:type", Number)
 ], Plano.prototype, "tokenChat", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ default: true }),
+    (0, typeorm_1.Column)({ name: 'ativo', type: 'boolean', default: true }),
     __metadata("design:type", Boolean)
 ], Plano.prototype, "ativo", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ nullable: true }),
+    (0, typeorm_1.Column)({ name: 'descricao', type: 'varchar', nullable: true }),
     __metadata("design:type", String)
 ], Plano.prototype, "descricao", void 0);
 __decorate([

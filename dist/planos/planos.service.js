@@ -23,14 +23,43 @@ let PlanosService = class PlanosService {
         this.planoRepository = planoRepository;
     }
     async create(data) {
-        const plano = this.planoRepository.create(data);
-        return this.planoRepository.save(plano);
+        const { acesso, ...planoData } = data;
+        const plano = this.planoRepository.create(planoData);
+        const saved = await this.planoRepository.save(plano);
+        return { ...saved, acesso: acesso || 'all' };
     }
     async findAll() {
-        return this.planoRepository.find({
-            where: { ativo: true },
-            order: { valorOriginal: 'ASC' },
-        });
+        try {
+            const planos = await this.planoRepository
+                .createQueryBuilder('plano')
+                .select([
+                'plano.id',
+                'plano.nome',
+                'plano.valorOriginal',
+                'plano.valorPromocional',
+                'plano.limiteAnalises',
+                'plano.tokenChat',
+                'plano.ativo',
+                'plano.descricao',
+                'plano.createdAt',
+                'plano.updatedAt',
+            ])
+                .where('plano.ativo = :ativo', { ativo: true })
+                .orderBy('plano.valorOriginal', 'ASC')
+                .getMany();
+            return planos.map(plano => ({
+                ...plano,
+                acesso: plano.acesso || 'all',
+            }));
+        }
+        catch (error) {
+            console.error('❌ Erro ao buscar planos:', error);
+            console.error('❌ Detalhes do erro:', {
+                message: error?.message,
+                stack: error?.stack,
+            });
+            throw error;
+        }
     }
     async findById(id) {
         return this.planoRepository.findOne({ where: { id } });

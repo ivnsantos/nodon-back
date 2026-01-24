@@ -141,13 +141,20 @@ let AuthService = class AuthService {
                     limiteAnalises: plano.limiteAnalises,
                     tokenChat: Number(plano.tokenChat),
                     descricao: plano.descricao,
+                    acesso: plano.acesso || 'all',
                 };
             }
         }
+        const clientesMaster = await this.clientesMasterService.findByUserId(user.userId);
+        const clientesMasterIds = clientesMaster.map(cm => cm.id);
+        const usuariosComuns = await this.userComumService.findByUserId(user.userId);
+        const usuariosComunsIds = usuariosComuns.map(uc => uc.id);
         const payload = {
             id: user.userId,
             email: user.email,
             tipo: tipo,
+            clientesMasterIds: clientesMasterIds,
+            usuariosComunsIds: usuariosComunsIds,
         };
         return {
             access_token: this.jwtService.sign(payload),
@@ -419,6 +426,7 @@ let AuthService = class AuthService {
                             valor: plano.valorPromocional || plano.valorOriginal,
                             tokenChat: plano.tokenChat,
                             analises: plano.limiteAnalises,
+                            acesso: plano.acesso || 'all',
                         };
                     }
                 }
@@ -499,6 +507,7 @@ let AuthService = class AuthService {
                                 valor: plano.valorPromocional || plano.valorOriginal,
                                 tokenChat: plano.tokenChat,
                                 analises: plano.limiteAnalises,
+                                acesso: plano.acesso || 'all',
                             };
                         }
                     }
@@ -771,6 +780,7 @@ let AuthService = class AuthService {
                         valor: plano.valorPromocional || plano.valorOriginal,
                         tokenChat: plano.tokenChat,
                         analises: plano.limiteAnalises,
+                        acesso: plano.acesso || 'all',
                     };
                 }
             }
@@ -824,6 +834,7 @@ let AuthService = class AuthService {
                                 valor: plano.valorPromocional || plano.valorOriginal,
                                 tokenChat: plano.tokenChat,
                                 analises: plano.limiteAnalises,
+                                acesso: plano.acesso || 'all',
                             };
                         }
                     }

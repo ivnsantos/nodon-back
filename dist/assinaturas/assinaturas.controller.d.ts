@@ -14,7 +14,14 @@ export declare class AssinaturasController {
         status: string;
     }>;
     findMy(req: any): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto | null>;
-    getDashboard(req: any, clienteMasterId?: string, usuario?: string): Promise<{
+    getDashboard(req: any, userComumIdHeader?: string, clienteMasterId?: string, usuario?: string): Promise<{
+        clienteMaster: {
+            id: string;
+            nomeEmpresa: string;
+            cnpj: string;
+            logo: string;
+            cor: string;
+        };
         clienteMasterId: string;
         usuarioId: string;
         tokensChat: {
@@ -28,10 +35,26 @@ export declare class AssinaturasController {
             porcentagemUso: number;
         };
         perfil: {
-            nome: string | null;
-            email: string | null;
+            id: string;
+            nome: string;
+            email: string;
+            cpf: string;
+            telefone: string;
+            cro: string;
+            postalCode: string;
+            address: string;
+            addressNumber: string;
+            complement: string;
+            province: string;
+            city: string;
+            state: string;
+            isVerified: boolean;
             ativo: boolean;
+            status: "ativo" | "inativo";
         };
+        assinatura: {
+            status: string;
+        } | null;
     } | {
         clienteMasterId: string;
         tokensChat: {

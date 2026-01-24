@@ -3,6 +3,8 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TypeOrmOptionsFactory, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { config } from 'dotenv';
+import { existsSync } from 'fs';
+import { resolve } from 'path';
 import { UserBase } from '../users/entities/user-base.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
 import { ClienteMaster } from '../users/entities/cliente-master.entity';
@@ -10,8 +12,20 @@ import { Plano } from '../planos/entities/plano.entity';
 import { Cupom } from '../cupons/entities/cupom.entity';
 import { Assinatura } from '../assinaturas/entities/assinatura.entity';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
+import { TipoConsulta } from '../calendario/entities/tipo-consulta.entity';
+import { Consulta } from '../calendario/entities/consulta.entity';
+import { Paciente } from '../pacientes/entities/paciente.entity';
+import { HistoricoPaciente } from '../pacientes/entities/historico-paciente.entity';
+import { Radiografia } from '../radiografias/entities/radiografia.entity';
+import { DesenhoProfissional } from '../desenhos-profissionais/entities/desenho-profissional.entity';
 
-config();
+// Carregar .env.local primeiro (tem prioridade), depois .env
+const envLocalPath = resolve(process.cwd(), '.env.local');
+if (existsSync(envLocalPath)) {
+  config({ path: envLocalPath });
+  console.log('✅ Carregado .env.local');
+}
+config(); // Carrega .env (se existir)
 
 @Injectable()
 export class TypeOrmConfigService implements TypeOrmOptionsFactory {
@@ -44,11 +58,16 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
     console.log('  - Port:', dbPort);
     console.log('  - Username:', dbUsername);
     console.log('  - Database:', dbName);
-    console.log('  - SSL:', dbSsl === 'true' || process.env.VERCEL ? 'Habilitado' : 'Desabilitado');
-
-    // SSL é obrigatório para conexões externas (Vercel) ou quando DB_SSL=true
-    // No Vercel, sempre usar SSL
-    const useSsl = true;
+    
+    // Determinar se deve usar SSL:
+    // - Se DB_SSL=true explicitamente, usar SSL
+    // - Se for localhost, não usar SSL (a menos que DB_SSL=true)
+    // - Se for Vercel ou outro ambiente de produção, usar SSL
+    const isLocalhost = dbHost === 'localhost' || dbHost === '127.0.0.1';
+    const useSsl = dbSsl === 'true' || (!isLocalhost && process.env.VERCEL);
+    
+    console.log('  - SSL:', useSsl ? 'Habilitado' : 'Desabilitado');
+    console.log('  - Ambiente:', isLocalhost ? 'Local' : 'Remoto');
 
     return {
       type: 'postgres',
@@ -60,8 +79,24 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       ssl: useSsl ? {
         rejectUnauthorized: false, // Necessário para alguns ambientes de hospedagem
       } : false,
-      entities: [UserBase, UserComum, ClienteMaster, Plano, Cupom, Assinatura, HistoricoMensal],
-      synchronize: process.env.NODE_ENV !== 'production',
+      entities: [
+        UserBase,
+        UserComum,
+        ClienteMaster,
+        Plano,
+        Cupom,
+        Assinatura,
+        HistoricoMensal,
+        TipoConsulta,
+        Consulta,
+        Paciente,
+        HistoricoPaciente,
+        Radiografia,
+        DesenhoProfissional,
+      ],
+      // Desabilitar synchronize para evitar problemas com alterações de schema
+      // Use migrations manuais em vez de synchronize
+      synchronize: false, // process.env.NODE_ENV !== 'production' && process.env.ENABLE_SYNC === 'true',
       logging: this.configService.get<string>('NODE_ENV') === 'development',
       autoLoadEntities: true,
       extra: useSsl ? {

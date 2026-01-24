@@ -14,6 +14,7 @@ import { UserComumService } from '../users/services/user-comum.service';
 import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
+import { ChatService } from '../chat/chat.service';
 export declare class AssinaturasService {
     private readonly assinaturaRepository;
     private readonly cupomRepository;
@@ -26,7 +27,8 @@ export declare class AssinaturasService {
     private readonly userBaseService;
     private readonly userComumService;
     private readonly emailService;
-    constructor(assinaturaRepository: Repository<Assinatura>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, emailService: EmailService);
+    private readonly chatService;
+    constructor(assinaturaRepository: Repository<Assinatura>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, emailService: EmailService, chatService: ChatService);
     create(createSubscriptionDto: CreateSubscriptionDto): Promise<SubscriptionResponseDto>;
     createSimple(createSimpleSubscriptionDto: CreateSimpleSubscriptionDto, user: {
         id: string;
@@ -86,6 +88,13 @@ export declare class AssinaturasService {
         cartao: any;
     }>;
     getDashboardInfoUsuario(clienteMasterId: string, userComum: UserComum): Promise<{
+        clienteMaster: {
+            id: string;
+            nomeEmpresa: string;
+            cnpj: string;
+            logo: string;
+            cor: string;
+        };
         clienteMasterId: string;
         usuarioId: string;
         tokensChat: {
@@ -99,10 +108,26 @@ export declare class AssinaturasService {
             porcentagemUso: number;
         };
         perfil: {
-            nome: string | null;
-            email: string | null;
+            id: string;
+            nome: string;
+            email: string;
+            cpf: string;
+            telefone: string;
+            cro: string;
+            postalCode: string;
+            address: string;
+            addressNumber: string;
+            complement: string;
+            province: string;
+            city: string;
+            state: string;
+            isVerified: boolean;
             ativo: boolean;
+            status: "ativo" | "inativo";
         };
+        assinatura: {
+            status: string;
+        } | null;
     }>;
     private toResponseDto;
 }

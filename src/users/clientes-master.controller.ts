@@ -23,6 +23,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ClientesMasterService } from './clientes-master.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { IsMasterGuard } from '../auth/guards/is-master.guard';
+import { ValidateResourceAccessGuard } from '../auth/guards/validate-resource-access.guard';
 import { UpdateClienteMasterDto } from './dto/update-cliente-master.dto';
 import { StorageService } from '../storage/storage.service';
 import { UserComumService } from './services/user-comum.service';
@@ -102,11 +103,18 @@ export class ClientesMasterController {
     return this.clientesMasterService.findById(id);
   }
 
-  @Get(':id/complete')
-  @UseGuards(JwtAuthGuard)
-  async getCompleteInfo(@Param('id') id: string, @Request() req) {
+  @Post('complete')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
+  async getCompleteInfo(@Headers('x-cliente-master-id') clienteMasterIdHeader: string, @Request() req) {
     // req.user.id é o ID do UserBase logado
     const userBaseId = req.user.id;
+    
+    // Validar se o header foi fornecido
+    if (!clienteMasterIdHeader) {
+      throw new BadRequestException('Header X-Cliente-Master-Id é obrigatório');
+    }
+    
+    const id = clienteMasterIdHeader;
     
     // O ID sempre será de um ClienteMaster - verificar se existe
     const clienteMaster = await this.clientesMasterService.findById(id);
@@ -114,23 +122,30 @@ export class ClientesMasterController {
       throw new NotFoundException('Cliente Master não encontrado');
     }
     
-    // 1. Verificar se o UserBaseId possui algum ClienteMaster vinculado
-    const clientesMasterDoUsuario = await this.clientesMasterService.findByUserId(userBaseId);
-    const possuiClienteMaster = clientesMasterDoUsuario.some(cm => String(cm.id) === String(id));
+    // 1. Verificar no token se o usuário é dono deste ClienteMaster
+    const clientesMasterIds = req.user.clientesMasterIds || [];
+    const possuiClienteMaster = clientesMasterIds.includes(id);
     
     let tipoRelacionamento: 'clienteMaster' | 'usuario';
     let idRelacionamento: string;
+    let userComumVinculado: any = null;
     
     if (possuiClienteMaster) {
-      // O usuário é dono deste ClienteMaster
+      // O usuário é dono deste ClienteMaster (verificado no token)
       tipoRelacionamento = 'clienteMaster';
       idRelacionamento = clienteMaster.id;
     } else {
-      // 2. Verificar se o UserBaseId tem algum UserComum vinculado a este ClienteMaster
-      const userComumVinculado = await this.userComumService.findByUserAndClienteMaster(
-        userBaseId,
-        id,
-      );
+      // 2. Verificar se algum dos usuariosComuns do token tem vínculo com este ClienteMaster
+      const usuariosComunsIds = req.user.usuariosComunsIds || [];
+      
+      // Buscar todos os UserComum do usuário que estão vinculados a este ClienteMaster
+      for (const userComumId of usuariosComunsIds) {
+        const userComum = await this.userComumService.findById(userComumId);
+        if (userComum && userComum.clienteMasterId === id) {
+          userComumVinculado = userComum;
+          break;
+        }
+      }
       
       if (userComumVinculado) {
         // O usuário é um UserComum vinculado a este ClienteMaster
@@ -144,11 +159,6 @@ export class ClientesMasterController {
     
     // Se for do tipo "usuario", retornar apenas dados do UserComum
     if (tipoRelacionamento === 'usuario') {
-      const userComumVinculado = await this.userComumService.findByUserAndClienteMaster(
-        userBaseId,
-        id,
-      );
-      
       if (!userComumVinculado) {
         throw new NotFoundException('UserComum não encontrado');
       }
@@ -598,7 +608,7 @@ export class ClientesMasterController {
   }
 
   @Get(':id/usuarios')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
   async getUsuariosByClienteMaster(@Param('id') id: string, @Request() req) {
     const userBaseId = req.user.id;
     

@@ -10,6 +10,7 @@ export declare class PlanosService {
         limiteAnalises: number;
         tokenChat?: number;
         descricao?: string;
+        acesso?: string;
     }): Promise<Plano>;
     findAll(): Promise<Plano[]>;
     findById(id: string): Promise<Plano | null>;

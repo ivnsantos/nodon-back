@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, Request, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards, Request, NotFoundException, ForbiddenException, Headers } from '@nestjs/common';
 import { AssinaturasService } from './assinaturas.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { CreateSimpleSubscriptionDto } from './dto/create-simple-subscription.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { IsMasterGuard } from '../auth/guards/is-master.guard';
+import { ValidateResourceAccessGuard } from '../auth/guards/validate-resource-access.guard';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { UserComumService } from '../users/services/user-comum.service';
 
@@ -42,18 +43,22 @@ export class AssinaturasController {
   }
 
   @Get('dashboard')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
   async getDashboard(
     @Request() req,
+    @Headers('x-user-comum-id') userComumIdHeader?: string,
     @Query('clienteMasterId') clienteMasterId?: string,
     @Query('usuario') usuario?: string,
   ) {
     // req.user.id agora é o ID do UserBase
     
-    // Se foi passado "usuario" (ID do UserComum)
-    if (usuario) {
-      // Buscar o UserComum pelo ID
-      const userComum = await this.userComumService.findById(usuario);
+    // Priorizar header x-user-comum-id, depois query parameter 'usuario'
+    const userComumId = userComumIdHeader || usuario;
+    
+    // Se foi passado "usuario" (ID do UserComum) via header ou query
+    if (userComumId) {
+      // Buscar o UserComum pelo ID com relacionamentos
+      const userComum = await this.userComumService.findById(userComumId);
       if (!userComum) {
         throw new NotFoundException('Usuário não encontrado');
       }

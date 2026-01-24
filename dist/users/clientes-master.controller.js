@@ -51,6 +51,7 @@ const platform_express_1 = require("@nestjs/platform-express");
 const clientes_master_service_1 = require("./clientes-master.service");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 const is_master_guard_1 = require("../auth/guards/is-master.guard");
+const validate_resource_access_guard_1 = require("../auth/guards/validate-resource-access.guard");
 const update_cliente_master_dto_1 = require("./dto/update-cliente-master.dto");
 const storage_service_1 = require("../storage/storage.service");
 const user_comum_service_1 = require("./services/user-comum.service");
@@ -119,22 +120,34 @@ let ClientesMasterController = class ClientesMasterController {
     async findOne(id) {
         return this.clientesMasterService.findById(id);
     }
-    async getCompleteInfo(id, req) {
+    async getCompleteInfo(clienteMasterIdHeader, req) {
         const userBaseId = req.user.id;
+        if (!clienteMasterIdHeader) {
+            throw new common_1.BadRequestException('Header X-Cliente-Master-Id é obrigatório');
+        }
+        const id = clienteMasterIdHeader;
         const clienteMaster = await this.clientesMasterService.findById(id);
         if (!clienteMaster) {
             throw new common_1.NotFoundException('Cliente Master não encontrado');
         }
-        const clientesMasterDoUsuario = await this.clientesMasterService.findByUserId(userBaseId);
-        const possuiClienteMaster = clientesMasterDoUsuario.some(cm => String(cm.id) === String(id));
+        const clientesMasterIds = req.user.clientesMasterIds || [];
+        const possuiClienteMaster = clientesMasterIds.includes(id);
         let tipoRelacionamento;
         let idRelacionamento;
+        let userComumVinculado = null;
         if (possuiClienteMaster) {
             tipoRelacionamento = 'clienteMaster';
             idRelacionamento = clienteMaster.id;
         }
         else {
-            const userComumVinculado = await this.userComumService.findByUserAndClienteMaster(userBaseId, id);
+            const usuariosComunsIds = req.user.usuariosComunsIds || [];
+            for (const userComumId of usuariosComunsIds) {
+                const userComum = await this.userComumService.findById(userComumId);
+                if (userComum && userComum.clienteMasterId === id) {
+                    userComumVinculado = userComum;
+                    break;
+                }
+            }
             if (userComumVinculado) {
                 tipoRelacionamento = 'usuario';
                 idRelacionamento = userComumVinculado.id;
@@ -144,7 +157,6 @@ let ClientesMasterController = class ClientesMasterController {
             }
         }
         if (tipoRelacionamento === 'usuario') {
-            const userComumVinculado = await this.userComumService.findByUserAndClienteMaster(userBaseId, id);
             if (!userComumVinculado) {
                 throw new common_1.NotFoundException('UserComum não encontrado');
             }
@@ -574,9 +586,9 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], ClientesMasterController.prototype, "findOne", null);
 __decorate([
-    (0, common_1.Get)(':id/complete'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    __param(0, (0, common_1.Param)('id')),
+    (0, common_1.Post)('complete'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, validate_resource_access_guard_1.ValidateResourceAccessGuard),
+    __param(0, (0, common_1.Headers)('x-cliente-master-id')),
     __param(1, (0, common_1.Request)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
@@ -621,7 +633,7 @@ __decorate([
 ], ClientesMasterController.prototype, "registerUserByHash", null);
 __decorate([
     (0, common_1.Get)(':id/usuarios'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, validate_resource_access_guard_1.ValidateResourceAccessGuard),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Request)()),
     __metadata("design:type", Function),

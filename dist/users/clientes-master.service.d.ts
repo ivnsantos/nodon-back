@@ -3,12 +3,16 @@ import { ClienteMaster } from './entities/cliente-master.entity';
 import { UserBase } from './entities/user-base.entity';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
+import { UserComumService } from './services/user-comum.service';
+import { UserBaseService } from './services/user-base.service';
 export declare class ClientesMasterService {
     private clienteMasterRepository;
     private userBaseRepository;
     private assinaturasService;
     private planosService;
-    constructor(clienteMasterRepository: Repository<ClienteMaster>, userBaseRepository: Repository<UserBase>, assinaturasService: AssinaturasService, planosService: PlanosService);
+    private userComumService;
+    private userBaseService;
+    constructor(clienteMasterRepository: Repository<ClienteMaster>, userBaseRepository: Repository<UserBase>, assinaturasService: AssinaturasService, planosService: PlanosService, userComumService: UserComumService, userBaseService: UserBaseService);
     create(data: {
         userId: string;
         nomeEmpresa?: string;
@@ -86,6 +90,33 @@ export declare class ClientesMasterService {
             updatedAt?: undefined;
         };
         plano: null;
+        usuarios: {
+            id: string;
+            userId: string;
+            clienteMasterId: string;
+            ativo: boolean;
+            status: "ativo" | "inativo";
+            createdAt: Date;
+            updatedAt: Date;
+            user: {
+                id: string;
+                nome: string;
+                email: string;
+                cpf: string;
+                telefone: string;
+                cro: string;
+                postalCode: string;
+                address: string;
+                addressNumber: string;
+                complement: string;
+                province: string;
+                city: string;
+                state: string;
+                isVerified: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+            } | null;
+        }[];
     } | {
         clienteMaster: {
             id: string;
@@ -152,9 +183,37 @@ export declare class ClientesMasterService {
             valorPromocional: any;
             tokenChat: any;
             limiteAnalises: any;
+            acesso: any;
             ativo: any;
             createdAt: any;
             updatedAt: any;
         } | null;
+        usuarios: {
+            id: string;
+            userId: string;
+            clienteMasterId: string;
+            ativo: boolean;
+            status: "ativo" | "inativo";
+            createdAt: Date;
+            updatedAt: Date;
+            user: {
+                id: string;
+                nome: string;
+                email: string;
+                cpf: string;
+                telefone: string;
+                cro: string;
+                postalCode: string;
+                address: string;
+                addressNumber: string;
+                complement: string;
+                province: string;
+                city: string;
+                state: string;
+                isVerified: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+            } | null;
+        }[];
     }>;
 }

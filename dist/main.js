@@ -9,9 +9,9 @@ const platform_express_1 = require("@nestjs/platform-express");
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
-const app_module_1 = require("./app.module");
-const http_exception_filter_1 = require("./common/filters/http-exception.filter");
-const transform_interceptor_1 = require("./common/interceptors/transform.interceptor");
+const app_module_js_1 = require("./app.module.js");
+const http_exception_filter_js_1 = require("./common/filters/http-exception.filter.js");
+const transform_interceptor_js_1 = require("./common/interceptors/transform.interceptor.js");
 const express = require('express');
 let cachedApp;
 async function createApp() {
@@ -20,7 +20,9 @@ async function createApp() {
     }
     try {
         const expressApp = express();
-        const app = await core_1.NestFactory.create(app_module_1.AppModule, new platform_express_1.ExpressAdapter(expressApp));
+        expressApp.use(express.json({ limit: '50mb' }));
+        expressApp.use(express.urlencoded({ extended: true, limit: '50mb' }));
+        const app = await core_1.NestFactory.create(app_module_js_1.AppModule, new platform_express_1.ExpressAdapter(expressApp));
         app.use((0, cookie_parser_1.default)());
         app.enableCors({
             origin: true,
@@ -31,9 +33,22 @@ async function createApp() {
             whitelist: true,
             forbidNonWhitelisted: true,
             transform: true,
+            exceptionFactory: (errors) => {
+                const messages = errors.map(error => {
+                    return Object.values(error.constraints || {}).join(', ');
+                });
+                console.error('❌ Erro de validação:', {
+                    errors: errors.map(e => ({
+                        property: e.property,
+                        constraints: e.constraints,
+                    })),
+                    messages,
+                });
+                return new common_1.BadRequestException(messages.join('; '));
+            },
         }));
-        app.useGlobalFilters(new http_exception_filter_1.HttpExceptionFilter());
-        app.useGlobalInterceptors(new transform_interceptor_1.TransformInterceptor());
+        app.useGlobalFilters(new http_exception_filter_js_1.HttpExceptionFilter());
+        app.useGlobalInterceptors(new transform_interceptor_js_1.TransformInterceptor());
         const config = new swagger_1.DocumentBuilder()
             .setTitle('NODON Platform API')
             .setDescription('API de autenticação e gerenciamento de usuários')

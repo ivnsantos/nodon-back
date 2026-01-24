@@ -43,15 +43,15 @@ export declare class ClientesMasterController {
         } | null;
     }>;
     findOne(id: string): Promise<import("./entities/cliente-master.entity").ClienteMaster | null>;
-    getCompleteInfo(id: string, req: any): Promise<{
+    getCompleteInfo(clienteMasterIdHeader: string, req: any): Promise<{
         userComum: {
-            id: string;
-            userId: string;
-            clienteMasterId: string;
-            ativo: boolean;
-            status: "ativo" | "inativo";
-            createdAt: Date;
-            updatedAt: Date;
+            id: any;
+            userId: any;
+            clienteMasterId: any;
+            ativo: any;
+            status: any;
+            createdAt: any;
+            updatedAt: any;
         };
         clienteMasterId: string;
         assinatura: {
@@ -60,7 +60,7 @@ export declare class ClientesMasterController {
         relacionamento: {
             tipo: "usuario";
             id: string;
-            status: "ativo" | "inativo";
+            status: any;
         };
     } | {
         relacionamento: {
@@ -126,6 +126,33 @@ export declare class ClientesMasterController {
             updatedAt?: undefined;
         };
         plano: null;
+        usuarios: {
+            id: string;
+            userId: string;
+            clienteMasterId: string;
+            ativo: boolean;
+            status: "ativo" | "inativo";
+            createdAt: Date;
+            updatedAt: Date;
+            user: {
+                id: string;
+                nome: string;
+                email: string;
+                cpf: string;
+                telefone: string;
+                cro: string;
+                postalCode: string;
+                address: string;
+                addressNumber: string;
+                complement: string;
+                province: string;
+                city: string;
+                state: string;
+                isVerified: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+            } | null;
+        }[];
         userComum?: undefined;
         clienteMasterId?: undefined;
     } | {
@@ -199,10 +226,38 @@ export declare class ClientesMasterController {
             valorPromocional: any;
             tokenChat: any;
             limiteAnalises: any;
+            acesso: any;
             ativo: any;
             createdAt: any;
             updatedAt: any;
         } | null;
+        usuarios: {
+            id: string;
+            userId: string;
+            clienteMasterId: string;
+            ativo: boolean;
+            status: "ativo" | "inativo";
+            createdAt: Date;
+            updatedAt: Date;
+            user: {
+                id: string;
+                nome: string;
+                email: string;
+                cpf: string;
+                telefone: string;
+                cro: string;
+                postalCode: string;
+                address: string;
+                addressNumber: string;
+                complement: string;
+                province: string;
+                city: string;
+                state: string;
+                isVerified: boolean;
+                createdAt: Date;
+                updatedAt: Date;
+            } | null;
+        }[];
         userComum?: undefined;
         clienteMasterId?: undefined;
     }>;

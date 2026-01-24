@@ -13,6 +13,8 @@ exports.TypeOrmConfigService = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const dotenv_1 = require("dotenv");
+const fs_1 = require("fs");
+const path_1 = require("path");
 const user_base_entity_1 = require("../users/entities/user-base.entity");
 const user_comum_entity_1 = require("../users/entities/user-comum.entity");
 const cliente_master_entity_1 = require("../users/entities/cliente-master.entity");
@@ -20,6 +22,17 @@ const plano_entity_1 = require("../planos/entities/plano.entity");
 const cupom_entity_1 = require("../cupons/entities/cupom.entity");
 const assinatura_entity_1 = require("../assinaturas/entities/assinatura.entity");
 const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
+const tipo_consulta_entity_1 = require("../calendario/entities/tipo-consulta.entity");
+const consulta_entity_1 = require("../calendario/entities/consulta.entity");
+const paciente_entity_1 = require("../pacientes/entities/paciente.entity");
+const historico_paciente_entity_1 = require("../pacientes/entities/historico-paciente.entity");
+const radiografia_entity_1 = require("../radiografias/entities/radiografia.entity");
+const desenho_profissional_entity_1 = require("../desenhos-profissionais/entities/desenho-profissional.entity");
+const envLocalPath = (0, path_1.resolve)(process.cwd(), '.env.local');
+if ((0, fs_1.existsSync)(envLocalPath)) {
+    (0, dotenv_1.config)({ path: envLocalPath });
+    console.log('✅ Carregado .env.local');
+}
 (0, dotenv_1.config)();
 let TypeOrmConfigService = class TypeOrmConfigService {
     configService;
@@ -47,8 +60,10 @@ let TypeOrmConfigService = class TypeOrmConfigService {
         console.log('  - Port:', dbPort);
         console.log('  - Username:', dbUsername);
         console.log('  - Database:', dbName);
-        console.log('  - SSL:', dbSsl === 'true' || process.env.VERCEL ? 'Habilitado' : 'Desabilitado');
-        const useSsl = true;
+        const isLocalhost = dbHost === 'localhost' || dbHost === '127.0.0.1';
+        const useSsl = dbSsl === 'true' || (!isLocalhost && process.env.VERCEL);
+        console.log('  - SSL:', useSsl ? 'Habilitado' : 'Desabilitado');
+        console.log('  - Ambiente:', isLocalhost ? 'Local' : 'Remoto');
         return {
             type: 'postgres',
             host: dbHost,
@@ -59,8 +74,22 @@ let TypeOrmConfigService = class TypeOrmConfigService {
             ssl: useSsl ? {
                 rejectUnauthorized: false,
             } : false,
-            entities: [user_base_entity_1.UserBase, user_comum_entity_1.UserComum, cliente_master_entity_1.ClienteMaster, plano_entity_1.Plano, cupom_entity_1.Cupom, assinatura_entity_1.Assinatura, historico_mensal_entity_1.HistoricoMensal],
-            synchronize: process.env.NODE_ENV !== 'production',
+            entities: [
+                user_base_entity_1.UserBase,
+                user_comum_entity_1.UserComum,
+                cliente_master_entity_1.ClienteMaster,
+                plano_entity_1.Plano,
+                cupom_entity_1.Cupom,
+                assinatura_entity_1.Assinatura,
+                historico_mensal_entity_1.HistoricoMensal,
+                tipo_consulta_entity_1.TipoConsulta,
+                consulta_entity_1.Consulta,
+                paciente_entity_1.Paciente,
+                historico_paciente_entity_1.HistoricoPaciente,
+                radiografia_entity_1.Radiografia,
+                desenho_profissional_entity_1.DesenhoProfissional,
+            ],
+            synchronize: false,
             logging: this.configService.get('NODE_ENV') === 'development',
             autoLoadEntities: true,
             extra: useSsl ? {

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
 import { PlanosService } from './planos.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -8,7 +8,19 @@ export class PlanosController {
 
   @Get()
   async findAll() {
-    return this.planosService.findAll();
+    try {
+      return await this.planosService.findAll();
+    } catch (error) {
+      console.error('❌ Erro no controller de planos (findAll):', error);
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: 'Erro ao buscar planos',
+          error: error?.message || 'Erro desconhecido',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
   }
 
   @Get(':id')
