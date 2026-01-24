@@ -307,6 +307,38 @@ let AuthService = class AuthService {
             return null;
         }
     }
+    async getMe(userBaseId) {
+        const userBase = await this.userBaseService.findById(userBaseId);
+        if (!userBase) {
+            throw new common_1.BadRequestException('Usuário não encontrado');
+        }
+        const clienteMaster = await this.clientesMasterService.findByUserId(userBaseId);
+        const usuariosComuns = await this.userComumService.findByUserId(userBaseId);
+        let tipo = 'usuario';
+        let clienteMasterId = null;
+        if (clienteMaster && clienteMaster.length > 0) {
+            tipo = 'master';
+            clienteMasterId = clienteMaster[0].id;
+        }
+        else if (usuariosComuns && usuariosComuns.length > 0) {
+            tipo = 'usuario';
+            clienteMasterId = usuariosComuns[0].clienteMasterId;
+        }
+        return {
+            id: userBase.id,
+            nome: userBase.nome,
+            email: userBase.email,
+            foto: userBase.foto,
+            telefone: userBase.telefone,
+            cpf: userBase.cpf,
+            cro: userBase.cro,
+            isVerified: userBase.isVerified,
+            tipo: tipo,
+            clienteMasterId: clienteMasterId,
+            createdAt: userBase.createdAt,
+            updatedAt: userBase.updatedAt,
+        };
+    }
     async generateTokenForUser(userId, email, tipo) {
         const payload = {
             id: userId,
@@ -532,6 +564,193 @@ let AuthService = class AuthService {
             quantidade: clientesMasterAssociados.length,
             user: userBaseData,
             clientesMaster: clientesMasterAssociados,
+        };
+    }
+    async googleLogin(googleUser) {
+        let userBase = await this.userBaseService.findByGoogleId(googleUser.googleId);
+        if (userBase) {
+            if (googleUser.foto && userBase.foto !== googleUser.foto) {
+                await this.userBaseService.update(userBase.id, { foto: googleUser.foto });
+                userBase.foto = googleUser.foto;
+            }
+        }
+        if (!userBase) {
+            userBase = await this.userBaseService.findByEmail(googleUser.email);
+            if (userBase) {
+                await this.userBaseService.updateGoogleId(userBase.id, googleUser.googleId);
+                if (googleUser.foto) {
+                    await this.userBaseService.update(userBase.id, { foto: googleUser.foto });
+                }
+            }
+            else {
+                return {
+                    isNewUser: true,
+                    access_token: null,
+                    user: null,
+                    googleData: {
+                        googleId: googleUser.googleId,
+                        email: googleUser.email,
+                        nome: googleUser.nome,
+                        foto: googleUser.foto,
+                    },
+                };
+            }
+        }
+        const clienteMaster = await this.clientesMasterService.findByEmail(googleUser.email);
+        let tipo = 'usuario';
+        let userId = userBase.id;
+        let clienteMasterId = null;
+        let assinatura = null;
+        let planoInfo = null;
+        if (clienteMaster && clienteMaster.ativo) {
+            tipo = 'master';
+            userId = clienteMaster.id;
+            clienteMasterId = clienteMaster.id;
+            assinatura = await this.assinaturasService.findByUserId(clienteMaster.id);
+        }
+        else {
+            const usuariosComuns = await this.userComumService.findByUserId(userBase.id);
+            if (usuariosComuns && usuariosComuns.length > 0) {
+                const userComum = usuariosComuns[0];
+                userId = userComum.id;
+                clienteMasterId = userComum.clienteMasterId;
+                assinatura = await this.assinaturasService.findByUserId(userComum.clienteMasterId);
+            }
+        }
+        if (assinatura && assinatura.planoId) {
+            const plano = await this.planosService.findById(assinatura.planoId);
+            if (plano) {
+                planoInfo = {
+                    id: plano.id,
+                    nome: plano.nome,
+                    valorOriginal: Number(plano.valorOriginal),
+                    valorPromocional: plano.valorPromocional ? Number(plano.valorPromocional) : null,
+                    limiteAnalises: plano.limiteAnalises,
+                    tokenChat: Number(plano.tokenChat),
+                    descricao: plano.descricao,
+                };
+            }
+        }
+        const payload = {
+            id: userBase.id,
+            email: userBase.email,
+            tipo: tipo,
+        };
+        return {
+            isNewUser: false,
+            access_token: this.jwtService.sign(payload),
+            user: {
+                id: userId,
+                nome: userBase.nome,
+                email: userBase.email,
+                tipo: tipo,
+                isAdmin: tipo === 'master',
+                isEmailVerified: true,
+                assinatura: assinatura
+                    ? {
+                        id: assinatura.id,
+                        status: assinatura.status,
+                        planoId: assinatura.planoId,
+                        plano: planoInfo,
+                    }
+                    : null,
+            },
+        };
+    }
+    async facebookLogin(facebookUser) {
+        if (!facebookUser.email) {
+            throw new common_1.BadRequestException('Email não fornecido pelo Facebook. Por favor, autorize o acesso ao email.');
+        }
+        let userBase = await this.userBaseService.findByFacebookId(facebookUser.facebookId);
+        if (userBase) {
+            if (facebookUser.foto && userBase.foto !== facebookUser.foto) {
+                await this.userBaseService.update(userBase.id, { foto: facebookUser.foto });
+                userBase.foto = facebookUser.foto;
+            }
+        }
+        if (!userBase) {
+            userBase = await this.userBaseService.findByEmail(facebookUser.email);
+            if (userBase) {
+                await this.userBaseService.updateFacebookId(userBase.id, facebookUser.facebookId);
+                if (facebookUser.foto) {
+                    await this.userBaseService.update(userBase.id, { foto: facebookUser.foto });
+                }
+            }
+            else {
+                return {
+                    isNewUser: true,
+                    access_token: null,
+                    user: null,
+                    facebookData: {
+                        facebookId: facebookUser.facebookId,
+                        email: facebookUser.email,
+                        nome: facebookUser.nome,
+                        foto: facebookUser.foto,
+                    },
+                };
+            }
+        }
+        const clienteMaster = await this.clientesMasterService.findByEmail(facebookUser.email);
+        let tipo = 'usuario';
+        let userId = userBase.id;
+        let clienteMasterId = null;
+        let assinatura = null;
+        let planoInfo = null;
+        if (clienteMaster && clienteMaster.ativo) {
+            tipo = 'master';
+            userId = clienteMaster.id;
+            clienteMasterId = clienteMaster.id;
+            assinatura = await this.assinaturasService.findByUserId(clienteMaster.id);
+        }
+        else {
+            const usuariosComuns = await this.userComumService.findByUserId(userBase.id);
+            if (usuariosComuns && usuariosComuns.length > 0) {
+                tipo = 'usuario';
+                userId = usuariosComuns[0].id;
+                clienteMasterId = usuariosComuns[0].clienteMasterId;
+                assinatura = await this.assinaturasService.findByUserId(usuariosComuns[0].clienteMasterId);
+            }
+        }
+        if (assinatura && assinatura.planoId) {
+            const plano = await this.planosService.findById(assinatura.planoId);
+            if (plano) {
+                planoInfo = {
+                    id: plano.id,
+                    nome: plano.nome,
+                    valorOriginal: Number(plano.valorOriginal),
+                    valorPromocional: plano.valorPromocional ? Number(plano.valorPromocional) : null,
+                    limiteAnalises: plano.limiteAnalises,
+                    tokenChat: Number(plano.tokenChat),
+                    descricao: plano.descricao,
+                };
+            }
+        }
+        const payload = {
+            id: userBase.id,
+            email: userBase.email,
+            tipo: tipo,
+        };
+        return {
+            isNewUser: false,
+            access_token: this.jwtService.sign(payload),
+            user: {
+                id: userId,
+                nome: userBase.nome,
+                email: userBase.email,
+                foto: userBase.foto,
+                tipo: tipo,
+                isAdmin: tipo === 'master',
+                isEmailVerified: true,
+                clienteMasterId: clienteMasterId,
+                assinatura: assinatura
+                    ? {
+                        id: assinatura.id,
+                        status: assinatura.status,
+                        planoId: assinatura.planoId,
+                        plano: planoInfo,
+                    }
+                    : null,
+            },
         };
     }
     async getClientMasterByEmail(email) {

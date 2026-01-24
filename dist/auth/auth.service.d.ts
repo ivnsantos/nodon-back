@@ -102,6 +102,20 @@ export declare class AuthService {
         userId: any;
     }>;
     validateToken(token: string): Promise<any>;
+    getMe(userBaseId: string): Promise<{
+        id: string;
+        nome: string;
+        email: string;
+        foto: string | null;
+        telefone: string;
+        cpf: string;
+        cro: string;
+        isVerified: boolean;
+        tipo: string;
+        clienteMasterId: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
     generateTokenForUser(userId: string, email: string, tipo: string): Promise<string>;
     verifyEmail(email: string, code: string): Promise<{
         message: string;
@@ -136,6 +150,76 @@ export declare class AuthService {
             updatedAt: Date;
         };
         clientesMaster: ClienteMasterInfo[];
+    }>;
+    googleLogin(googleUser: {
+        googleId: string;
+        email: string;
+        nome: string;
+        foto?: string | null;
+    }): Promise<{
+        isNewUser: boolean;
+        access_token: null;
+        user: null;
+        googleData: {
+            googleId: string;
+            email: string;
+            nome: string;
+            foto: string | null | undefined;
+        };
+    } | {
+        isNewUser: boolean;
+        access_token: string;
+        user: {
+            id: string;
+            nome: string;
+            email: string;
+            tipo: string;
+            isAdmin: boolean;
+            isEmailVerified: boolean;
+            assinatura: {
+                id: any;
+                status: any;
+                planoId: any;
+                plano: any;
+            } | null;
+        };
+        googleData?: undefined;
+    }>;
+    facebookLogin(facebookUser: {
+        facebookId: string;
+        email: string | null;
+        nome: string;
+        foto?: string | null;
+    }): Promise<{
+        isNewUser: boolean;
+        access_token: null;
+        user: null;
+        facebookData: {
+            facebookId: string;
+            email: string;
+            nome: string;
+            foto: string | null | undefined;
+        };
+    } | {
+        isNewUser: boolean;
+        access_token: string;
+        user: {
+            id: string;
+            nome: string;
+            email: string;
+            foto: string | null;
+            tipo: string;
+            isAdmin: boolean;
+            isEmailVerified: boolean;
+            clienteMasterId: string | null;
+            assinatura: {
+                id: any;
+                status: any;
+                planoId: any;
+                plano: any;
+            } | null;
+        };
+        facebookData?: undefined;
     }>;
     getClientMasterByEmail(email: string): Promise<{
         quantidade: number;

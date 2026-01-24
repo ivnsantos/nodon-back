@@ -376,6 +376,46 @@ export class AuthService {
     }
   }
 
+  async getMe(userBaseId: string) {
+    // Buscar UserBase
+    const userBase = await this.userBaseService.findById(userBaseId);
+    if (!userBase) {
+      throw new BadRequestException('Usuário não encontrado');
+    }
+
+    // Verificar se é ClienteMaster
+    const clienteMaster = await this.clientesMasterService.findByUserId(userBaseId);
+    
+    // Verificar se é UserComum
+    const usuariosComuns = await this.userComumService.findByUserId(userBaseId);
+
+    let tipo = 'usuario';
+    let clienteMasterId: string | null = null;
+
+    if (clienteMaster && clienteMaster.length > 0) {
+      tipo = 'master';
+      clienteMasterId = clienteMaster[0].id;
+    } else if (usuariosComuns && usuariosComuns.length > 0) {
+      tipo = 'usuario';
+      clienteMasterId = usuariosComuns[0].clienteMasterId;
+    }
+
+    return {
+      id: userBase.id,
+      nome: userBase.nome,
+      email: userBase.email,
+      foto: userBase.foto,
+      telefone: userBase.telefone,
+      cpf: userBase.cpf,
+      cro: userBase.cro,
+      isVerified: userBase.isVerified,
+      tipo: tipo,
+      clienteMasterId: clienteMasterId,
+      createdAt: userBase.createdAt,
+      updatedAt: userBase.updatedAt,
+    };
+  }
+
   async generateTokenForUser(userId: string, email: string, tipo: string): Promise<string> {
     const payload = {
       id: userId, // ID do UserBase
@@ -678,6 +718,241 @@ export class AuthService {
       quantidade: clientesMasterAssociados.length,
       user: userBaseData,
       clientesMaster: clientesMasterAssociados,
+    };
+  }
+
+  async googleLogin(googleUser: {
+    googleId: string;
+    email: string;
+    nome: string;
+    foto?: string | null;
+  }) {
+    // 1. Verificar se já existe usuário com este googleId
+    let userBase = await this.userBaseService.findByGoogleId(googleUser.googleId);
+    
+    if (userBase) {
+      // Usuário já existe com googleId - atualizar foto se necessário
+      if (googleUser.foto && userBase.foto !== googleUser.foto) {
+        await this.userBaseService.update(userBase.id, { foto: googleUser.foto });
+        userBase.foto = googleUser.foto;
+      }
+    }
+    
+    if (!userBase) {
+      // 2. Verificar se existe usuário com este email
+      userBase = await this.userBaseService.findByEmail(googleUser.email);
+      
+      if (userBase) {
+        // Usuário existe com email mas sem googleId - vincular conta Google e atualizar foto
+        await this.userBaseService.updateGoogleId(userBase.id, googleUser.googleId);
+        if (googleUser.foto) {
+          await this.userBaseService.update(userBase.id, { foto: googleUser.foto });
+        }
+      } else {
+        // 3. Usuário não existe - retornar como novo usuário
+        // O registro será feito na página /register
+        return {
+          isNewUser: true,
+          access_token: null,
+          user: null,
+          googleData: {
+            googleId: googleUser.googleId,
+            email: googleUser.email,
+            nome: googleUser.nome,
+            foto: googleUser.foto,
+          },
+        };
+      }
+    }
+  
+    // 4. Buscar informações do usuário (master ou comum)
+    const clienteMaster = await this.clientesMasterService.findByEmail(googleUser.email);
+    
+    let tipo = 'usuario';
+    let userId = userBase.id;
+    let clienteMasterId: string | null = null;
+    let assinatura: any = null;
+    let planoInfo: any = null;
+  
+    if (clienteMaster && clienteMaster.ativo) {
+      tipo = 'master';
+      userId = clienteMaster.id;
+      clienteMasterId = clienteMaster.id;
+      assinatura = await this.assinaturasService.findByUserId(clienteMaster.id);
+    } else {
+      // Verificar se é usuário comum
+      const usuariosComuns = await this.userComumService.findByUserId(userBase.id);
+      if (usuariosComuns && usuariosComuns.length > 0) {
+        const userComum = usuariosComuns[0];
+        userId = userComum.id;
+        clienteMasterId = userComum.clienteMasterId;
+        assinatura = await this.assinaturasService.findByUserId(userComum.clienteMasterId);
+      }
+    }
+  
+    // Montar informações do plano se houver assinatura
+    if (assinatura && assinatura.planoId) {
+      const plano = await this.planosService.findById(assinatura.planoId);
+      if (plano) {
+        planoInfo = {
+          id: plano.id,
+          nome: plano.nome,
+          valorOriginal: Number(plano.valorOriginal),
+          valorPromocional: plano.valorPromocional ? Number(plano.valorPromocional) : null,
+          limiteAnalises: plano.limiteAnalises,
+          tokenChat: Number(plano.tokenChat),
+          descricao: plano.descricao,
+        };
+      }
+    }
+  
+    // 5. Gerar token JWT
+    const payload = {
+      id: userBase.id,
+      email: userBase.email,
+      tipo: tipo,
+    };
+  
+    return {
+      isNewUser: false,
+      access_token: this.jwtService.sign(payload),
+      user: {
+        id: userId,
+        nome: userBase.nome,
+        email: userBase.email,
+        tipo: tipo,
+        isAdmin: tipo === 'master',
+        isEmailVerified: true,
+        assinatura: assinatura
+          ? {
+              id: assinatura.id,
+              status: assinatura.status,
+              planoId: assinatura.planoId,
+              plano: planoInfo,
+            }
+          : null,
+      },
+    };
+  }
+
+  async facebookLogin(facebookUser: {
+    facebookId: string;
+    email: string | null;
+    nome: string;
+    foto?: string | null;
+  }) {
+    // Facebook pode não retornar email se o usuário não autorizou
+    if (!facebookUser.email) {
+      throw new BadRequestException('Email não fornecido pelo Facebook. Por favor, autorize o acesso ao email.');
+    }
+
+    // 1. Verificar se já existe usuário com este facebookId
+    let userBase = await this.userBaseService.findByFacebookId(facebookUser.facebookId);
+    
+    if (userBase) {
+      // Usuário já existe com facebookId - atualizar foto se necessário
+      if (facebookUser.foto && userBase.foto !== facebookUser.foto) {
+        await this.userBaseService.update(userBase.id, { foto: facebookUser.foto });
+        userBase.foto = facebookUser.foto;
+      }
+    }
+    
+    if (!userBase) {
+      // 2. Verificar se existe usuário com este email
+      userBase = await this.userBaseService.findByEmail(facebookUser.email);
+      
+      if (userBase) {
+        // Usuário existe com email mas sem facebookId - vincular conta Facebook e atualizar foto
+        await this.userBaseService.updateFacebookId(userBase.id, facebookUser.facebookId);
+        if (facebookUser.foto) {
+          await this.userBaseService.update(userBase.id, { foto: facebookUser.foto });
+        }
+      } else {
+        // 3. Usuário não existe - retornar como novo usuário
+        // O registro será feito na página /register
+        return {
+          isNewUser: true,
+          access_token: null,
+          user: null,
+          facebookData: {
+            facebookId: facebookUser.facebookId,
+            email: facebookUser.email,
+            nome: facebookUser.nome,
+            foto: facebookUser.foto,
+          },
+        };
+      }
+    }
+  
+    // 4. Buscar informações do usuário (master ou comum)
+    const clienteMaster = await this.clientesMasterService.findByEmail(facebookUser.email);
+    
+    let tipo = 'usuario';
+    let userId = userBase.id;
+    let clienteMasterId: string | null = null;
+    let assinatura: any = null;
+    let planoInfo: any = null;
+  
+    if (clienteMaster && clienteMaster.ativo) {
+      tipo = 'master';
+      userId = clienteMaster.id;
+      clienteMasterId = clienteMaster.id;
+      assinatura = await this.assinaturasService.findByUserId(clienteMaster.id);
+    } else {
+      // Verificar se é usuário comum
+      const usuariosComuns = await this.userComumService.findByUserId(userBase.id);
+      if (usuariosComuns && usuariosComuns.length > 0) {
+        tipo = 'usuario';
+        userId = usuariosComuns[0].id;
+        clienteMasterId = usuariosComuns[0].clienteMasterId;
+        assinatura = await this.assinaturasService.findByUserId(usuariosComuns[0].clienteMasterId);
+      }
+    }
+
+    // Montar informações do plano se houver assinatura
+    if (assinatura && assinatura.planoId) {
+      const plano = await this.planosService.findById(assinatura.planoId);
+      if (plano) {
+        planoInfo = {
+          id: plano.id,
+          nome: plano.nome,
+          valorOriginal: Number(plano.valorOriginal),
+          valorPromocional: plano.valorPromocional ? Number(plano.valorPromocional) : null,
+          limiteAnalises: plano.limiteAnalises,
+          tokenChat: Number(plano.tokenChat),
+          descricao: plano.descricao,
+        };
+      }
+    }
+
+    // 5. Gerar token JWT
+    const payload = {
+      id: userBase.id,
+      email: userBase.email,
+      tipo: tipo,
+    };
+
+    return {
+      isNewUser: false,
+      access_token: this.jwtService.sign(payload),
+      user: {
+        id: userId,
+        nome: userBase.nome,
+        email: userBase.email,
+        foto: userBase.foto,
+        tipo: tipo,
+        isAdmin: tipo === 'master',
+        isEmailVerified: true,
+        clienteMasterId: clienteMasterId,
+        assinatura: assinatura
+          ? {
+              id: assinatura.id,
+              status: assinatura.status,
+              planoId: assinatura.planoId,
+              plano: planoInfo,
+            }
+          : null,
+      },
     };
   }
 

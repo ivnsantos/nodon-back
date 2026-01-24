@@ -5,6 +5,8 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
+import { FacebookStrategy } from './strategies/facebook.strategy';
 import { ValidateResourceAccessGuard } from './guards/validate-resource-access.guard';
 import { UsersModule } from '../users/users.module';
 import { ClientesMasterModule } from '../users/clientes-master.module';
@@ -30,7 +32,7 @@ import { EmailModule } from '../email/email.module';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, ValidateResourceAccessGuard],
+  providers: [AuthService, JwtStrategy, GoogleStrategy, FacebookStrategy, ValidateResourceAccessGuard],
   exports: [AuthService, ValidateResourceAccessGuard],
 })
 export class AuthModule {}
