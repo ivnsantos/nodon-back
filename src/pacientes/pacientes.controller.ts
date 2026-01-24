@@ -1,169 +1,60 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Delete,
-  Body,
-  Param,
-  Query,
-  UseGuards,
-  Headers,
-  NotFoundException,
-} from '@nestjs/common';
+import { Controller, Get, Post, Body, Put, Param, Delete, UseGuards, Request, Query, BadRequestException } from '@nestjs/common';
 import { PacientesService } from './pacientes.service';
+import { PacientesHistoricoService } from './pacientes-historico.service';
+import { CreatePacienteDto } from './dto/create-paciente.dto';
+import { UpdatePacienteDto } from './dto/update-paciente.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ValidateResourceAccessGuard } from '../auth/guards/validate-resource-access.guard';
 
 @Controller('pacientes')
-@UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
+@UseGuards(JwtAuthGuard)
 export class PacientesController {
-  constructor(private pacientesService: PacientesService) {}
+  constructor(
+    private readonly pacientesService: PacientesService,
+    private readonly historicoService: PacientesHistoricoService,
+  ) {}
 
-  @Get('buscar-por-cpf')
-  async buscarPorCpf(
-    @Query('cpf') cpf: string,
-    @Headers('x-cliente-master-id') clienteMasterId: string,
-  ) {
-    if (!cpf) {
-      throw new NotFoundException('CPF não fornecido');
-    }
-
-    if (!clienteMasterId) {
-      throw new NotFoundException('Cliente Master ID não fornecido');
-    }
-
-    const paciente = await this.pacientesService.findByCpf(cpf, clienteMasterId);
-
-    if (!paciente) {
-      return {
-        statusCode: 404,
-        message: 'Paciente não encontrado com este CPF',
-        data: null,
-      };
-    }
-
-    return {
-      statusCode: 200,
-      message: 'Paciente encontrado',
-      data: {
-        paciente: {
-          id: paciente.id,
-          nome: paciente.nome,
-          email: paciente.email,
-          telefone: paciente.telefone,
-          cpf: paciente.cpf,
-          data_nascimento: paciente.dataNascimento,
-          observacoes: paciente.observacoes,
-          created_at: paciente.createdAt,
-          updated_at: paciente.updatedAt,
-        },
-      },
-    };
-  }
-
-  @Get('buscar')
-  async buscar(
-    @Query('cpf') cpf: string | undefined,
-    @Query('nome') nome: string | undefined,
-    @Headers('x-cliente-master-id') clienteMasterId: string,
-  ) {
-    if (!clienteMasterId) {
-      throw new NotFoundException('Cliente Master ID não fornecido');
-    }
-
-    if (!cpf && !nome) {
-      return {
-        statusCode: 400,
-        message: 'É necessário fornecer CPF ou nome para buscar',
-        data: {
-          pacientes: [],
-        },
-      };
-    }
-
-    const pacientes = await this.pacientesService.buscar(cpf, nome, clienteMasterId);
-
-    if (pacientes.length === 0) {
-      return {
-        statusCode: 200,
-        message: cpf 
-          ? 'Nenhum paciente encontrado com este CPF' 
-          : 'Nenhum paciente encontrado com este nome',
-        data: {
-          pacientes: [],
-        },
-      };
-    }
-
-    return {
-      statusCode: 200,
-      message: `${pacientes.length} paciente(s) encontrado(s)`,
-      data: {
-        pacientes: pacientes.map((paciente) => ({
-          id: paciente.id,
-          nome: paciente.nome,
-          email: paciente.email,
-          telefone: paciente.telefone,
-          cpf: paciente.cpf,
-          data_nascimento: paciente.dataNascimento,
-          observacoes: paciente.observacoes,
-          created_at: paciente.createdAt,
-          updated_at: paciente.updatedAt,
-        })),
-      },
-    };
+  @Post()
+  async create(@Body() createPacienteDto: CreatePacienteDto, @Request() req) {
+    return this.pacientesService.create(createPacienteDto, req.user.id, req.user.tipo);
   }
 
   @Get()
-  async listarPacientes(
-    @Headers('x-cliente-master-id') clienteMasterId: string,
-  ) {
-    const pacientes = await this.pacientesService.findAll(clienteMasterId);
-
-    return {
-      statusCode: 200,
-      message: 'Pacientes listados com sucesso',
-      data: {
-        pacientes: pacientes.map((paciente) => ({
-          id: paciente.id,
-          nome: paciente.nome,
-          email: paciente.email,
-          telefone: paciente.telefone,
-          cpf: paciente.cpf,
-          data_nascimento: paciente.dataNascimento,
-          observacoes: paciente.observacoes,
-          created_at: paciente.createdAt,
-          updated_at: paciente.updatedAt,
-        })),
-      },
-    };
+  async findAll(@Query('clienteMasterId') clienteMasterId: string, @Request() req) {
+    try {
+      if (!clienteMasterId) {
+        throw new BadRequestException('clienteMasterId é obrigatório');
+      }
+      return await this.pacientesService.findAll(clienteMasterId, req.user.id, req.user.tipo);
+    } catch (error) {
+      console.error('❌ Erro no controller de pacientes (findAll):', {
+        clienteMasterId,
+        userId: req.user?.id,
+        userTipo: req.user?.tipo,
+        error: error?.message || error,
+        stack: error?.stack,
+      });
+      throw error;
+    }
   }
 
   @Get(':id')
-  async buscarPacientePorId(
-    @Param('id') id: string,
-    @Headers('x-cliente-master-id') clienteMasterId: string,
-  ) {
-    const paciente = await this.pacientesService.findById(id, clienteMasterId);
+  async findOne(@Param('id') id: string, @Request() req) {
+    return this.pacientesService.findOne(id, req.user.id, req.user.tipo);
+  }
 
-    return {
-      statusCode: 200,
-      message: 'Paciente encontrado',
-      data: {
-        paciente: {
-          id: paciente.id,
-          nome: paciente.nome,
-          email: paciente.email,
-          telefone: paciente.telefone,
-          cpf: paciente.cpf,
-          data_nascimento: paciente.dataNascimento,
-          observacoes: paciente.observacoes,
-          created_at: paciente.createdAt,
-          updated_at: paciente.updatedAt,
-        },
-      },
-    };
+  @Put(':id')
+  async update(@Param('id') id: string, @Body() updatePacienteDto: UpdatePacienteDto, @Request() req) {
+    return this.pacientesService.update(id, updatePacienteDto, req.user.id, req.user.tipo);
+  }
+
+  @Delete(':id')
+  async remove(@Param('id') id: string, @Request() req) {
+    await this.pacientesService.remove(id, req.user.id, req.user.tipo);
+    return { message: 'Paciente deletado com sucesso' };
+  }
+
+  @Get(':id/historico')
+  async getHistorico(@Param('id') id: string, @Request() req) {
+    return this.historicoService.buscarHistoricoPorPaciente(id, req.user.id, req.user.tipo);
   }
 }
-

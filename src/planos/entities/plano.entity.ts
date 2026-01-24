@@ -11,29 +11,33 @@ export class Plano {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({ name: 'nome', type: 'varchar', nullable: false })
   nome: string;
 
-  @Column('decimal', { precision: 10, scale: 2 })
+  @Column({ name: 'valor_original', type: 'decimal', precision: 10, scale: 2 })
   valorOriginal: number;
 
-  @Column('decimal', { precision: 10, scale: 2, nullable: true })
+  @Column({ name: 'valor_promocional', type: 'decimal', precision: 10, scale: 2, nullable: true })
   valorPromocional: number;
 
-  @Column()
+  @Column({ name: 'limite_analises' })
   limiteAnalises: number;
 
   @Column({ name: 'token_chat', type: 'bigint', default: 1500000 })
   tokenChat: number;
 
-  @Column({ default: true })
+  @Column({ name: 'ativo', type: 'boolean', default: true })
   ativo: boolean;
 
-  @Column({ nullable: true })
+  @Column({ name: 'descricao', type: 'varchar', nullable: true })
   descricao: string;
 
-  @Column({ nullable: true, default: 'all' })
-  acesso: string; // 'all' ou 'calendario,chat' (separado por vírgula)
+  // Temporariamente comentado até a coluna ser criada no banco
+  // @Column({ name: 'acesso', type: 'varchar', nullable: true, default: 'all' })
+  // acesso: string; // 'all' ou 'calendario,chat' (separado por vírgula)
+  
+  // Propriedade virtual para compatibilidade
+  acesso?: string;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

@@ -7,7 +7,7 @@ export declare class Plano {
     tokenChat: number;
     ativo: boolean;
     descricao: string;
-    acesso: string;
+    acesso?: string;
     createdAt: Date;
     updatedAt: Date;
 }

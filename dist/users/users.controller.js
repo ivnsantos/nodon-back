@@ -32,30 +32,131 @@ let UsersController = class UsersController {
         this.clientesMasterService = clientesMasterService;
         this.userBaseService = userBaseService;
     }
-    async findAll(req) {
-        const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
-        if (!clientesMaster || clientesMaster.length === 0) {
-            throw new Error('Cliente Master não encontrado');
+    async findAll(clienteMasterId, req) {
+        if (!clienteMasterId) {
+            throw new common_1.BadRequestException('clienteMasterId é obrigatório');
         }
-        const clienteMasterId = clientesMaster[0].id;
-        return this.usersService.findAllByClienteMaster(clienteMasterId);
+        const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
+        if (!clienteMaster) {
+            throw new common_1.NotFoundException('Cliente Master não encontrado');
+        }
+        const userBaseId = req.user.id;
+        const possuiClienteMaster = (await this.clientesMasterService.findByUserId(userBaseId))
+            .some(cm => String(cm.id) === String(clienteMasterId));
+        if (!possuiClienteMaster) {
+            const userComumVinculado = await this.userComumService.findByUserAndClienteMaster(userBaseId, clienteMasterId);
+            if (!userComumVinculado) {
+                throw new common_1.ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+            }
+        }
+        const usuarios = [];
+        const donoUserBase = await this.userBaseService.findById(clienteMaster.userId);
+        if (donoUserBase) {
+            usuarios.push({
+                id: donoUserBase.id,
+                nome: donoUserBase.nome,
+                email: donoUserBase.email,
+                tipo: 'master',
+                ativo: true,
+            });
+        }
+        const usuariosComuns = await this.userComumService.findByClienteMasterId(clienteMasterId);
+        for (const userComum of usuariosComuns) {
+            const userBase = await this.userBaseService.findById(userComum.userId);
+            if (userBase) {
+                usuarios.push({
+                    id: userBase.id,
+                    nome: userBase.nome,
+                    email: userBase.email,
+                    tipo: 'comum',
+                    ativo: userComum.ativo,
+                });
+            }
+        }
+        return {
+            statusCode: 200,
+            message: 'Usuários listados com sucesso',
+            data: usuarios,
+        };
     }
-    async findOne(id, req) {
+    async findUserBase(id) {
+        const userBase = await this.userBaseService.findById(id);
+        if (!userBase) {
+            throw new common_1.NotFoundException('Usuário não encontrado');
+        }
+        const { password, verificationToken, tokenExpiresAt, ...userData } = userBase;
+        return userData;
+    }
+    async findOne(id, clienteMasterId, req) {
+        if (!clienteMasterId) {
+            throw new common_1.BadRequestException('clienteMasterId é obrigatório');
+        }
+        const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
+        if (!clienteMaster) {
+            throw new common_1.NotFoundException('Cliente Master não encontrado');
+        }
+        const userBaseId = req.user.id;
+        const possuiClienteMaster = (await this.clientesMasterService.findByUserId(userBaseId))
+            .some(cm => String(cm.id) === String(clienteMasterId));
+        if (!possuiClienteMaster) {
+            const userComumVinculado = await this.userComumService.findByUserAndClienteMaster(userBaseId, clienteMasterId);
+            if (!userComumVinculado) {
+                throw new common_1.ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+            }
+        }
+        if (clienteMaster.userId === id) {
+            const donoUserBase = await this.userBaseService.findById(id);
+            if (!donoUserBase) {
+                throw new common_1.NotFoundException('Usuário não encontrado');
+            }
+            return {
+                statusCode: 200,
+                message: 'Usuário encontrado',
+                data: {
+                    id: donoUserBase.id,
+                    nome: donoUserBase.nome,
+                    email: donoUserBase.email,
+                    tipo: 'master',
+                    ativo: true,
+                },
+            };
+        }
+        const userBaseById = await this.userBaseService.findById(id);
+        if (userBaseById) {
+            const userComumByUserBase = await this.userComumService.findByUserAndClienteMaster(id, clienteMasterId);
+            if (userComumByUserBase) {
+                return {
+                    statusCode: 200,
+                    message: 'Usuário encontrado',
+                    data: {
+                        id: userBaseById.id,
+                        nome: userBaseById.nome,
+                        email: userBaseById.email,
+                        tipo: 'comum',
+                        ativo: userComumByUserBase.ativo,
+                    },
+                };
+            }
+        }
         const userComum = await this.userComumService.findById(id);
         if (!userComum) {
-            throw new Error('Usuário não encontrado');
+            throw new common_1.NotFoundException('Usuário não encontrado');
         }
-        if (req.user.tipo === 'master') {
-            const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
-            if (!clientesMaster || clientesMaster.length === 0) {
-                throw new Error('Cliente Master não encontrado');
-            }
-            const clienteMasterId = clientesMaster[0].id;
-            if (userComum.clienteMasterId !== clienteMasterId) {
-                throw new Error('Acesso negado');
-            }
+        if (userComum.clienteMasterId !== clienteMasterId) {
+            throw new common_1.ForbiddenException('Usuário não pertence a este Cliente Master');
         }
-        return userComum;
+        const userBase = await this.userBaseService.findById(userComum.userId);
+        return {
+            statusCode: 200,
+            message: 'Usuário encontrado',
+            data: {
+                id: userBase?.id,
+                nome: userBase?.nome || 'Nome não disponível',
+                email: userBase?.email || 'Email não disponível',
+                tipo: 'comum',
+                ativo: userComum.ativo,
+            },
+        };
     }
     async update(id, data) {
         return this.userComumService.update(id, data);
@@ -120,18 +221,26 @@ let UsersController = class UsersController {
 exports.UsersController = UsersController;
 __decorate([
     (0, common_1.Get)(),
-    (0, common_1.UseGuards)(is_master_guard_1.IsMasterGuard),
-    __param(0, (0, common_1.Request)()),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
-    __metadata("design:returntype", Promise)
-], UsersController.prototype, "findAll", null);
-__decorate([
-    (0, common_1.Get)(':id'),
-    __param(0, (0, common_1.Param)('id')),
+    __param(0, (0, common_1.Query)('clienteMasterId')),
     __param(1, (0, common_1.Request)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('base/:id'),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], UsersController.prototype, "findUserBase", null);
+__decorate([
+    (0, common_1.Get)(':id'),
+    __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, common_1.Query)('clienteMasterId')),
+    __param(2, (0, common_1.Request)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object]),
     __metadata("design:returntype", Promise)
 ], UsersController.prototype, "findOne", null);
 __decorate([

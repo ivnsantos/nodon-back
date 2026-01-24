@@ -61,6 +61,7 @@ const user_base_service_1 = require("../users/services/user-base.service");
 const user_comum_service_1 = require("../users/services/user-comum.service");
 const email_service_1 = require("../email/email.service");
 const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
+const chat_service_1 = require("../chat/chat.service");
 let AssinaturasService = class AssinaturasService {
     assinaturaRepository;
     cupomRepository;
@@ -73,7 +74,8 @@ let AssinaturasService = class AssinaturasService {
     userBaseService;
     userComumService;
     emailService;
-    constructor(assinaturaRepository, cupomRepository, historicoRepository, asaasService, planosService, cuponsService, clientesMasterService, usersService, userBaseService, userComumService, emailService) {
+    chatService;
+    constructor(assinaturaRepository, cupomRepository, historicoRepository, asaasService, planosService, cuponsService, clientesMasterService, usersService, userBaseService, userComumService, emailService, chatService) {
         this.assinaturaRepository = assinaturaRepository;
         this.cupomRepository = cupomRepository;
         this.historicoRepository = historicoRepository;
@@ -85,6 +87,7 @@ let AssinaturasService = class AssinaturasService {
         this.userBaseService = userBaseService;
         this.userComumService = userComumService;
         this.emailService = emailService;
+        this.chatService = chatService;
     }
     async create(createSubscriptionDto) {
         let coupon = null;
@@ -518,6 +521,20 @@ let AssinaturasService = class AssinaturasService {
             quantidadeUsuarios = usuarios.length;
         }
         const agora = new Date();
+        let dataInicioFaturamento = null;
+        let proximaRenovacao = null;
+        if (assinaturaEntity && assinaturaEntity.createdAt) {
+            const dataInicio = new Date(assinaturaEntity.createdAt);
+            const diaFaturamento = dataInicio.getDate();
+            const inicioCicloAtual = new Date(agora.getFullYear(), agora.getMonth(), diaFaturamento);
+            if (agora.getDate() < diaFaturamento) {
+                inicioCicloAtual.setMonth(inicioCicloAtual.getMonth() - 1);
+            }
+            dataInicioFaturamento = inicioCicloAtual;
+            const proxima = new Date(inicioCicloAtual);
+            proxima.setMonth(proxima.getMonth() + 1);
+            proximaRenovacao = proxima.toISOString().split('T')[0];
+        }
         const ano = agora.getFullYear();
         const mes = agora.getMonth() + 1;
         const historicoAtual = await this.historicoRepository.findOne({
@@ -530,26 +547,34 @@ let AssinaturasService = class AssinaturasService {
         const todosHistoricos = await this.historicoRepository.find({
             where: { clienteMasterId: clienteMaster.id },
         });
-        const tokensChatUsados = todosHistoricos.reduce((sum, h) => sum + Number(h.tokensUtilizados || 0), 0);
-        const tokensChatUsadosMes = Number(historicoAtual?.tokensUtilizados || 0);
+        const tokensChatUsados = await this.chatService.getTotalTokensByClienteMaster(clienteMaster.id);
+        let tokensChatUsadosMes = 0;
+        let analisesFeitasCiclo = 0;
+        if (dataInicioFaturamento) {
+            tokensChatUsadosMes = await this.chatService.getTotalTokensByClienteMasterInPeriod(clienteMaster.id, dataInicioFaturamento);
+            for (const h of todosHistoricos) {
+                const dataHistorico = new Date(h.ano, h.mes - 1, 1);
+                const fimMesHistorico = new Date(h.ano, h.mes, 0);
+                if (fimMesHistorico >= dataInicioFaturamento && dataHistorico <= agora) {
+                    analisesFeitasCiclo += Number(h.analisesFeitas || 0);
+                }
+            }
+        }
+        else {
+            tokensChatUsadosMes = tokensChatUsados;
+            analisesFeitasCiclo = Number(historicoAtual?.analisesFeitas || 0);
+        }
         const tokensChatLimite = plano ? Number(plano.tokenChat) : 0;
         const porcentagemUsoTokens = tokensChatLimite > 0
             ? Math.min(100, Math.round((tokensChatUsadosMes / tokensChatLimite) * 100))
             : 0;
         const analisesFeitas = todosHistoricos.reduce((sum, h) => sum + Number(h.analisesFeitas || 0), 0);
-        const analisesFeitasMes = Number(historicoAtual?.analisesFeitas || 0);
+        const analisesFeitasMes = analisesFeitasCiclo;
         const analisesLimite = plano ? Number(plano.limiteAnalises) : 0;
         const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasMes);
         const porcentagemUsoAnalises = analisesLimite > 0
             ? Math.min(100, Math.round((analisesFeitasMes / analisesLimite) * 100))
             : 0;
-        let proximaRenovacao = null;
-        if (assinaturaEntity && assinaturaEntity.createdAt) {
-            const dataInicio = new Date(assinaturaEntity.createdAt);
-            const proxima = new Date(dataInicio);
-            proxima.setMonth(proxima.getMonth() + 1);
-            proximaRenovacao = proxima.toISOString().split('T')[0];
-        }
         let cartao = null;
         if (assinaturaEntity && assinaturaEntity.creditCardNumber && assinaturaEntity.creditCardBrand) {
             const ultimos4 = assinaturaEntity.creditCardNumber.slice(-4);
@@ -720,6 +745,7 @@ exports.AssinaturasService = AssinaturasService = __decorate([
     __param(1, (0, typeorm_1.InjectRepository)(cupom_entity_1.Cupom)),
     __param(2, (0, typeorm_1.InjectRepository)(historico_mensal_entity_1.HistoricoMensal)),
     __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => clientes_master_service_1.ClientesMasterService))),
+    __param(11, (0, common_1.Inject)((0, common_1.forwardRef)(() => chat_service_1.ChatService))),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
@@ -730,6 +756,7 @@ exports.AssinaturasService = AssinaturasService = __decorate([
         users_service_1.UsersService,
         user_base_service_1.UserBaseService,
         user_comum_service_1.UserComumService,
-        email_service_1.EmailService])
+        email_service_1.EmailService,
+        chat_service_1.ChatService])
 ], AssinaturasService);
 //# sourceMappingURL=assinaturas.service.js.map

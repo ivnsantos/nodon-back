@@ -11,8 +11,10 @@ import { AnalisesModule } from './analises/analises.module';
 import { HealthModule } from './health/health.module';
 import { EmailModule } from './email/email.module';
 import { StorageModule } from './storage/storage.module';
-import { CalendarioModule } from './calendario/calendario.module';
+import { ChatModule } from './chat/chat.module';
 import { PacientesModule } from './pacientes/pacientes.module';
+import { RadiografiasModule } from './radiografias/radiografias.module';
+import { DesenhosProfissionaisModule } from './desenhos-profissionais/desenhos-profissionais.module';
 import { TypeOrmConfigService } from './config/typeorm.config';
 import { PlanosService } from './planos/planos.service';
 
@@ -21,9 +23,12 @@ import { PlanosService } from './planos/planos.service';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [
+        join(process.cwd(), '.env.local'), // Prioridade para desenvolvimento local
+        join(__dirname, '..', '.env.local'),
         join(__dirname, '..', '.env'),
         join(process.cwd(), '.env'),
         join(process.cwd(), 'server-nestjs', '.env'),
+        '.env.local',
         '.env',
         '../.env',
       ],
@@ -42,8 +47,10 @@ import { PlanosService } from './planos/planos.service';
     HealthModule,
     EmailModule,
     StorageModule,
-    CalendarioModule,
+    ChatModule,
     PacientesModule,
+    RadiografiasModule,
+    DesenhosProfissionaisModule,
   ],
 })
 export class AppModule implements OnModuleInit {

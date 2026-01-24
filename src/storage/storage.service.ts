@@ -40,6 +40,13 @@ export class StorageService {
   }
 
   /**
+   * Retorna o domínio público configurado
+   */
+  getPublicDomain(): string {
+    return this.publicDomain;
+  }
+
+  /**
    * Faz upload de uma imagem para o R2
    * @param file Buffer do arquivo
    * @param path Caminho onde o arquivo será salvo (ex: "logos/cliente-123.png")
