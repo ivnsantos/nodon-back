@@ -12,6 +12,7 @@ import { UsersModule } from '../users/users.module';
 import { ClientesMasterModule } from '../users/clientes-master.module';
 import { EmailModule } from '../email/email.module';
 import { ChatModule } from '../chat/chat.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ChatModule } from '../chat/chat.module';
     forwardRef(() => ClientesMasterModule),
     EmailModule,
     forwardRef(() => ChatModule),
+    forwardRef(() => AuthModule),
   ],
   controllers: [AssinaturasController],
   providers: [AssinaturasService, AsaasService],

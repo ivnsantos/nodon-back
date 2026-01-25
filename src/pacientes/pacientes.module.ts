@@ -12,8 +12,8 @@ import { ClientesMasterModule } from '../users/clientes-master.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Paciente, HistoricoPaciente, Radiografia]),
-    UsersModule,
-    ClientesMasterModule,
+    forwardRef(() => UsersModule),
+    forwardRef(() => ClientesMasterModule),
   ],
   controllers: [PacientesController],
   providers: [

@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Between, MoreThanOrEqual } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { ClienteMaster } from './entities/cliente-master.entity';
 import { UserBase } from './entities/user-base.entity';
@@ -8,6 +8,12 @@ import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
 import { UserComumService } from './services/user-comum.service';
 import { UserBaseService } from './services/user-base.service';
+import { CalendarioService } from '../calendario/calendario.service';
+import { RadiografiasService } from '../radiografias/radiografias.service';
+import { ChatService } from '../chat/chat.service';
+import { PacientesService } from '../pacientes/pacientes.service';
+import { Radiografia } from '../radiografias/entities/radiografia.entity';
+import { Paciente } from '../pacientes/entities/paciente.entity';
 
 @Injectable()
 export class ClientesMasterService {
@@ -23,6 +29,18 @@ export class ClientesMasterService {
     private userComumService: UserComumService,
     @Inject(forwardRef(() => UserBaseService))
     private userBaseService: UserBaseService,
+    @Inject(forwardRef(() => CalendarioService))
+    private calendarioService: CalendarioService,
+    @Inject(forwardRef(() => RadiografiasService))
+    private radiografiasService: RadiografiasService,
+    @Inject(forwardRef(() => ChatService))
+    private chatService: ChatService,
+    @Inject(forwardRef(() => PacientesService))
+    private pacientesService: PacientesService,
+    @InjectRepository(Radiografia)
+    private radiografiaRepository: Repository<Radiografia>,
+    @InjectRepository(Paciente)
+    private pacienteRepository: Repository<Paciente>,
   ) {}
 
   async create(data: {
@@ -302,6 +320,7 @@ export class ClientesMasterService {
       usuarios: usuariosCompletos,
     };
   }
+
 
 }
 

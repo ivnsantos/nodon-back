@@ -16,6 +16,7 @@ export class PacientesHistoricoService {
     private pacientesService: PacientesService,
     private userBaseService: UserBaseService,
     private userComumService: UserComumService,
+    @Inject(forwardRef(() => ClientesMasterService))
     private clientesMasterService: ClientesMasterService,
   ) {}
 

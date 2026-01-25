@@ -34,7 +34,7 @@ __decorate([
     __metadata("design:type", String)
 ], Plano.prototype, "nome", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'valor_original', type: 'decimal', precision: 10, scale: 2 }),
+    (0, typeorm_1.Column)({ name: 'valor_original', type: 'decimal', nullable: true }),
     __metadata("design:type", Number)
 ], Plano.prototype, "valorOriginal", void 0);
 __decorate([
@@ -42,7 +42,7 @@ __decorate([
     __metadata("design:type", Number)
 ], Plano.prototype, "valorPromocional", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'limite_analises' }),
+    (0, typeorm_1.Column)({ name: 'limite_analises', nullable: true }),
     __metadata("design:type", Number)
 ], Plano.prototype, "limiteAnalises", void 0);
 __decorate([

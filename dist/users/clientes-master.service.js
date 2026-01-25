@@ -23,6 +23,12 @@ const assinaturas_service_1 = require("../assinaturas/assinaturas.service");
 const planos_service_1 = require("../planos/planos.service");
 const user_comum_service_1 = require("./services/user-comum.service");
 const user_base_service_1 = require("./services/user-base.service");
+const calendario_service_1 = require("../calendario/calendario.service");
+const radiografias_service_1 = require("../radiografias/radiografias.service");
+const chat_service_1 = require("../chat/chat.service");
+const pacientes_service_1 = require("../pacientes/pacientes.service");
+const radiografia_entity_1 = require("../radiografias/entities/radiografia.entity");
+const paciente_entity_1 = require("../pacientes/entities/paciente.entity");
 let ClientesMasterService = class ClientesMasterService {
     clienteMasterRepository;
     userBaseRepository;
@@ -30,13 +36,25 @@ let ClientesMasterService = class ClientesMasterService {
     planosService;
     userComumService;
     userBaseService;
-    constructor(clienteMasterRepository, userBaseRepository, assinaturasService, planosService, userComumService, userBaseService) {
+    calendarioService;
+    radiografiasService;
+    chatService;
+    pacientesService;
+    radiografiaRepository;
+    pacienteRepository;
+    constructor(clienteMasterRepository, userBaseRepository, assinaturasService, planosService, userComumService, userBaseService, calendarioService, radiografiasService, chatService, pacientesService, radiografiaRepository, pacienteRepository) {
         this.clienteMasterRepository = clienteMasterRepository;
         this.userBaseRepository = userBaseRepository;
         this.assinaturasService = assinaturasService;
         this.planosService = planosService;
         this.userComumService = userComumService;
         this.userBaseService = userBaseService;
+        this.calendarioService = calendarioService;
+        this.radiografiasService = radiografiasService;
+        this.chatService = chatService;
+        this.pacientesService = pacientesService;
+        this.radiografiaRepository = radiografiaRepository;
+        this.pacienteRepository = pacienteRepository;
     }
     async create(data) {
         let hash;
@@ -286,11 +304,23 @@ exports.ClientesMasterService = ClientesMasterService = __decorate([
     __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => assinaturas_service_1.AssinaturasService))),
     __param(4, (0, common_1.Inject)((0, common_1.forwardRef)(() => user_comum_service_1.UserComumService))),
     __param(5, (0, common_1.Inject)((0, common_1.forwardRef)(() => user_base_service_1.UserBaseService))),
+    __param(6, (0, common_1.Inject)((0, common_1.forwardRef)(() => calendario_service_1.CalendarioService))),
+    __param(7, (0, common_1.Inject)((0, common_1.forwardRef)(() => radiografias_service_1.RadiografiasService))),
+    __param(8, (0, common_1.Inject)((0, common_1.forwardRef)(() => chat_service_1.ChatService))),
+    __param(9, (0, common_1.Inject)((0, common_1.forwardRef)(() => pacientes_service_1.PacientesService))),
+    __param(10, (0, typeorm_1.InjectRepository)(radiografia_entity_1.Radiografia)),
+    __param(11, (0, typeorm_1.InjectRepository)(paciente_entity_1.Paciente)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         assinaturas_service_1.AssinaturasService,
         planos_service_1.PlanosService,
         user_comum_service_1.UserComumService,
-        user_base_service_1.UserBaseService])
+        user_base_service_1.UserBaseService,
+        calendario_service_1.CalendarioService,
+        radiografias_service_1.RadiografiasService,
+        chat_service_1.ChatService,
+        pacientes_service_1.PacientesService,
+        typeorm_2.Repository,
+        typeorm_2.Repository])
 ], ClientesMasterService);
 //# sourceMappingURL=clientes-master.service.js.map

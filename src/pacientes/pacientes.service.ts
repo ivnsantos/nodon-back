@@ -20,6 +20,7 @@ export class PacientesService {
     @InjectRepository(Radiografia)
     private radiografiaRepository: Repository<Radiografia>,
     private userComumService: UserComumService,
+    @Inject(forwardRef(() => ClientesMasterService))
     private clientesMasterService: ClientesMasterService,
     @Optional()
     @Inject(forwardRef(() => PacientesHistoricoService))

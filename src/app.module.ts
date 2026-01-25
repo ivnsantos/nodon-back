@@ -15,6 +15,7 @@ import { ChatModule } from './chat/chat.module';
 import { PacientesModule } from './pacientes/pacientes.module';
 import { RadiografiasModule } from './radiografias/radiografias.module';
 import { DesenhosProfissionaisModule } from './desenhos-profissionais/desenhos-profissionais.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { TypeOrmConfigService } from './config/typeorm.config';
 import { PlanosService } from './planos/planos.service';
 
@@ -51,6 +52,7 @@ import { PlanosService } from './planos/planos.service';
     PacientesModule,
     RadiografiasModule,
     DesenhosProfissionaisModule,
+    DashboardModule,
   ],
 })
 export class AppModule implements OnModuleInit {

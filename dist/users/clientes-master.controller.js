@@ -131,7 +131,12 @@ let ClientesMasterController = class ClientesMasterController {
             throw new common_1.NotFoundException('Cliente Master não encontrado');
         }
         const clientesMasterIds = req.user.clientesMasterIds || [];
-        const possuiClienteMaster = clientesMasterIds.includes(id);
+        let possuiClienteMaster = clientesMasterIds.includes(id);
+        if (!possuiClienteMaster) {
+            const clientesMasterDoUsuario = await this.clientesMasterService.findByUserId(userBaseId);
+            const idsDoBanco = clientesMasterDoUsuario.map(cm => String(cm.id).trim());
+            possuiClienteMaster = idsDoBanco.includes(String(id).trim());
+        }
         let tipoRelacionamento;
         let idRelacionamento;
         let userComumVinculado = null;
@@ -141,13 +146,19 @@ let ClientesMasterController = class ClientesMasterController {
         }
         else {
             const usuariosComunsIds = req.user.usuariosComunsIds || [];
-            for (const userComumId of usuariosComunsIds) {
-                const userComum = await this.userComumService.findById(userComumId);
-                if (userComum && userComum.clienteMasterId === id) {
-                    userComumVinculado = userComum;
-                    break;
+            let usuariosComunsDoUsuario = [];
+            if (usuariosComunsIds.length === 0) {
+                usuariosComunsDoUsuario = await this.userComumService.findByUserId(userBaseId);
+            }
+            else {
+                for (const userComumId of usuariosComunsIds) {
+                    const userComum = await this.userComumService.findById(userComumId);
+                    if (userComum) {
+                        usuariosComunsDoUsuario.push(userComum);
+                    }
                 }
             }
+            userComumVinculado = usuariosComunsDoUsuario.find(uc => String(uc.clienteMasterId).trim() === String(id).trim());
             if (userComumVinculado) {
                 tipoRelacionamento = 'usuario';
                 idRelacionamento = userComumVinculado.id;

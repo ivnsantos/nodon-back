@@ -340,10 +340,16 @@ let AuthService = class AuthService {
         };
     }
     async generateTokenForUser(userId, email, tipo) {
+        const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+        const clientesMasterIds = clientesMaster.map(cm => cm.id);
+        const usuariosComuns = await this.userComumService.findByUserId(userId);
+        const usuariosComunsIds = usuariosComuns.map(uc => uc.id);
         const payload = {
             id: userId,
             email: email,
             tipo: tipo,
+            clientesMasterIds: clientesMasterIds,
+            usuariosComunsIds: usuariosComunsIds,
         };
         return this.jwtService.sign(payload);
     }

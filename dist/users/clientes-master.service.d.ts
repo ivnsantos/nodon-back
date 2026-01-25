@@ -5,6 +5,12 @@ import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
 import { UserComumService } from './services/user-comum.service';
 import { UserBaseService } from './services/user-base.service';
+import { CalendarioService } from '../calendario/calendario.service';
+import { RadiografiasService } from '../radiografias/radiografias.service';
+import { ChatService } from '../chat/chat.service';
+import { PacientesService } from '../pacientes/pacientes.service';
+import { Radiografia } from '../radiografias/entities/radiografia.entity';
+import { Paciente } from '../pacientes/entities/paciente.entity';
 export declare class ClientesMasterService {
     private clienteMasterRepository;
     private userBaseRepository;
@@ -12,7 +18,13 @@ export declare class ClientesMasterService {
     private planosService;
     private userComumService;
     private userBaseService;
-    constructor(clienteMasterRepository: Repository<ClienteMaster>, userBaseRepository: Repository<UserBase>, assinaturasService: AssinaturasService, planosService: PlanosService, userComumService: UserComumService, userBaseService: UserBaseService);
+    private calendarioService;
+    private radiografiasService;
+    private chatService;
+    private pacientesService;
+    private radiografiaRepository;
+    private pacienteRepository;
+    constructor(clienteMasterRepository: Repository<ClienteMaster>, userBaseRepository: Repository<UserBase>, assinaturasService: AssinaturasService, planosService: PlanosService, userComumService: UserComumService, userBaseService: UserBaseService, calendarioService: CalendarioService, radiografiasService: RadiografiasService, chatService: ChatService, pacientesService: PacientesService, radiografiaRepository: Repository<Radiografia>, pacienteRepository: Repository<Paciente>);
     create(data: {
         userId: string;
         nomeEmpresa?: string;

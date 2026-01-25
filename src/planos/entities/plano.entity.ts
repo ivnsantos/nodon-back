@@ -14,13 +14,13 @@ export class Plano {
   @Column({ name: 'nome', type: 'varchar', nullable: false })
   nome: string;
 
-  @Column({ name: 'valor_original', type: 'decimal', precision: 10, scale: 2 })
+  @Column({ name: 'valor_original', type: 'decimal', nullable: true })
   valorOriginal: number;
 
   @Column({ name: 'valor_promocional', type: 'decimal', precision: 10, scale: 2, nullable: true })
   valorPromocional: number;
 
-  @Column({ name: 'limite_analises' })
+  @Column({ name: 'limite_analises', nullable: true })
   limiteAnalises: number;
 
   @Column({ name: 'token_chat', type: 'bigint', default: 1500000 })

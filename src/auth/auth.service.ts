@@ -417,10 +417,20 @@ export class AuthService {
   }
 
   async generateTokenForUser(userId: string, email: string, tipo: string): Promise<string> {
+    // Buscar todos os ClienteMaster do UserBase
+    const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+    const clientesMasterIds = clientesMaster.map(cm => cm.id);
+    
+    // Buscar todos os UserComum do UserBase
+    const usuariosComuns = await this.userComumService.findByUserId(userId);
+    const usuariosComunsIds = usuariosComuns.map(uc => uc.id);
+
     const payload = {
       id: userId, // ID do UserBase
       email: email,
       tipo: tipo,
+      clientesMasterIds: clientesMasterIds, // Array de IDs de ClienteMaster
+      usuariosComunsIds: usuariosComunsIds, // Array de IDs de UserComum
     };
     return this.jwtService.sign(payload);
   }

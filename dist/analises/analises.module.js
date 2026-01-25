@@ -23,9 +23,9 @@ exports.AnalisesModule = AnalisesModule = __decorate([
     (0, common_1.Module)({
         imports: [
             typeorm_1.TypeOrmModule.forFeature([historico_mensal_entity_1.HistoricoMensal]),
-            users_module_1.UsersModule,
-            clientes_master_module_1.ClientesMasterModule,
-            assinaturas_module_1.AssinaturasModule,
+            (0, common_1.forwardRef)(() => users_module_1.UsersModule),
+            (0, common_1.forwardRef)(() => clientes_master_module_1.ClientesMasterModule),
+            (0, common_1.forwardRef)(() => assinaturas_module_1.AssinaturasModule),
             planos_module_1.PlanosModule,
         ],
         controllers: [analises_controller_1.AnalisesController],

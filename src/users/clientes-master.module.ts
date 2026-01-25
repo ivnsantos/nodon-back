@@ -10,15 +10,25 @@ import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { PlanosModule } from '../planos/planos.module';
 import { UsersModule } from './users.module';
 import { AuthModule } from '../auth/auth.module';
+import { CalendarioModule } from '../calendario/calendario.module';
+import { RadiografiasModule } from '../radiografias/radiografias.module';
+import { ChatModule } from '../chat/chat.module';
+import { PacientesModule } from '../pacientes/pacientes.module';
+import { Radiografia } from '../radiografias/entities/radiografia.entity';
+import { Paciente } from '../pacientes/entities/paciente.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ClienteMaster, UserBase, UserComum]),
+    TypeOrmModule.forFeature([ClienteMaster, UserBase, UserComum, Radiografia, Paciente]),
     StorageModule,
     forwardRef(() => AssinaturasModule),
     PlanosModule,
     forwardRef(() => UsersModule),
     forwardRef(() => AuthModule),
+    forwardRef(() => CalendarioModule),
+    forwardRef(() => RadiografiasModule),
+    forwardRef(() => ChatModule),
+    forwardRef(() => PacientesModule),
   ],
   controllers: [ClientesMasterController],
   providers: [ClientesMasterService],

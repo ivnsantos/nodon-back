@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RadiografiasService } from './radiografias.service';
 import { RadiografiasController } from './radiografias.controller';
@@ -14,12 +14,12 @@ import { AnalisesModule } from '../analises/analises.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Radiografia, DesenhoProfissional]),
-    UsersModule,
-    ClientesMasterModule,
+    forwardRef(() => UsersModule),
+    forwardRef(() => ClientesMasterModule),
     StorageModule,
-    ChatModule,
-    AssinaturasModule,
-    AnalisesModule,
+    forwardRef(() => ChatModule),
+    forwardRef(() => AssinaturasModule),
+    forwardRef(() => AnalisesModule),
   ],
   controllers: [RadiografiasController],
   providers: [RadiografiasService],

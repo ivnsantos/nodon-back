@@ -173,6 +173,8 @@ exports.AnalisesService = AnalisesService;
 exports.AnalisesService = AnalisesService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(historico_mensal_entity_1.HistoricoMensal)),
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => clientes_master_service_1.ClientesMasterService))),
+    __param(2, (0, common_1.Inject)((0, common_1.forwardRef)(() => assinaturas_service_1.AssinaturasService))),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         clientes_master_service_1.ClientesMasterService,
         assinaturas_service_1.AssinaturasService,

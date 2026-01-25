@@ -89,7 +89,7 @@ let TypeOrmConfigService = class TypeOrmConfigService {
                 radiografia_entity_1.Radiografia,
                 desenho_profissional_entity_1.DesenhoProfissional,
             ],
-            synchronize: false,
+            synchronize: true,
             logging: this.configService.get('NODE_ENV') === 'development',
             autoLoadEntities: true,
             extra: useSsl ? {

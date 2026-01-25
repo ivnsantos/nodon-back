@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Radiografia } from './entities/radiografia.entity';
@@ -20,11 +20,15 @@ export class RadiografiasService {
     private radiografiaRepository: Repository<Radiografia>,
     @InjectRepository(DesenhoProfissional)
     private desenhoProfissionalRepository: Repository<DesenhoProfissional>,
+    @Inject(forwardRef(() => ClientesMasterService))
     private clientesMasterService: ClientesMasterService,
     private userComumService: UserComumService,
     private storageService: StorageService,
+    @Inject(forwardRef(() => ChatService))
     private chatService: ChatService,
+    @Inject(forwardRef(() => AssinaturasService))
     private assinaturasService: AssinaturasService,
+    @Inject(forwardRef(() => AnalisesService))
     private analisesService: AnalisesService,
   ) {}
 
