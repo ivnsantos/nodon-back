@@ -96,7 +96,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
       ],
       // Desabilitar synchronize para evitar problemas com alterações de schema
       // Use migrations manuais em vez de synchronize
-      synchronize: true, // process.env.NODE_ENV !== 'production' && process.env.ENABLE_SYNC === 'true',
+      synchronize: false, // Desabilitado - use migrations manuais (add-password-reset-columns.sql)
       logging: this.configService.get<string>('NODE_ENV') === 'development',
       autoLoadEntities: true,
       extra: useSsl ? {
