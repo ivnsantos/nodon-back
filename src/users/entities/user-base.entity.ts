@@ -76,6 +76,12 @@ export class UserBase {
   @Column({ name: 'foto', type: 'varchar', nullable: true })
   foto: string | null;
 
+  @Column({ name: 'password_reset_token', type: 'varchar', nullable: true })
+  passwordResetToken: string | null;
+
+  @Column({ name: 'password_reset_expires_at', type: 'timestamp', nullable: true })
+  passwordResetExpiresAt: Date | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

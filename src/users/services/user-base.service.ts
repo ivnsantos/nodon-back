@@ -117,5 +117,11 @@ export class UserBaseService {
     }
     return user;
   }
+
+  async findByPasswordResetToken(token: string): Promise<UserBase | null> {
+    return this.userBaseRepository.findOne({ 
+      where: { passwordResetToken: token },
+    });
+  }
 }
 

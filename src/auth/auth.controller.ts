@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Request, Get, Query, BadRequestException, NotFoundException, Res } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Request, Get, Query, BadRequestException, NotFoundException, Res, Param } from '@nestjs/common';
 import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
@@ -7,6 +7,8 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { IsMasterGuard } from './guards/is-master.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { FacebookAuthGuard } from './guards/facebook-auth.guard';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -255,6 +257,22 @@ export class AuthController {
       nome: body.nome,
       foto: body.foto,
     });
+  }
+
+  @Post('forgot-password')
+  async forgotPassword(@Body() requestPasswordResetDto: RequestPasswordResetDto) {
+    const frontendUrl = this.getFrontendUrl();
+    return this.authService.requestPasswordReset(requestPasswordResetDto.email, frontendUrl);
+  }
+
+  @Get('validate-reset-token/:token')
+  async validateResetToken(@Param('token') token: string) {
+    return this.authService.validatePasswordResetToken(token);
+  }
+
+  @Post('reset-password')
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPassword(resetPasswordDto.token, resetPasswordDto.newPassword);
   }
 }
 

@@ -2,6 +2,8 @@ import type { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 export declare class AuthController {
     private authService;
     private clientesMasterService;
@@ -191,5 +193,23 @@ export declare class AuthController {
             } | null;
         };
         facebookData?: undefined;
+    }>;
+    forgotPassword(requestPasswordResetDto: RequestPasswordResetDto): Promise<{
+        message: string;
+        token?: undefined;
+        warning?: undefined;
+        resetUrl?: undefined;
+    } | {
+        message: string;
+        token: any;
+        warning: string;
+        resetUrl: string;
+    }>;
+    validateResetToken(token: string): Promise<{
+        valid: boolean;
+        message: string;
+    }>;
+    resetPassword(resetPasswordDto: ResetPasswordDto): Promise<{
+        message: string;
     }>;
 }

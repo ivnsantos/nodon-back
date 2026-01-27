@@ -899,6 +899,91 @@ let AuthService = class AuthService {
             clientesMaster: clientesMasterAssociados,
         };
     }
+    async requestPasswordReset(email, frontendUrl) {
+        const userBase = await this.userBaseService.findByEmail(email);
+        if (!userBase) {
+            return {
+                message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.'
+            };
+        }
+        if (!userBase.password) {
+            return {
+                message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.'
+            };
+        }
+        const crypto = require('crypto');
+        const resetToken = crypto.randomBytes(32).toString('hex');
+        const resetExpires = new Date();
+        resetExpires.setHours(resetExpires.getHours() + 1);
+        await this.userBaseService.update(userBase.id, {
+            passwordResetToken: resetToken,
+            passwordResetExpiresAt: resetExpires,
+        });
+        try {
+            await this.emailService.sendPasswordResetEmail(userBase.email, resetToken, userBase.nome, frontendUrl);
+            return {
+                message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.'
+            };
+        }
+        catch (error) {
+            console.error('Erro ao enviar email de recuperação de senha:', error);
+            const isDevelopment = process.env.NODE_ENV !== 'production';
+            if (isDevelopment) {
+                return {
+                    message: 'Token de recuperação gerado. Verifique a configuração de email para envio automático.',
+                    token: resetToken,
+                    warning: 'Email não foi enviado devido a erro de configuração SMTP',
+                    resetUrl: `${frontendUrl}/reset-password?token=${resetToken}`,
+                };
+            }
+            await this.userBaseService.update(userBase.id, {
+                passwordResetToken: null,
+                passwordResetExpiresAt: null,
+            });
+            return {
+                message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.'
+            };
+        }
+    }
+    async validatePasswordResetToken(token) {
+        const userBase = await this.userBaseService.findByPasswordResetToken(token);
+        if (!userBase) {
+            throw new common_1.BadRequestException('Token inválido ou expirado.');
+        }
+        if (!userBase.passwordResetExpiresAt || userBase.passwordResetExpiresAt < new Date()) {
+            await this.userBaseService.update(userBase.id, {
+                passwordResetToken: null,
+                passwordResetExpiresAt: null,
+            });
+            throw new common_1.BadRequestException('Token expirado. Solicite uma nova recuperação de senha.');
+        }
+        return {
+            valid: true,
+            message: 'Token válido.'
+        };
+    }
+    async resetPassword(token, newPassword) {
+        const userBase = await this.userBaseService.findByPasswordResetToken(token);
+        if (!userBase) {
+            throw new common_1.BadRequestException('Token inválido ou expirado.');
+        }
+        if (!userBase.passwordResetExpiresAt || userBase.passwordResetExpiresAt < new Date()) {
+            await this.userBaseService.update(userBase.id, {
+                passwordResetToken: null,
+                passwordResetExpiresAt: null,
+            });
+            throw new common_1.BadRequestException('Token expirado. Solicite uma nova recuperação de senha.');
+        }
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await this.userBaseService.update(userBase.id, {
+            password: hashedPassword,
+            passwordResetToken: null,
+            passwordResetExpiresAt: null,
+        });
+        return {
+            message: 'Senha redefinida com sucesso!'
+        };
+    }
 };
 exports.AuthService = AuthService;
 exports.AuthService = AuthService = __decorate([

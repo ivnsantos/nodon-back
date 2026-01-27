@@ -37,6 +37,8 @@ export declare class UsersController {
         googleId: string | null;
         facebookId: string | null;
         foto: string | null;
+        passwordResetToken: string | null;
+        passwordResetExpiresAt: Date | null;
         createdAt: Date;
         updatedAt: Date;
         clientesMaster: import("./entities/cliente-master.entity").ClienteMaster[];

@@ -21,6 +21,8 @@ const jwt_auth_guard_1 = require("./guards/jwt-auth.guard");
 const is_master_guard_1 = require("./guards/is-master.guard");
 const google_auth_guard_1 = require("./guards/google-auth.guard");
 const facebook_auth_guard_1 = require("./guards/facebook-auth.guard");
+const request_password_reset_dto_1 = require("./dto/request-password-reset.dto");
+const reset_password_dto_1 = require("./dto/reset-password.dto");
 let AuthController = class AuthController {
     authService;
     clientesMasterService;
@@ -171,6 +173,16 @@ let AuthController = class AuthController {
             foto: body.foto,
         });
     }
+    async forgotPassword(requestPasswordResetDto) {
+        const frontendUrl = this.getFrontendUrl();
+        return this.authService.requestPasswordReset(requestPasswordResetDto.email, frontendUrl);
+    }
+    async validateResetToken(token) {
+        return this.authService.validatePasswordResetToken(token);
+    }
+    async resetPassword(resetPasswordDto) {
+        return this.authService.resetPassword(resetPasswordDto.token, resetPasswordDto.newPassword);
+    }
 };
 exports.AuthController = AuthController;
 __decorate([
@@ -280,6 +292,27 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "facebookLoginWithToken", null);
+__decorate([
+    (0, common_1.Post)('forgot-password'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [request_password_reset_dto_1.RequestPasswordResetDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "forgotPassword", null);
+__decorate([
+    (0, common_1.Get)('validate-reset-token/:token'),
+    __param(0, (0, common_1.Param)('token')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "validateResetToken", null);
+__decorate([
+    (0, common_1.Post)('reset-password'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [reset_password_dto_1.ResetPasswordDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "resetPassword", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
     __metadata("design:paramtypes", [auth_service_1.AuthService,

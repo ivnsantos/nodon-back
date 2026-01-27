@@ -1158,5 +1158,124 @@ export class AuthService {
       clientesMaster: clientesMasterAssociados,
     };
   }
+
+  async requestPasswordReset(email: string, frontendUrl: string) {
+    // Buscar UserBase pelo email
+    const userBase = await this.userBaseService.findByEmail(email);
+    
+    // Por segurança, não revelar se o email existe ou não
+    if (!userBase) {
+      // Retornar sucesso mesmo se o email não existir (por segurança)
+      return { 
+        message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.' 
+      };
+    }
+
+    // Verificar se o usuário tem senha (não é apenas OAuth)
+    if (!userBase.password) {
+      return { 
+        message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.' 
+      };
+    }
+
+    // Gerar token de recuperação
+    const crypto = require('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetExpires = new Date();
+    resetExpires.setHours(resetExpires.getHours() + 1); // Token expira em 1 hora
+
+    // Salvar token no banco
+    await this.userBaseService.update(userBase.id, {
+      passwordResetToken: resetToken,
+      passwordResetExpiresAt: resetExpires,
+    });
+
+    // Tentar enviar email, mas não falhar se houver erro de configuração
+    try {
+      await this.emailService.sendPasswordResetEmail(
+        userBase.email,
+        resetToken,
+        userBase.nome,
+        frontendUrl,
+      );
+      return { 
+        message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.' 
+      };
+    } catch (error) {
+      console.error('Erro ao enviar email de recuperação de senha:', error);
+      // Em desenvolvimento, retornar o token para testes (remover em produção)
+      const isDevelopment = process.env.NODE_ENV !== 'production';
+      if (isDevelopment) {
+        return { 
+          message: 'Token de recuperação gerado. Verifique a configuração de email para envio automático.',
+          token: resetToken, // Apenas para desenvolvimento - remover em produção
+          warning: 'Email não foi enviado devido a erro de configuração SMTP',
+          resetUrl: `${frontendUrl}/reset-password?token=${resetToken}`,
+        };
+      }
+      // Em produção, limpar token e retornar mensagem genérica
+      await this.userBaseService.update(userBase.id, {
+        passwordResetToken: null,
+        passwordResetExpiresAt: null,
+      });
+      return { 
+        message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.' 
+      };
+    }
+  }
+
+  async validatePasswordResetToken(token: string) {
+    const userBase = await this.userBaseService.findByPasswordResetToken(token);
+    
+    if (!userBase) {
+      throw new BadRequestException('Token inválido ou expirado.');
+    }
+
+    if (!userBase.passwordResetExpiresAt || userBase.passwordResetExpiresAt < new Date()) {
+      // Limpar token expirado
+      await this.userBaseService.update(userBase.id, {
+        passwordResetToken: null,
+        passwordResetExpiresAt: null,
+      });
+      throw new BadRequestException('Token expirado. Solicite uma nova recuperação de senha.');
+    }
+
+    return { 
+      valid: true,
+      message: 'Token válido.' 
+    };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    // Validar token
+    const userBase = await this.userBaseService.findByPasswordResetToken(token);
+    
+    if (!userBase) {
+      throw new BadRequestException('Token inválido ou expirado.');
+    }
+
+    if (!userBase.passwordResetExpiresAt || userBase.passwordResetExpiresAt < new Date()) {
+      // Limpar token expirado
+      await this.userBaseService.update(userBase.id, {
+        passwordResetToken: null,
+        passwordResetExpiresAt: null,
+      });
+      throw new BadRequestException('Token expirado. Solicite uma nova recuperação de senha.');
+    }
+
+    // Hash da nova senha
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Atualizar senha e limpar token
+    await this.userBaseService.update(userBase.id, {
+      password: hashedPassword,
+      passwordResetToken: null,
+      passwordResetExpiresAt: null,
+    });
+
+    return { 
+      message: 'Senha redefinida com sucesso!' 
+    };
+  }
 }
 

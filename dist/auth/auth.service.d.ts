@@ -243,4 +243,22 @@ export declare class AuthService {
         };
         clientesMaster: ClienteMasterInfo[];
     }>;
+    requestPasswordReset(email: string, frontendUrl: string): Promise<{
+        message: string;
+        token?: undefined;
+        warning?: undefined;
+        resetUrl?: undefined;
+    } | {
+        message: string;
+        token: any;
+        warning: string;
+        resetUrl: string;
+    }>;
+    validatePasswordResetToken(token: string): Promise<{
+        valid: boolean;
+        message: string;
+    }>;
+    resetPassword(token: string, newPassword: string): Promise<{
+        message: string;
+    }>;
 }
