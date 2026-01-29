@@ -106,13 +106,34 @@ let AssinaturasService = class AssinaturasService {
         if (!plano) {
             throw new common_1.NotFoundException('Plano não encontrado');
         }
-        let valorFinal = plano.valorPromocional || plano.valorOriginal;
+        const valorBasePlano = plano.valorPromocional ?? plano.valorOriginal ?? null;
+        console.log('💰 Valor do plano:', {
+            planoId: plano.id,
+            planoNome: plano.nome,
+            valorOriginal: plano.valorOriginal,
+            valorPromocional: plano.valorPromocional,
+            valorBaseUsado: valorBasePlano,
+        });
+        if (!valorBasePlano || valorBasePlano === null || Number(valorBasePlano) <= 0) {
+            throw new common_1.BadRequestException(`O plano "${plano.nome}" não possui valor configurado. Configure valorOriginal ou valorPromocional no plano antes de criar assinaturas.`);
+        }
+        let valorFinal = Number(valorBasePlano);
         if (coupon && coupon.active) {
             const desconto = (valorFinal * Number(coupon.discountValue)) / 100;
             valorFinal = valorFinal - desconto;
             if (valorFinal < 0)
                 valorFinal = 0;
+            console.log('🎫 Cupom aplicado:', {
+                cupomNome: coupon.name,
+                descontoPercentual: coupon.discountValue,
+                valorAntes: Number(valorBasePlano),
+                valorDepois: valorFinal,
+            });
         }
+        if (!valorFinal || valorFinal <= 0) {
+            throw new common_1.BadRequestException('O valor da assinatura deve ser maior que zero. Verifique o valor do plano.');
+        }
+        console.log('💰 Valor final que será enviado ao Asaas:', valorFinal);
         const asaasCustomerId = await this.asaasService.createCustomer({
             name: createSubscriptionDto.name,
             email: createSubscriptionDto.email,
@@ -168,10 +189,18 @@ let AssinaturasService = class AssinaturasService {
         }
         const nextDueDate = new Date();
         const nextDueDateString = nextDueDate.toISOString().split('T')[0];
+        const valorParaAsaas = Number(valorFinal);
+        console.log('📤 Enviando para Asaas:', {
+            customer: asaasCustomerId,
+            billingType: createSubscriptionDto.billingType,
+            value: valorParaAsaas,
+            planoNome: plano.nome,
+            planoId: plano.id,
+        });
         const subscriptionData = {
             customer: asaasCustomerId,
             billingType: createSubscriptionDto.billingType,
-            value: valorFinal,
+            value: valorParaAsaas,
             nextDueDate: nextDueDateString,
             cycle: 'MONTHLY',
             description: `Assinatura ${plano.nome} NODON`,

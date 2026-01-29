@@ -75,13 +75,46 @@ export class AssinaturasService {
       throw new NotFoundException('Plano não encontrado');
     }
 
-    // Calcular valor com desconto se cupom válido
-    let valorFinal = plano.valorPromocional || plano.valorOriginal;
+    // Calcular valor do plano (prioriza valor promocional se existir)
+    // Usar nullish coalescing para tratar null/undefined corretamente
+    const valorBasePlano = plano.valorPromocional ?? plano.valorOriginal ?? null;
+    console.log('💰 Valor do plano:', {
+      planoId: plano.id,
+      planoNome: plano.nome,
+      valorOriginal: plano.valorOriginal,
+      valorPromocional: plano.valorPromocional,
+      valorBaseUsado: valorBasePlano,
+    });
+
+    // Validar se o plano tem valor configurado
+    if (!valorBasePlano || valorBasePlano === null || Number(valorBasePlano) <= 0) {
+      throw new BadRequestException(
+        `O plano "${plano.nome}" não possui valor configurado. Configure valorOriginal ou valorPromocional no plano antes de criar assinaturas.`,
+      );
+    }
+
+    // Calcular valor final com desconto se cupom válido
+    let valorFinal = Number(valorBasePlano);
     if (coupon && coupon.active) {
       const desconto = (valorFinal * Number(coupon.discountValue)) / 100;
       valorFinal = valorFinal - desconto;
       if (valorFinal < 0) valorFinal = 0;
+      console.log('🎫 Cupom aplicado:', {
+        cupomNome: coupon.name,
+        descontoPercentual: coupon.discountValue,
+        valorAntes: Number(valorBasePlano),
+        valorDepois: valorFinal,
+      });
     }
+
+    // Validar valor final antes de enviar
+    if (!valorFinal || valorFinal <= 0) {
+      throw new BadRequestException(
+        'O valor da assinatura deve ser maior que zero. Verifique o valor do plano.',
+      );
+    }
+
+    console.log('💰 Valor final que será enviado ao Asaas:', valorFinal);
 
     // 3. Criar cliente na ASAAS
     const asaasCustomerId = await this.asaasService.createCustomer({
@@ -151,10 +184,21 @@ export class AssinaturasService {
     const nextDueDateString = nextDueDate.toISOString().split('T')[0];
 
     // 5. Prepara dados da assinatura com desconto se cupom válido
+    // Garantir que o valor seja um número (converter de decimal para número)
+    const valorParaAsaas = Number(valorFinal);
+    
+    console.log('📤 Enviando para Asaas:', {
+      customer: asaasCustomerId,
+      billingType: createSubscriptionDto.billingType,
+      value: valorParaAsaas,
+      planoNome: plano.nome,
+      planoId: plano.id,
+    });
+    
     const subscriptionData: any = {
       customer: asaasCustomerId,
       billingType: createSubscriptionDto.billingType,
-      value: valorFinal,
+      value: valorParaAsaas, // Valor do plano (valorPromocional ou valorOriginal)
       nextDueDate: nextDueDateString,
       cycle: 'MONTHLY',
       description: `Assinatura ${plano.nome} NODON`,
