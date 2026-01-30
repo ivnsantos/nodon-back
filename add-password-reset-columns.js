@@ -1,33 +1,22 @@
 const { Client } = require('pg');
-require('dotenv').config({ path: '.env.local' });
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config();
 
-async function addPasswordResetColumns() {
-  const dbHost = process.env.DB_HOST;
-  const dbPort = process.env.DB_PORT;
-  const dbUsername = process.env.DB_USERNAME;
-  const dbPassword = process.env.DB_PASSWORD;
-  const dbName = process.env.DB_NAME;
-
-  if (!dbHost || !dbPort || !dbUsername || !dbPassword || !dbName) {
-    console.error('❌ Variáveis de ambiente do banco de dados não configuradas');
-    process.exit(1);
-  }
-
-  // Verificar se precisa usar SSL
-  const useSsl = process.env.DB_SSL === 'true' || process.env.DB_SSL === '1' || process.env.NODE_ENV === 'production';
-
+async function runMigration() {
   const client = new Client({
-    host: dbHost,
-    port: parseInt(dbPort, 10),
-    user: dbUsername,
-    password: dbPassword,
-    database: dbName,
-    ssl: useSsl ? { rejectUnauthorized: false } : false,
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '5432', 10),
+    user: process.env.DB_USERNAME || 'postgres',
+    password: process.env.DB_PASSWORD || 'root',
+    database: process.env.DB_NAME || 'nodondb',
+    ssl: process.env.DB_SSL === 'true' ? {
+      rejectUnauthorized: false,
+    } : false,
   });
 
   try {
+    console.log('🔌 Conectando ao banco de dados...');
     await client.connect();
     console.log('✅ Conectado ao banco de dados');
 
@@ -35,18 +24,30 @@ async function addPasswordResetColumns() {
     const sqlFile = path.join(__dirname, 'add-password-reset-columns.sql');
     const sql = fs.readFileSync(sqlFile, 'utf8');
 
-    // Executar o SQL
+    console.log('📝 Executando migração...');
     await client.query(sql);
-    console.log('✅ Colunas de recuperação de senha adicionadas com sucesso');
+    console.log('✅ Migração executada com sucesso!');
+    console.log('✅ Colunas password_reset_token e password_reset_expires_at adicionadas à tabela users');
 
-    await client.end();
-    console.log('✅ Migration concluída');
   } catch (error) {
-    console.error('❌ Erro ao executar migration:', error);
+    console.error('❌ Erro ao executar migração:', error.message);
+    if (error.code === '42701') {
+      console.log('ℹ️  Coluna já existe, pulando...');
+    } else {
+      throw error;
+    }
+  } finally {
     await client.end();
-    process.exit(1);
+    console.log('🔌 Conexão encerrada');
   }
 }
 
-addPasswordResetColumns();
-
+runMigration()
+  .then(() => {
+    console.log('✅ Script concluído com sucesso!');
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error('❌ Erro fatal:', error);
+    process.exit(1);
+  });
