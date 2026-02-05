@@ -28,6 +28,10 @@ const paciente_entity_1 = require("../pacientes/entities/paciente.entity");
 const historico_paciente_entity_1 = require("../pacientes/entities/historico-paciente.entity");
 const radiografia_entity_1 = require("../radiografias/entities/radiografia.entity");
 const desenho_profissional_entity_1 = require("../desenhos-profissionais/entities/desenho-profissional.entity");
+const anamnese_entity_1 = require("../anamneses/entities/anamnese.entity");
+const pergunta_anamnese_entity_1 = require("../anamneses/entities/pergunta-anamnese.entity");
+const resposta_anamnese_entity_1 = require("../anamneses/entities/resposta-anamnese.entity");
+const resposta_pergunta_entity_1 = require("../anamneses/entities/resposta-pergunta.entity");
 const envLocalPath = (0, path_1.resolve)(process.cwd(), '.env.local');
 if ((0, fs_1.existsSync)(envLocalPath)) {
     (0, dotenv_1.config)({ path: envLocalPath });
@@ -88,8 +92,12 @@ let TypeOrmConfigService = class TypeOrmConfigService {
                 historico_paciente_entity_1.HistoricoPaciente,
                 radiografia_entity_1.Radiografia,
                 desenho_profissional_entity_1.DesenhoProfissional,
+                anamnese_entity_1.Anamnese,
+                pergunta_anamnese_entity_1.PerguntaAnamnese,
+                resposta_anamnese_entity_1.RespostaAnamnese,
+                resposta_pergunta_entity_1.RespostaPergunta,
             ],
-            synchronize: false,
+            synchronize: true,
             logging: this.configService.get('NODE_ENV') === 'development',
             autoLoadEntities: true,
             extra: useSsl ? {

@@ -18,6 +18,10 @@ import { Paciente } from '../pacientes/entities/paciente.entity';
 import { HistoricoPaciente } from '../pacientes/entities/historico-paciente.entity';
 import { Radiografia } from '../radiografias/entities/radiografia.entity';
 import { DesenhoProfissional } from '../desenhos-profissionais/entities/desenho-profissional.entity';
+import { Anamnese } from '../anamneses/entities/anamnese.entity';
+import { PerguntaAnamnese } from '../anamneses/entities/pergunta-anamnese.entity';
+import { RespostaAnamnese } from '../anamneses/entities/resposta-anamnese.entity';
+import { RespostaPergunta } from '../anamneses/entities/resposta-pergunta.entity';
 
 // Carregar .env.local primeiro (tem prioridade), depois .env
 const envLocalPath = resolve(process.cwd(), '.env.local');
@@ -93,6 +97,10 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
         HistoricoPaciente,
         Radiografia,
         DesenhoProfissional,
+        Anamnese,
+        PerguntaAnamnese,
+        RespostaAnamnese,
+        RespostaPergunta,
       ],
       // Desabilitar synchronize para evitar problemas com alterações de schema
       // Use migrations manuais em vez de synchronize

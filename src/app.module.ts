@@ -16,6 +16,7 @@ import { PacientesModule } from './pacientes/pacientes.module';
 import { RadiografiasModule } from './radiografias/radiografias.module';
 import { DesenhosProfissionaisModule } from './desenhos-profissionais/desenhos-profissionais.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AnamnesesModule } from './anamneses/anamneses.module';
 import { TypeOrmConfigService } from './config/typeorm.config';
 import { PlanosService } from './planos/planos.service';
 
@@ -53,6 +54,7 @@ import { PlanosService } from './planos/planos.service';
     RadiografiasModule,
     DesenhosProfissionaisModule,
     DashboardModule,
+    AnamnesesModule,
   ],
 })
 export class AppModule implements OnModuleInit {

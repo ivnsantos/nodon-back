@@ -28,6 +28,7 @@ const pacientes_module_1 = require("./pacientes/pacientes.module");
 const radiografias_module_1 = require("./radiografias/radiografias.module");
 const desenhos_profissionais_module_1 = require("./desenhos-profissionais/desenhos-profissionais.module");
 const dashboard_module_1 = require("./dashboard/dashboard.module");
+const anamneses_module_1 = require("./anamneses/anamneses.module");
 const typeorm_config_1 = require("./config/typeorm.config");
 const planos_service_1 = require("./planos/planos.service");
 let AppModule = class AppModule {
@@ -81,6 +82,7 @@ exports.AppModule = AppModule = __decorate([
             radiografias_module_1.RadiografiasModule,
             desenhos_profissionais_module_1.DesenhosProfissionaisModule,
             dashboard_module_1.DashboardModule,
+            anamneses_module_1.AnamnesesModule,
         ],
     }),
     __metadata("design:paramtypes", [planos_service_1.PlanosService])

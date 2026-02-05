@@ -43,6 +43,8 @@ let AsaasService = class AsaasService {
             throw new Error('ASAAS_API_KEY não configurada. Verifique o arquivo .env ou variáveis de ambiente do sistema');
         }
         console.log('✅ ASAAS_API_KEY configurada com sucesso');
+        console.log('✅ ASAAS_API_URL:', this.apiUrl);
+        console.log('✅ ASAAS_API_KEY:', this.apiKey);
         this.axiosInstance = axios_1.default.create({
             baseURL: this.apiUrl,
             headers: {
@@ -122,6 +124,9 @@ let AsaasService = class AsaasService {
             if (data.billingType === 'CREDIT_CARD' && data.creditCard) {
                 subscriptionPayload.creditCard = data.creditCard;
             }
+            console.log('✅ Criando assinatura no Asaas:', subscriptionPayload);
+            console.log('✅ ASAAS_API_URL:', this.apiUrl);
+            console.log('✅ ASAAS_API_KEY:', this.apiKey);
             const response = await this.axiosInstance.post('/subscriptions', subscriptionPayload);
             return response.data;
         }
