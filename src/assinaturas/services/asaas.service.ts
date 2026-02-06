@@ -58,7 +58,12 @@ export class AsaasService {
   private readonly axiosInstance: AxiosInstance;
 
   constructor(private configService: ConfigService) {
-    this.apiUrl = this.configService.get<string>('ASAAS_API_URL', 'https://sandbox.asaas.com/api/v3');
+    // Priorizar process.env.ASAAS_API_URL (carregado pelo dotenv no main.ts)
+    // pois o ConfigService com expandVariables pode tentar expandir $ como variável
+    this.apiUrl = 
+      process.env.ASAAS_API_URL || 
+      this.configService.get<string>('ASAAS_API_URL') || 
+      'https://sandbox.asaas.com/api/v3';
     
     // Priorizar process.env.ASAAS_API_KEY (carregado pelo dotenv no main.ts)
     // pois o ConfigService com expandVariables pode tentar expandir $ como variável

@@ -23,7 +23,10 @@ let AsaasService = class AsaasService {
     axiosInstance;
     constructor(configService) {
         this.configService = configService;
-        this.apiUrl = this.configService.get('ASAAS_API_URL', 'https://sandbox.asaas.com/api/v3');
+        this.apiUrl =
+            process.env.ASAAS_API_URL ||
+                this.configService.get('ASAAS_API_URL') ||
+                'https://sandbox.asaas.com/api/v3';
         this.apiKey =
             process.env.ASAAS_API_KEY ||
                 this.configService.get('ASAAS_API_KEY') ||
