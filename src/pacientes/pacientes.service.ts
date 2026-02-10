@@ -151,6 +151,111 @@ export class PacientesService {
     }
   }
 
+  async buscar(cpf?: string, nome?: string, clienteMasterId?: string, userId?: string, userTipo?: string): Promise<any[]> {
+    try {
+      const queryBuilder = this.pacienteRepository.createQueryBuilder('paciente');
+
+      // Se clienteMasterId foi fornecido, filtrar por ele e verificar permissão
+      if (clienteMasterId && userId && userTipo) {
+        await this.verificarPermissao(userId, userTipo, clienteMasterId);
+        queryBuilder.where('paciente.clienteMasterId = :clienteMasterId', { clienteMasterId });
+      } else if (userId && userTipo) {
+        // Se não foi fornecido clienteMasterId, buscar em todos os clientes master que o usuário tem acesso
+        if (userTipo === 'master') {
+          const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+          const clienteMasterIds = clientesMaster.map(cm => cm.id);
+          if (clienteMasterIds.length > 0) {
+            queryBuilder.where('paciente.clienteMasterId IN (:...clienteMasterIds)', { clienteMasterIds });
+          } else {
+            // Usuário master sem clientes master, retornar vazio
+            return [];
+          }
+        } else {
+          // Usuário comum - buscar nos clientes master vinculados
+          const usuariosComuns = await this.userComumService.findByUserId(userId);
+          const clienteMasterIds = usuariosComuns.map(uc => uc.clienteMasterId);
+          if (clienteMasterIds.length > 0) {
+            queryBuilder.where('paciente.clienteMasterId IN (:...clienteMasterIds)', { clienteMasterIds });
+          } else {
+            // Usuário comum sem vínculos, retornar vazio
+            return [];
+          }
+        }
+      }
+
+      // Adicionar filtros de busca
+      if (cpf) {
+        queryBuilder.andWhere('paciente.cpf ILIKE :cpf', { cpf: `%${cpf}%` });
+      }
+
+      if (nome) {
+        queryBuilder.andWhere('paciente.nome ILIKE :nome', { nome: `%${nome}%` });
+      }
+
+      // Selecionar apenas os campos necessários (sem relações)
+      queryBuilder.select([
+        'paciente.id',
+        'paciente.clienteMasterId',
+        'paciente.nome',
+        'paciente.cpf',
+        'paciente.dataNascimento',
+        'paciente.email',
+        'paciente.telefone',
+        'paciente.status',
+        'paciente.cep',
+        'paciente.rua',
+        'paciente.numero',
+        'paciente.complemento',
+        'paciente.bairro',
+        'paciente.cidade',
+        'paciente.estado',
+        'paciente.necessidades',
+        'paciente.observacoes',
+        'paciente.createdAt',
+        'paciente.updatedAt',
+      ]);
+
+      // Ordenar por data de criação
+      queryBuilder.orderBy('paciente.createdAt', 'DESC');
+
+      const pacientes = await queryBuilder.getMany();
+      
+      // Converter para objetos simples sem propriedades do TypeORM
+      return pacientes.map(paciente => ({
+        id: paciente.id,
+        clienteMasterId: paciente.clienteMasterId,
+        nome: paciente.nome,
+        cpf: paciente.cpf,
+        dataNascimento: paciente.dataNascimento,
+        email: paciente.email,
+        telefone: paciente.telefone,
+        status: paciente.status,
+        cep: paciente.cep,
+        rua: paciente.rua,
+        numero: paciente.numero,
+        complemento: paciente.complemento,
+        bairro: paciente.bairro,
+        cidade: paciente.cidade,
+        estado: paciente.estado,
+        necessidades: paciente.necessidades,
+        observacoes: paciente.observacoes,
+        createdAt: paciente.createdAt,
+        updatedAt: paciente.updatedAt,
+      }));
+    } catch (error) {
+      console.error('❌ Erro ao buscar pacientes:', {
+        cpf,
+        nome,
+        clienteMasterId,
+        userId,
+        userTipo,
+        error: error?.message || error,
+        stack: error?.stack,
+      });
+      throw error;
+    }
+  }
+
   async findOne(id: string, userId: string, userTipo: string): Promise<Paciente> {
     const paciente = await this.pacienteRepository.findOne({
       where: { id },

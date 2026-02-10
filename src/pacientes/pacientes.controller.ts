@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Put, Param, Delete, UseGuards, Request, Query, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Put, Param, Delete, UseGuards, Request, Query, BadRequestException, Res, Headers } from '@nestjs/common';
+import type { Response } from 'express';
 import { PacientesService } from './pacientes.service';
 import { PacientesHistoricoService } from './pacientes-historico.service';
 import { CreatePacienteDto } from './dto/create-paciente.dto';
 import { UpdatePacienteDto } from './dto/update-paciente.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ValidateResourceAccessGuard } from '../auth/guards/validate-resource-access.guard';
 
 @Controller('pacientes')
 @UseGuards(JwtAuthGuard)
@@ -16,6 +18,51 @@ export class PacientesController {
   @Post()
   async create(@Body() createPacienteDto: CreatePacienteDto, @Request() req) {
     return this.pacientesService.create(createPacienteDto, req.user.id, req.user.tipo);
+  }
+
+  @Get('buscar')
+  @UseGuards(ValidateResourceAccessGuard)
+  async buscar(
+    @Res() res: Response,
+    @Request() req,
+    @Query('cpf') cpf?: string,
+    @Query('nome') nome?: string,
+    @Headers('x-cliente-master-id') clienteMasterIdHeader?: string,
+  ) {
+    try {
+      if (!cpf && !nome) {
+        throw new BadRequestException('É necessário fornecer pelo menos um parâmetro de busca (cpf ou nome)');
+      }
+
+      // Obter clienteMasterId do header (case-insensitive)
+      // O guard já validou o acesso, então podemos usar diretamente
+      const clienteMasterId = clienteMasterIdHeader || 
+        req.headers['x-cliente-master-id'] || 
+        req.headers['X-Cliente-Master-Id'] ||
+        null;
+
+      const pacientes = await this.pacientesService.buscar(
+        cpf,
+        nome,
+        clienteMasterId ? String(clienteMasterId).trim() : undefined,
+        req.user.id,
+        req.user.tipo,
+      );
+
+      // Retornar diretamente sem passar pelo interceptor
+      return res.json(pacientes);
+    } catch (error) {
+      console.error('❌ Erro no controller de pacientes (buscar):', {
+        cpf,
+        nome,
+        clienteMasterId: req.headers['x-cliente-master-id'] || req.headers['X-Cliente-Master-Id'],
+        userId: req.user?.id,
+        userTipo: req.user?.tipo,
+        error: error?.message || error,
+        stack: error?.stack,
+      });
+      throw error;
+    }
   }
 
   @Get()

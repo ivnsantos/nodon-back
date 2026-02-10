@@ -21,6 +21,20 @@ export class TransformInterceptor<T>
     context: ExecutionContext,
     next: CallHandler,
   ): Observable<Response<T>> {
+    const request = context.switchToHttp().getRequest();
+    // Pegar apenas o path sem query strings
+    const path = request.path || request.url?.split('?')[0];
+    
+    // Rotas que devem retornar dados diretamente sem wrapper
+    const skipTransformPaths = [
+      '/api/pacientes/buscar',
+    ];
+    
+    // Se a rota está na lista de exceções, retornar dados diretamente
+    if (skipTransformPaths.some(skipPath => path?.includes(skipPath))) {
+      return next.handle();
+    }
+    
     return next.handle().pipe(
       map((data) => ({
         statusCode: context.switchToHttp().getResponse().statusCode,

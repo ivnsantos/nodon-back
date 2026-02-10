@@ -260,12 +260,19 @@ export class UsersController {
     }
 
     // Buscar todos os UserComum vinculados a este ClienteMaster
+    console.log('🔍 Buscando UserComum para clienteMasterId:', clienteMasterId);
     const usuarios = await this.userComumService.findByClienteMasterId(clienteMasterId);
+    console.log(`✅ Encontrados ${usuarios.length} UserComum vinculados`);
 
     // Montar resposta simplificada
     const usuariosSimplificados = await Promise.all(
       usuarios.map(async (usuario) => {
         const userBase = await this.userBaseService.findById(usuario.userId);
+        console.log('📋 Processando UserComum:', {
+          userComumId: usuario.id,
+          userId: usuario.userId,
+          userBaseNome: userBase?.nome,
+        });
         return {
           id: usuario.id, // ID do UserComum, não do UserBase
           nome: userBase?.nome || 'Nome não disponível',
