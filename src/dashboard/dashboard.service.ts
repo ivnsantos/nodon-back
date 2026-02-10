@@ -26,10 +26,11 @@ export class DashboardService {
   ) {}
 
   async getDashboardData(clienteMasterId: string, userId: string, userTipo: string) {
-    const agora = new Date();
-    const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
-    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
-    const fimMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0, 23, 59, 59);
+    try {
+      const agora = new Date();
+      const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+      const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+      const fimMes = new Date(agora.getFullYear(), agora.getMonth() + 1, 0, 23, 59, 59);
     
     // Início e fim da semana (domingo a sábado)
     const diaSemana = agora.getDay();
@@ -42,16 +43,14 @@ export class DashboardService {
     // 1. Diagnósticos (Radiografias)
     const totalDiagnosticos = await this.radiografiaRepository
       .createQueryBuilder('radiografia')
-      .innerJoin('radiografia.masterClient', 'clienteMaster')
-      .where('clienteMaster.id = :clienteMasterId', { clienteMasterId })
+      .where('radiografia.clienteMasterId = :clienteMasterId', { clienteMasterId })
       .getCount();
     
     const diagnosticosEsteMes = await this.radiografiaRepository
       .createQueryBuilder('radiografia')
-      .innerJoin('radiografia.masterClient', 'clienteMaster')
-      .where('clienteMaster.id = :clienteMasterId', { clienteMasterId })
-      .andWhere('radiografia.created_at >= :inicioMes', { inicioMes })
-      .andWhere('radiografia.created_at <= :fimMes', { fimMes })
+      .where('radiografia.clienteMasterId = :clienteMasterId', { clienteMasterId })
+      .andWhere('radiografia.createdAt >= :inicioMes', { inicioMes })
+      .andWhere('radiografia.createdAt <= :fimMes', { fimMes })
       .getCount();
 
     // 2. Conversas (Chat)
@@ -63,9 +62,29 @@ export class DashboardService {
     const porcentagemTokens = tokensLimite > 0 ? Math.round((tokensUsados / tokensLimite) * 100 * 10) / 10 : 0;
 
     // 3. Consultas
+    // Para consultas de hoje, usar início e fim do dia para garantir comparação correta
+    const inicioHoje = new Date(hoje);
+    inicioHoje.setHours(0, 0, 0, 0);
+    const fimHoje = new Date(hoje);
+    fimHoje.setHours(23, 59, 59, 999);
+    
     const consultasHoje = await this.calendarioService.findAllConsultas(clienteMasterId, {
-      dataInicio: hoje.toISOString().split('T')[0],
-      dataFim: hoje.toISOString().split('T')[0],
+      dataInicio: inicioHoje.toISOString().split('T')[0],
+      dataFim: fimHoje.toISOString().split('T')[0],
+    });
+    
+    // Filtrar apenas consultas que realmente são de hoje (comparar apenas a data)
+    const hojeStr = hoje.toISOString().split('T')[0];
+    const consultasHojeFiltradas = consultasHoje.filter(consulta => {
+      let dataConsulta: Date;
+      if (consulta.dataConsulta instanceof Date) {
+        dataConsulta = consulta.dataConsulta;
+      } else if (typeof consulta.dataConsulta === 'string') {
+        dataConsulta = new Date(consulta.dataConsulta);
+      } else {
+        dataConsulta = new Date(consulta.dataConsulta as any);
+      }
+      return dataConsulta.toISOString().split('T')[0] === hojeStr;
     });
     
     const consultasEstaSemana = await this.calendarioService.findAllConsultas(clienteMasterId, {
@@ -89,9 +108,8 @@ export class DashboardService {
     const diagnosticosRecentes = await this.radiografiaRepository
       .createQueryBuilder('radiografia')
       .leftJoinAndSelect('radiografia.paciente', 'paciente')
-      .innerJoin('radiografia.masterClient', 'clienteMaster')
-      .where('clienteMaster.id = :clienteMasterId', { clienteMasterId })
-      .orderBy('radiografia.created_at', 'DESC')
+      .where('radiografia.clienteMasterId = :clienteMasterId', { clienteMasterId })
+      .orderBy('radiografia.createdAt', 'DESC')
       .limit(5)
       .getMany();
 
@@ -113,7 +131,7 @@ export class DashboardService {
           porcentagemTokensUsados: porcentagemTokens,
         },
         consultas: {
-          hoje: consultasHoje.length,
+          hoje: consultasHojeFiltradas.length,
           estaSemana: consultasEstaSemana.length,
         },
         clientes: {
@@ -121,24 +139,58 @@ export class DashboardService {
           ativos: pacientesAtivos.length,
         },
       },
-      proximasConsultas: proximasConsultas.slice(0, 3).map(consulta => ({
-        id: consulta.id,
-        hora: consulta.horaConsulta,
-        paciente: consulta.paciente?.nome || 'Paciente',
-        tipo: consulta.tipoConsulta?.nome || 'Consulta',
-        data: consulta.dataConsulta.toISOString().split('T')[0],
-        dataRelativa: this.getDataRelativa(consulta.dataConsulta),
-      })),
+      proximasConsultas: proximasConsultas.slice(0, 3).map(consulta => {
+        // Converter dataConsulta para Date se necessário
+        let dataConsulta: Date;
+        if (consulta.dataConsulta instanceof Date) {
+          dataConsulta = consulta.dataConsulta;
+        } else if (typeof consulta.dataConsulta === 'string') {
+          dataConsulta = new Date(consulta.dataConsulta);
+        } else {
+          dataConsulta = new Date(consulta.dataConsulta as any);
+        }
+
+        return {
+          id: consulta.id,
+          hora: consulta.horaConsulta,
+          paciente: consulta.paciente?.nome || 'Paciente',
+          tipo: consulta.tipoConsulta?.nome || 'Consulta',
+          data: dataConsulta.toISOString().split('T')[0],
+          dataRelativa: this.getDataRelativa(dataConsulta),
+        };
+      }),
       usoTokens,
-      diagnosticosRecentes: diagnosticosRecentes.map(diag => ({
-        id: diag.id,
-        paciente: diag.paciente?.nome || diag.nome,
-        tipoExame: diag.tipoExame || 'Radiografia',
-        data: diag.data.toISOString().split('T')[0],
-        achados: diag.achadosRadiograficos?.length || 0,
-        status: diag.achadosRadiograficos && diag.achadosRadiograficos.length > 0 ? 'completo' : 'pendente',
-      })),
+      diagnosticosRecentes: diagnosticosRecentes.map(diag => {
+        // Converter data para Date se necessário
+        let data: Date;
+        if (diag.data instanceof Date) {
+          data = diag.data;
+        } else if (typeof diag.data === 'string') {
+          data = new Date(diag.data);
+        } else {
+          data = new Date(diag.data as any);
+        }
+
+        return {
+          id: diag.id,
+          paciente: diag.paciente?.nome || diag.nome,
+          tipoExame: diag.tipoExame || 'Radiografia',
+          data: data.toISOString().split('T')[0],
+          achados: diag.achadosRadiograficos?.length || 0,
+          status: diag.achadosRadiograficos && diag.achadosRadiograficos.length > 0 ? 'completo' : 'pendente',
+        };
+      }),
     };
+    } catch (error) {
+      console.error('❌ Erro ao buscar dados do dashboard:', {
+        clienteMasterId,
+        userId,
+        userTipo,
+        error: error?.message || error,
+        stack: error?.stack,
+      });
+      throw error;
+    }
   }
 
   private getDataRelativa(data: Date): string {

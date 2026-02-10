@@ -16,6 +16,9 @@ export class Radiografia {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({ name: 'cliente_master_id', type: 'uuid' })
+  clienteMasterId: string;
+
   @ManyToOne(() => ClienteMaster)
   @JoinColumn({ name: 'cliente_master_id' })
   masterClient: ClienteMaster;
