@@ -19,6 +19,7 @@ export declare class AuthController {
             id: any;
             nome: any;
             email: any;
+            telefone: string | null;
             tipo: any;
             isAdmin: boolean;
             isEmailVerified: boolean;
@@ -67,14 +68,14 @@ export declare class AuthController {
         message: string;
         userId: any;
     }>;
-    verifyEmail(body: {
-        email: string;
+    verifyPhone(body: {
+        telefone: string;
         code: string;
     }): Promise<{
         message: string;
     }>;
     resendVerificationCode(body: {
-        email: string;
+        telefone: string;
     }): Promise<{
         message: string;
         code?: undefined;
@@ -83,6 +84,12 @@ export declare class AuthController {
         message: string;
         code: string;
         warning: string;
+    }>;
+    verifyEmail(body: {
+        email: string;
+        code: string;
+    }): Promise<{
+        message: string;
     }>;
     getMe(req: any): Promise<{
         id: string;

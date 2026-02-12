@@ -82,20 +82,29 @@ export class AuthController {
     return this.authService.logout(req.user);
   }
 
+  @Post('verify-phone')
+  async verifyPhone(@Body() body: { telefone: string; code: string }) {
+    if (!body.telefone || !body.code) {
+      throw new BadRequestException('Telefone e código são obrigatórios');
+    }
+    return this.authService.verifyPhone(body.telefone, body.code);
+  }
+
+  @Post('resend-verification-code')
+  async resendVerificationCode(@Body() body: { telefone: string }) {
+    if (!body.telefone) {
+      throw new BadRequestException('Telefone é obrigatório');
+    }
+    return this.authService.resendVerificationCode(body.telefone);
+  }
+
+  // Manter método antigo para compatibilidade (deprecated)
   @Post('verify-email')
   async verifyEmail(@Body() body: { email: string; code: string }) {
     if (!body.email || !body.code) {
       throw new BadRequestException('E-mail e código são obrigatórios');
     }
     return this.authService.verifyEmail(body.email, body.code);
-  }
-
-  @Post('resend-verification-code')
-  async resendVerificationCode(@Body() body: { email: string }) {
-    if (!body.email) {
-      throw new BadRequestException('E-mail é obrigatório');
-    }
-    return this.authService.resendVerificationCode(body.email);
   }
 
   @Get('me')

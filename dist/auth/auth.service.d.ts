@@ -6,6 +6,7 @@ import { ClientesMasterService } from '../users/clientes-master.service';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
 import { EmailService } from '../email/email.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 export interface ClienteMasterInfo {
     id: string;
     hash: string | null;
@@ -45,7 +46,8 @@ export declare class AuthService {
     private planosService;
     private jwtService;
     private emailService;
-    constructor(usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, clientesMasterService: ClientesMasterService, assinaturasService: AssinaturasService, planosService: PlanosService, jwtService: JwtService, emailService: EmailService);
+    private whatsappService;
+    constructor(usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, clientesMasterService: ClientesMasterService, assinaturasService: AssinaturasService, planosService: PlanosService, jwtService: JwtService, emailService: EmailService, whatsappService: WhatsAppService);
     validateUser(email: string, password: string): Promise<any>;
     login(email: string, password: string): Promise<{
         access_token: string;
@@ -53,6 +55,7 @@ export declare class AuthService {
             id: any;
             nome: any;
             email: any;
+            telefone: string | null;
             tipo: any;
             isAdmin: boolean;
             isEmailVerified: boolean;
@@ -117,10 +120,13 @@ export declare class AuthService {
         updatedAt: Date;
     }>;
     generateTokenForUser(userId: string, email: string, tipo: string): Promise<string>;
+    verifyPhone(telefone: string, code: string): Promise<{
+        message: string;
+    }>;
     verifyEmail(email: string, code: string): Promise<{
         message: string;
     }>;
-    resendVerificationCode(email: string): Promise<{
+    resendVerificationCode(telefone: string): Promise<{
         message: string;
         code?: undefined;
         warning?: undefined;

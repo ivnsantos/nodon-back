@@ -59,6 +59,10 @@ export class UserBaseService {
     return this.userBaseRepository.findOne({ where: { email } });
   }
 
+  async findByTelefone(telefone: string): Promise<UserBase | null> {
+    return this.userBaseRepository.findOne({ where: { telefone } });
+  }
+
   async findById(id: string): Promise<UserBase | null> {
     return this.userBaseRepository.findOne({ 
       where: { id },

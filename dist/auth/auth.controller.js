@@ -62,17 +62,23 @@ let AuthController = class AuthController {
     async logout(req) {
         return this.authService.logout(req.user);
     }
+    async verifyPhone(body) {
+        if (!body.telefone || !body.code) {
+            throw new common_1.BadRequestException('Telefone e código são obrigatórios');
+        }
+        return this.authService.verifyPhone(body.telefone, body.code);
+    }
+    async resendVerificationCode(body) {
+        if (!body.telefone) {
+            throw new common_1.BadRequestException('Telefone é obrigatório');
+        }
+        return this.authService.resendVerificationCode(body.telefone);
+    }
     async verifyEmail(body) {
         if (!body.email || !body.code) {
             throw new common_1.BadRequestException('E-mail e código são obrigatórios');
         }
         return this.authService.verifyEmail(body.email, body.code);
-    }
-    async resendVerificationCode(body) {
-        if (!body.email) {
-            throw new common_1.BadRequestException('E-mail é obrigatório');
-        }
-        return this.authService.resendVerificationCode(body.email);
     }
     async getMe(req) {
         return this.authService.getMe(req.user.id);
@@ -217,12 +223,12 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "logout", null);
 __decorate([
-    (0, common_1.Post)('verify-email'),
+    (0, common_1.Post)('verify-phone'),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
-], AuthController.prototype, "verifyEmail", null);
+], AuthController.prototype, "verifyPhone", null);
 __decorate([
     (0, common_1.Post)('resend-verification-code'),
     __param(0, (0, common_1.Body)()),
@@ -230,6 +236,13 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "resendVerificationCode", null);
+__decorate([
+    (0, common_1.Post)('verify-email'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "verifyEmail", null);
 __decorate([
     (0, common_1.Get)('me'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

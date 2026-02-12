@@ -8,6 +8,7 @@ import { ClientesMasterService } from '../users/clientes-master.service';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
 import { EmailService } from '../email/email.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { ClienteMaster } from '../users/entities/cliente-master.entity';
 
 export interface ClienteMasterInfo {
@@ -53,6 +54,7 @@ export class AuthService {
     private planosService: PlanosService,
     private jwtService: JwtService,
     private emailService: EmailService,
+    private whatsappService: WhatsAppService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -171,6 +173,7 @@ export class AuthService {
         id: user.id,
         nome: user.nome,
         email: user.email,
+        telefone: userBase?.telefone || null,
         tipo: tipo,
         isAdmin: isAdmin,
         isEmailVerified: isEmailVerified,
@@ -244,24 +247,48 @@ export class AuthService {
       cnpj: data.cnpj,
     });
 
-    // Enviar email de verificação apenas se não estiver verificado
+    // Enviar código de verificação via WhatsApp se houver telefone, caso contrário via email
     if (!isVerified && verificationToken) {
-      try {
-        await this.emailService.sendVerificationCode(
-          userBase.email,
-          verificationToken,
-          userBase.nome,
-        );
-      } catch (error) {
-        console.error('Erro ao enviar email de verificação:', error);
-        // Não falhar o registro se o email não for enviado, mas logar o erro
+      if (userBase.telefone) {
+        try {
+          await this.whatsappService.sendVerificationCode(
+            userBase.telefone,
+            verificationToken,
+            userBase.nome,
+          );
+        } catch (error) {
+          console.error('Erro ao enviar WhatsApp de verificação:', error);
+          // Tentar enviar por email como fallback
+          try {
+            await this.emailService.sendVerificationCode(
+              userBase.email,
+              verificationToken,
+              userBase.nome,
+            );
+          } catch (emailError) {
+            console.error('Erro ao enviar email de verificação:', emailError);
+          }
+        }
+      } else {
+        // Se não tem telefone, enviar por email
+        try {
+          await this.emailService.sendVerificationCode(
+            userBase.email,
+            verificationToken,
+            userBase.nome,
+          );
+        } catch (error) {
+          console.error('Erro ao enviar email de verificação:', error);
+        }
       }
     }
 
     return {
       message: isVerified 
-        ? 'Cadastro realizado com sucesso! Seu e-mail já estava verificado em outra conta.'
-        : 'Cadastro realizado com sucesso! Por favor, verifique seu e-mail para ativar sua conta.',
+        ? 'Cadastro realizado com sucesso! Seu telefone já estava verificado em outra conta.'
+        : userBase.telefone
+          ? 'Cadastro realizado com sucesso! Por favor, verifique seu telefone via WhatsApp para ativar sua conta.'
+          : 'Cadastro realizado com sucesso! Por favor, verifique seu e-mail para ativar sua conta.',
       user: {
         id: clienteMaster.id,
         userId: userBase.id,
@@ -329,24 +356,48 @@ export class AuthService {
       status: 'ativo',
     });
 
-    // Enviar email de verificação apenas se não estiver verificado
+    // Enviar código de verificação via WhatsApp se houver telefone, caso contrário via email
     if (!isVerified && verificationToken) {
-      try {
-        await this.emailService.sendVerificationCode(
-          userBase.email,
-          verificationToken,
-          userBase.nome,
-        );
-      } catch (error) {
-        console.error('Erro ao enviar email de verificação:', error);
-        // Não falhar o registro se o email não for enviado, mas logar o erro
+      if (userBase.telefone) {
+        try {
+          await this.whatsappService.sendVerificationCode(
+            userBase.telefone,
+            verificationToken,
+            userBase.nome,
+          );
+        } catch (error) {
+          console.error('Erro ao enviar WhatsApp de verificação:', error);
+          // Tentar enviar por email como fallback
+          try {
+            await this.emailService.sendVerificationCode(
+              userBase.email,
+              verificationToken,
+              userBase.nome,
+            );
+          } catch (emailError) {
+            console.error('Erro ao enviar email de verificação:', emailError);
+          }
+        }
+      } else {
+        // Se não tem telefone, enviar por email
+        try {
+          await this.emailService.sendVerificationCode(
+            userBase.email,
+            verificationToken,
+            userBase.nome,
+          );
+        } catch (error) {
+          console.error('Erro ao enviar email de verificação:', error);
+        }
       }
     }
 
     return {
       message: isVerified
-        ? 'Usuário cadastrado com sucesso! Seu e-mail já estava verificado em outra conta.'
-        : 'Usuário cadastrado com sucesso! Por favor, verifique seu e-mail para ativar sua conta.',
+        ? 'Usuário cadastrado com sucesso! Seu telefone já estava verificado em outra conta.'
+        : userBase.telefone
+          ? 'Usuário cadastrado com sucesso! Por favor, verifique seu telefone via WhatsApp para ativar sua conta.'
+          : 'Usuário cadastrado com sucesso! Por favor, verifique seu e-mail para ativar sua conta.',
       user: {
         id: userBase.id,
         nome: userBase.nome,
@@ -435,6 +486,33 @@ export class AuthService {
     return this.jwtService.sign(payload);
   }
 
+  async verifyPhone(telefone: string, code: string) {
+    // Buscar UserBase pelo telefone
+    const userBase = await this.userBaseService.findByTelefone(telefone);
+    
+    if (!userBase) {
+      throw new BadRequestException('Telefone não encontrado.');
+    }
+
+    if (!userBase.telefone) {
+      throw new BadRequestException('Telefone não cadastrado para este usuário.');
+    }
+
+    // Verificar se o código está correto
+    if (userBase.verificationToken !== code) {
+      throw new BadRequestException('Código de verificação inválido.');
+    }
+    
+    // Verificar se o token expirou
+    if (userBase.tokenExpiresAt && new Date() > userBase.tokenExpiresAt) {
+      throw new BadRequestException('Código de verificação expirado. Por favor, solicite um novo.');
+    }
+    
+    await this.userBaseService.updateVerificationStatus(userBase.id, true);
+    return { message: 'Telefone verificado com sucesso!' };
+  }
+
+  // Manter método antigo para compatibilidade (deprecated)
   async verifyEmail(email: string, code: string) {
     // Buscar UserBase pelo email (email é único)
     const userBase = await this.userBaseService.findByEmail(email);
@@ -457,17 +535,21 @@ export class AuthService {
     return { message: 'E-mail verificado com sucesso!' };
   }
 
-  async resendVerificationCode(email: string) {
-    // Buscar UserBase pelo email (email é único)
-    const userBase = await this.userBaseService.findByEmail(email);
+  async resendVerificationCode(telefone: string) {
+    // Buscar UserBase pelo telefone
+    const userBase = await this.userBaseService.findByTelefone(telefone);
     
     if (!userBase) {
-      throw new BadRequestException('E-mail não encontrado.');
+      throw new BadRequestException('Telefone não encontrado.');
+    }
+
+    if (!userBase.telefone) {
+      throw new BadRequestException('Telefone não cadastrado para este usuário.');
     }
 
     // Verificar se já está verificado
     if (userBase.isVerified) {
-      throw new BadRequestException('Este e-mail já foi verificado.');
+      throw new BadRequestException('Este telefone já foi verificado.');
     }
     
     // Gerar novo código
@@ -480,17 +562,17 @@ export class AuthService {
       tokenExpiresAt,
     });
     
-    // Tentar enviar email, mas não falhar se houver erro de configuração
+    // Enviar código via WhatsApp
     try {
-      await this.emailService.sendVerificationCode(userBase.email, verificationToken, userBase.nome);
-      return { message: 'Código de verificação reenviado com sucesso!' };
+      await this.whatsappService.sendVerificationCode(userBase.telefone, verificationToken, userBase.nome);
+      return { message: 'Código de verificação enviado via WhatsApp com sucesso!' };
     } catch (error) {
-      console.error('Erro ao enviar email de verificação:', error);
-      // Retornar o código mesmo se o email falhar (para desenvolvimento/testes)
+      console.error('Erro ao enviar WhatsApp de verificação:', error);
+      // Retornar o código mesmo se o WhatsApp falhar (para desenvolvimento/testes)
       return { 
-        message: 'Código de verificação gerado. Verifique a configuração de email para envio automático.',
+        message: 'Código de verificação gerado. Verifique a configuração de WhatsApp para envio automático.',
         code: verificationToken, // Apenas para desenvolvimento - remover em produção
-        warning: 'Email não foi enviado devido a erro de configuração SMTP'
+        warning: 'WhatsApp não foi enviado devido a erro de configuração'
       };
     }
   }
