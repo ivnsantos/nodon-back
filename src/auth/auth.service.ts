@@ -564,16 +564,37 @@ export class AuthService {
     
     // Enviar código via WhatsApp
     try {
-      await this.whatsappService.sendVerificationCode(userBase.telefone, verificationToken, userBase.nome);
+      const response = await this.whatsappService.sendVerificationCode(userBase.telefone, verificationToken, userBase.nome);
+      console.log('🔄 Resposta do WhatsApp:', response);
       return { message: 'Código de verificação enviado via WhatsApp com sucesso!' };
-    } catch (error) {
-      console.error('Erro ao enviar WhatsApp de verificação:', error);
-      // Retornar o código mesmo se o WhatsApp falhar (para desenvolvimento/testes)
-      return { 
-        message: 'Código de verificação gerado. Verifique a configuração de WhatsApp para envio automático.',
-        code: 'XXXXXX', // Apenas para desenvolvimento - remover em produção
-        warning: 'WhatsApp não foi enviado devido a erro de configuração'
-      };
+    } catch (error: any) {
+      console.error('❌ Erro ao enviar WhatsApp de verificação:', {
+        telefone: userBase.telefone,
+        error: error?.response?.data || error?.message,
+        status: error?.response?.status,
+        url: error?.config?.url,
+        code: error?.code,
+      });
+      
+      // Se for erro de conexão ou URL incorreta, lançar exceção
+      if (error?.code === 'ECONNREFUSED' || error?.code === 'ENOTFOUND' || error?.code === 'ETIMEDOUT') {
+        throw new BadRequestException(
+          `Erro ao conectar com o serviço de WhatsApp. Verifique se a API está rodando e acessível. Erro: ${error.message}`
+        );
+      }
+      
+      // Se for erro HTTP, lançar exceção com detalhes
+      if (error?.response) {
+        const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message;
+        throw new BadRequestException(
+          `Erro ao enviar WhatsApp: ${errorMessage}`
+        );
+      }
+      
+      // Para outros erros, lançar exceção genérica
+      throw new BadRequestException(
+        `Erro ao enviar código via WhatsApp: ${error?.message || 'Erro desconhecido'}`
+      );
     }
   }
 
