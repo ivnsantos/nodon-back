@@ -89,6 +89,35 @@ export class PacientesController {
     return this.pacientesService.findOne(id, req.user.id, req.user.tipo);
   }
 
+  @Get(':id/completo')
+  @UseGuards(ValidateResourceAccessGuard)
+  async findOneCompleto(
+    @Param('id') id: string,
+    @Query('clienteMasterId') clienteMasterId: string,
+    @Headers('x-cliente-master-id') clienteMasterIdHeader: string,
+    @Request() req,
+  ) {
+    try {
+      const clienteMasterIdFinal = clienteMasterId || clienteMasterIdHeader;
+      
+      if (!clienteMasterIdFinal) {
+        throw new BadRequestException('clienteMasterId é obrigatório (query ou header)');
+      }
+
+      return await this.pacientesService.findOneCompleto(id, clienteMasterIdFinal, req.user.id, req.user.tipo);
+    } catch (error) {
+      console.error('❌ Erro no controller de pacientes (findOneCompleto):', {
+        id,
+        clienteMasterId: clienteMasterId || clienteMasterIdHeader,
+        userId: req.user?.id,
+        userTipo: req.user?.tipo,
+        error: error?.message || error,
+        stack: error?.stack,
+      });
+      throw error;
+    }
+  }
+
   @Put(':id')
   async update(@Param('id') id: string, @Body() updatePacienteDto: UpdatePacienteDto, @Request() req) {
     return this.pacientesService.update(id, updatePacienteDto, req.user.id, req.user.tipo);

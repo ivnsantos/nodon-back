@@ -9,6 +9,7 @@ import { UpdatePacienteDto } from './dto/update-paciente.dto';
 import { UserComumService } from '../users/services/user-comum.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { PacientesHistoricoService } from './pacientes-historico.service';
+import { QuestionariosService } from '../questionarios/questionarios.service';
 
 @Injectable()
 export class PacientesService {
@@ -25,6 +26,9 @@ export class PacientesService {
     @Optional()
     @Inject(forwardRef(() => PacientesHistoricoService))
     private historicoService?: PacientesHistoricoService,
+    @Optional()
+    @Inject(forwardRef(() => QuestionariosService))
+    private questionariosService?: QuestionariosService,
   ) {}
 
   async create(createPacienteDto: CreatePacienteDto, userId: string, userTipo: string): Promise<Paciente> {
@@ -75,7 +79,7 @@ export class PacientesService {
     }
   }
 
-  async findAll(clienteMasterId: string, userId: string, userTipo: string): Promise<Paciente[]> {
+  async findAll(clienteMasterId: string, userId: string, userTipo: string): Promise<any[]> {
     try {
       console.log('🔍 Buscando pacientes:', { clienteMasterId, userId, userTipo });
       
@@ -86,10 +90,9 @@ export class PacientesService {
       // Tentar buscar pacientes - usar query raw como fallback se a coluna não existir
       let pacientes: Paciente[];
       try {
-        // Primeiro tentar com find normal
+        // Primeiro tentar com find normal (sem relações para retornar apenas dados básicos)
         pacientes = await this.pacienteRepository.find({
           where: { clienteMasterId },
-          relations: ['masterClient', 'radiografias'],
           order: { createdAt: 'DESC' },
         });
       } catch (error: any) {
@@ -106,7 +109,6 @@ export class PacientesService {
             );
             pacientes = rawPacientes.map((row: any) => {
               const paciente = new Paciente();
-              // Mapear cliente_master_id para clienteMasterId
               paciente.clienteMasterId = row.cliente_master_id || row.cliente_master_id;
               paciente.id = row.id;
               paciente.nome = row.nome;
@@ -137,8 +139,19 @@ export class PacientesService {
         }
       }
       
-      console.log(`✅ Encontrados ${pacientes.length} pacientes`);
-      return pacientes;
+      // Retornar apenas dados básicos
+      const pacientesBasicos = pacientes.map(paciente => ({
+        id: paciente.id,
+        nome: paciente.nome,
+        cpf: paciente.cpf,
+        dataNascimento: paciente.dataNascimento,
+        email: paciente.email,
+        telefone: paciente.telefone,
+        status: paciente.status,
+      }));
+      
+      console.log(`✅ Encontrados ${pacientesBasicos.length} pacientes`);
+      return pacientesBasicos;
     } catch (error) {
       console.error('❌ Erro ao buscar pacientes:', {
         clienteMasterId,
@@ -270,6 +283,124 @@ export class PacientesService {
     await this.verificarPermissao(userId, userTipo, paciente.clienteMasterId);
 
     return paciente;
+  }
+
+  /**
+   * Busca um paciente específico com todos os dados completos (similar ao findAll mas para um paciente)
+   * Inclui informações sobre feedbacks/questionários vinculados
+   */
+  async findOneCompleto(id: string, clienteMasterId: string, userId: string, userTipo: string): Promise<any> {
+    try {
+      console.log('🔍 Buscando paciente completo:', { id, clienteMasterId, userId, userTipo });
+      
+      // Verificar permissão
+      await this.verificarPermissao(userId, userTipo, clienteMasterId);
+      console.log('✅ Permissão verificada');
+
+      // Buscar paciente com todas as relações
+      let paciente: Paciente | null;
+      try {
+        paciente = await this.pacienteRepository.findOne({
+          where: { id, clienteMasterId },
+          relations: ['masterClient', 'radiografias'],
+        });
+      } catch (error: any) {
+        // Se falhar (provavelmente porque a coluna não existe), usar query raw
+        if (error?.message?.includes('cliente_master_id') || error?.message?.includes('não existe')) {
+          console.warn('⚠️ Coluna cliente_master_id não encontrada, usando query raw...');
+          
+          const rawPacientes = await this.pacienteRepository.query(
+            'SELECT * FROM pacientes WHERE id = $1 AND cliente_master_id = $2 LIMIT 1',
+            [id, clienteMasterId]
+          );
+
+          if (!rawPacientes || rawPacientes.length === 0) {
+            throw new NotFoundException('Paciente não encontrado');
+          }
+
+          const row = rawPacientes[0];
+          paciente = new Paciente();
+          paciente.clienteMasterId = row.cliente_master_id;
+          paciente.id = row.id;
+          paciente.nome = row.nome;
+          paciente.cpf = row.cpf;
+          paciente.dataNascimento = row.data_nascimento;
+          paciente.email = row.email;
+          paciente.telefone = row.telefone;
+          paciente.status = row.status;
+          paciente.cep = row.cep;
+          paciente.rua = row.rua;
+          paciente.numero = row.numero;
+          paciente.complemento = row.complemento;
+          paciente.bairro = row.bairro;
+          paciente.cidade = row.cidade;
+          paciente.estado = row.estado;
+          paciente.necessidades = row.necessidades;
+          paciente.observacoes = row.observacoes;
+          paciente.createdAt = row.created_at;
+          paciente.updatedAt = row.updated_at;
+          paciente.radiografias = [];
+        } else {
+          throw error;
+        }
+      }
+
+      if (!paciente) {
+        throw new NotFoundException('Paciente não encontrado');
+      }
+
+      // Verificar se o paciente pertence ao clienteMasterId informado
+      if (paciente.clienteMasterId !== clienteMasterId) {
+        throw new ForbiddenException('Paciente não pertence ao Cliente Master informado');
+      }
+
+      // Buscar questionários/feedbacks vinculados ao paciente
+      let questionariosVinculados: any[] = [];
+      let temFeedback = false;
+      
+      if (this.questionariosService) {
+        try {
+          questionariosVinculados = await this.questionariosService.listarQuestionariosPaciente(id, userId, userTipo);
+          temFeedback = questionariosVinculados.length > 0;
+        } catch (error) {
+          console.warn('⚠️ Erro ao buscar questionários do paciente:', error?.message);
+          // Não falhar se não conseguir buscar questionários
+        }
+      }
+
+      console.log('✅ Paciente encontrado:', paciente.id);
+      
+      // Retornar paciente com informações de feedback
+      return {
+        ...paciente,
+        temFeedback,
+        questionarios: questionariosVinculados.map(q => ({
+          id: q.id,
+          questionarioId: q.questionarioId,
+          questionario: {
+            id: q.questionario?.id,
+            titulo: q.questionario?.titulo,
+            descricao: q.questionario?.descricao,
+          },
+          enviada: q.enviada,
+          concluida: q.concluida,
+          createdAt: q.createdAt,
+        })),
+        totalQuestionarios: questionariosVinculados.length,
+        questionariosPendentes: questionariosVinculados.filter(q => q.enviada && !q.concluida).length,
+        questionariosConcluidos: questionariosVinculados.filter(q => q.concluida).length,
+      };
+    } catch (error) {
+      console.error('❌ Erro ao buscar paciente completo:', {
+        id,
+        clienteMasterId,
+        userId,
+        userTipo,
+        error: error?.message || error,
+        stack: error?.stack,
+      });
+      throw error;
+    }
   }
 
   async update(id: string, updatePacienteDto: UpdatePacienteDto, userId: string, userTipo: string): Promise<Paciente> {

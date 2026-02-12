@@ -8,12 +8,14 @@ import { HistoricoPaciente } from './entities/historico-paciente.entity';
 import { Radiografia } from '../radiografias/entities/radiografia.entity';
 import { UsersModule } from '../users/users.module';
 import { ClientesMasterModule } from '../users/clientes-master.module';
+import { QuestionariosModule } from '../questionarios/questionarios.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Paciente, HistoricoPaciente, Radiografia]),
     forwardRef(() => UsersModule),
     forwardRef(() => ClientesMasterModule),
+    forwardRef(() => QuestionariosModule),
   ],
   controllers: [PacientesController],
   providers: [
