@@ -450,7 +450,7 @@ let AuthService = class AuthService {
             console.error('Erro ao enviar WhatsApp de verificação:', error);
             return {
                 message: 'Código de verificação gerado. Verifique a configuração de WhatsApp para envio automático.',
-                code: verificationToken,
+                code: 'XXXXXX',
                 warning: 'WhatsApp não foi enviado devido a erro de configuração'
             };
         }

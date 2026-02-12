@@ -14,7 +14,7 @@ export class WhatsAppService {
   async sendMessage(phoneNumber: string, message: string): Promise<void> {
     try {
       const response = await axios.post(
-        `${this.whatsappApiUrl}/whatsapp/send`,
+        `${this.whatsappApiUrl}/api/whatsapp/send`,
         {
           phoneNumber,
           message,

@@ -571,7 +571,7 @@ export class AuthService {
       // Retornar o código mesmo se o WhatsApp falhar (para desenvolvimento/testes)
       return { 
         message: 'Código de verificação gerado. Verifique a configuração de WhatsApp para envio automático.',
-        code: verificationToken, // Apenas para desenvolvimento - remover em produção
+        code: 'XXXXXX', // Apenas para desenvolvimento - remover em produção
         warning: 'WhatsApp não foi enviado devido a erro de configuração'
       };
     }
