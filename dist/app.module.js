@@ -30,6 +30,7 @@ const desenhos_profissionais_module_1 = require("./desenhos-profissionais/desenh
 const dashboard_module_1 = require("./dashboard/dashboard.module");
 const anamneses_module_1 = require("./anamneses/anamneses.module");
 const questionarios_module_1 = require("./questionarios/questionarios.module");
+const treatments_module_1 = require("./treatments/treatments.module");
 const typeorm_config_1 = require("./config/typeorm.config");
 const planos_service_1 = require("./planos/planos.service");
 let AppModule = class AppModule {
@@ -85,6 +86,7 @@ exports.AppModule = AppModule = __decorate([
             dashboard_module_1.DashboardModule,
             anamneses_module_1.AnamnesesModule,
             questionarios_module_1.QuestionariosModule,
+            treatments_module_1.TreatmentsModule,
         ],
     }),
     __metadata("design:paramtypes", [planos_service_1.PlanosService])
