@@ -23,17 +23,15 @@ export class WhatsAppService {
           headers: {
             'Content-Type': 'application/json',
           },
+          validateStatus: (status) => status >= 200 && status < 300, // Aceitar qualquer status 2xx como sucesso
         },
       );
 
-      if (response.status !== 200) {
-        throw new HttpException(
-          'Erro ao enviar mensagem via WhatsApp',
-          HttpStatus.INTERNAL_SERVER_ERROR,
-        );
-      }
-
-      console.log(`✅ Mensagem WhatsApp enviada para ${phoneNumber}`);
+      // Se chegou aqui, a requisição foi bem-sucedida (status 2xx)
+      console.log(`✅ Mensagem WhatsApp enviada para ${phoneNumber}`, {
+        status: response.status,
+        data: response.data,
+      });
     } catch (error) {
       console.error('❌ Erro ao enviar mensagem WhatsApp:', {
         phoneNumber,
