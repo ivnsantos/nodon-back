@@ -1359,5 +1359,143 @@ export class AuthService {
       message: 'Senha redefinida com sucesso!' 
     };
   }
+
+  /**
+   * Passo 1: Solicitar recuperação de senha via WhatsApp
+   * Recebe email e telefone, valida e envia código via WhatsApp
+   */
+  async requestPasswordResetPhone(email: string, telefone: string) {
+    // Buscar usuário por email
+    const userBase = await this.userBaseService.findByEmail(email);
+
+    if (!userBase) {
+      // Não revelar que o email não existe por segurança
+      return {
+        message: 'Se o email e telefone estiverem cadastrados, você receberá um código via WhatsApp.',
+      };
+    }
+
+    // Verificar se o telefone corresponde ao email
+    if (!userBase.telefone || userBase.telefone !== telefone) {
+      // Não revelar informações específicas por segurança
+      return {
+        message: 'Se o email e telefone estiverem cadastrados, você receberá um código via WhatsApp.',
+      };
+    }
+
+    // Gerar código de 6 dígitos
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const resetExpires = new Date();
+    resetExpires.setMinutes(resetExpires.getMinutes() + 15); // Expira em 15 minutos
+
+    // Salvar código no verificationToken (reutilizando o campo)
+    await this.userBaseService.update(userBase.id, {
+      verificationToken: resetCode,
+      tokenExpiresAt: resetExpires,
+    });
+
+    try {
+      // Enviar código via WhatsApp
+      await this.whatsappService.sendPasswordResetCode(
+        userBase.telefone,
+        resetCode,
+        userBase.nome,
+      );
+
+      return {
+        message: 'Código de recuperação enviado via WhatsApp com sucesso!',
+      };
+    } catch (error) {
+      console.error('Erro ao enviar WhatsApp de recuperação de senha:', error);
+      throw new BadRequestException(
+        'Erro ao enviar código via WhatsApp. Por favor, tente novamente.',
+      );
+    }
+  }
+
+  /**
+   * Passo 2: Validar código de recuperação
+   * Valida o código enviado via WhatsApp
+   */
+  async validatePasswordResetCode(code: string, telefone: string) {
+    const userBase = await this.userBaseService.findByTelefone(telefone);
+
+    if (!userBase) {
+      throw new BadRequestException('Telefone não encontrado.');
+    }
+
+    if (!userBase.telefone || userBase.telefone !== telefone) {
+      throw new BadRequestException('Telefone não corresponde.');
+    }
+
+    if (!userBase.verificationToken) {
+      throw new BadRequestException('Nenhum código de recuperação encontrado. Solicite um novo código.');
+    }
+
+    if (userBase.verificationToken !== code) {
+      throw new BadRequestException('Código inválido.');
+    }
+
+    if (!userBase.tokenExpiresAt || userBase.tokenExpiresAt < new Date()) {
+      // Limpar código expirado
+      await this.userBaseService.update(userBase.id, {
+        verificationToken: null,
+        tokenExpiresAt: null,
+      });
+      throw new BadRequestException('Código expirado. Solicite um novo código.');
+    }
+
+    return {
+      valid: true,
+      message: 'Código válido. Você pode redefinir sua senha.',
+    };
+  }
+
+  /**
+   * Passo 3: Redefinir senha com código validado
+   * Redefine a senha após validação do código
+   */
+  async resetPasswordWithCode(code: string, telefone: string, newPassword: string) {
+    const userBase = await this.userBaseService.findByTelefone(telefone);
+
+    if (!userBase) {
+      throw new BadRequestException('Telefone não encontrado.');
+    }
+
+    if (!userBase.telefone || userBase.telefone !== telefone) {
+      throw new BadRequestException('Telefone não corresponde.');
+    }
+
+    if (!userBase.verificationToken) {
+      throw new BadRequestException('Nenhum código de recuperação encontrado. Solicite um novo código.');
+    }
+
+    if (userBase.verificationToken !== code) {
+      throw new BadRequestException('Código inválido.');
+    }
+
+    if (!userBase.tokenExpiresAt || userBase.tokenExpiresAt < new Date()) {
+      // Limpar código expirado
+      await this.userBaseService.update(userBase.id, {
+        verificationToken: null,
+        tokenExpiresAt: null,
+      });
+      throw new BadRequestException('Código expirado. Solicite um novo código.');
+    }
+
+    // Hash da nova senha
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Atualizar senha e limpar código
+    await this.userBaseService.update(userBase.id, {
+      password: hashedPassword,
+      verificationToken: null,
+      tokenExpiresAt: null,
+    });
+
+    return {
+      message: 'Senha redefinida com sucesso!',
+    };
+  }
 }
 

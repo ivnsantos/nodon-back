@@ -1044,6 +1044,93 @@ let AuthService = class AuthService {
             message: 'Senha redefinida com sucesso!'
         };
     }
+    async requestPasswordResetPhone(email, telefone) {
+        const userBase = await this.userBaseService.findByEmail(email);
+        if (!userBase) {
+            return {
+                message: 'Se o email e telefone estiverem cadastrados, você receberá um código via WhatsApp.',
+            };
+        }
+        if (!userBase.telefone || userBase.telefone !== telefone) {
+            return {
+                message: 'Se o email e telefone estiverem cadastrados, você receberá um código via WhatsApp.',
+            };
+        }
+        const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const resetExpires = new Date();
+        resetExpires.setMinutes(resetExpires.getMinutes() + 15);
+        await this.userBaseService.update(userBase.id, {
+            verificationToken: resetCode,
+            tokenExpiresAt: resetExpires,
+        });
+        try {
+            await this.whatsappService.sendPasswordResetCode(userBase.telefone, resetCode, userBase.nome);
+            return {
+                message: 'Código de recuperação enviado via WhatsApp com sucesso!',
+            };
+        }
+        catch (error) {
+            console.error('Erro ao enviar WhatsApp de recuperação de senha:', error);
+            throw new common_1.BadRequestException('Erro ao enviar código via WhatsApp. Por favor, tente novamente.');
+        }
+    }
+    async validatePasswordResetCode(code, telefone) {
+        const userBase = await this.userBaseService.findByTelefone(telefone);
+        if (!userBase) {
+            throw new common_1.BadRequestException('Telefone não encontrado.');
+        }
+        if (!userBase.telefone || userBase.telefone !== telefone) {
+            throw new common_1.BadRequestException('Telefone não corresponde.');
+        }
+        if (!userBase.verificationToken) {
+            throw new common_1.BadRequestException('Nenhum código de recuperação encontrado. Solicite um novo código.');
+        }
+        if (userBase.verificationToken !== code) {
+            throw new common_1.BadRequestException('Código inválido.');
+        }
+        if (!userBase.tokenExpiresAt || userBase.tokenExpiresAt < new Date()) {
+            await this.userBaseService.update(userBase.id, {
+                verificationToken: null,
+                tokenExpiresAt: null,
+            });
+            throw new common_1.BadRequestException('Código expirado. Solicite um novo código.');
+        }
+        return {
+            valid: true,
+            message: 'Código válido. Você pode redefinir sua senha.',
+        };
+    }
+    async resetPasswordWithCode(code, telefone, newPassword) {
+        const userBase = await this.userBaseService.findByTelefone(telefone);
+        if (!userBase) {
+            throw new common_1.BadRequestException('Telefone não encontrado.');
+        }
+        if (!userBase.telefone || userBase.telefone !== telefone) {
+            throw new common_1.BadRequestException('Telefone não corresponde.');
+        }
+        if (!userBase.verificationToken) {
+            throw new common_1.BadRequestException('Nenhum código de recuperação encontrado. Solicite um novo código.');
+        }
+        if (userBase.verificationToken !== code) {
+            throw new common_1.BadRequestException('Código inválido.');
+        }
+        if (!userBase.tokenExpiresAt || userBase.tokenExpiresAt < new Date()) {
+            await this.userBaseService.update(userBase.id, {
+                verificationToken: null,
+                tokenExpiresAt: null,
+            });
+            throw new common_1.BadRequestException('Código expirado. Solicite um novo código.');
+        }
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+        await this.userBaseService.update(userBase.id, {
+            password: hashedPassword,
+            verificationToken: null,
+            tokenExpiresAt: null,
+        });
+        return {
+            message: 'Senha redefinida com sucesso!',
+        };
+    }
 };
 exports.AuthService = AuthService;
 exports.AuthService = AuthService = __decorate([

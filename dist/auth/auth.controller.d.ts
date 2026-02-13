@@ -4,6 +4,9 @@ import { AuthService } from './auth.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { RequestPasswordResetPhoneDto } from './dto/request-password-reset-phone.dto';
+import { ValidatePasswordResetCodeDto } from './dto/validate-password-reset-code.dto';
+import { ResetPasswordWithCodeDto } from './dto/reset-password-with-code.dto';
 export declare class AuthController {
     private authService;
     private clientesMasterService;
@@ -217,6 +220,16 @@ export declare class AuthController {
         message: string;
     }>;
     resetPassword(resetPasswordDto: ResetPasswordDto): Promise<{
+        message: string;
+    }>;
+    forgotPasswordPhone(requestPasswordResetPhoneDto: RequestPasswordResetPhoneDto): Promise<{
+        message: string;
+    }>;
+    validatePasswordResetCode(validateCodeDto: ValidatePasswordResetCodeDto): Promise<{
+        valid: boolean;
+        message: string;
+    }>;
+    resetPasswordWithCode(resetPasswordWithCodeDto: ResetPasswordWithCodeDto): Promise<{
         message: string;
     }>;
 }

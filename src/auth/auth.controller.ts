@@ -9,6 +9,9 @@ import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { FacebookAuthGuard } from './guards/facebook-auth.guard';
 import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { RequestPasswordResetPhoneDto } from './dto/request-password-reset-phone.dto';
+import { ValidatePasswordResetCodeDto } from './dto/validate-password-reset-code.dto';
+import { ResetPasswordWithCodeDto } from './dto/reset-password-with-code.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -282,6 +285,45 @@ export class AuthController {
   @Post('reset-password')
   async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
     return this.authService.resetPassword(resetPasswordDto.token, resetPasswordDto.newPassword);
+  }
+
+  // ========== FLUXO DE RECUPERAÇÃO DE SENHA VIA WHATSAPP ==========
+
+  /**
+   * Passo 1: Solicitar recuperação de senha via WhatsApp
+   * Recebe email e telefone, valida e envia código via WhatsApp
+   */
+  @Post('forgot-password-phone')
+  async forgotPasswordPhone(@Body() requestPasswordResetPhoneDto: RequestPasswordResetPhoneDto) {
+    return this.authService.requestPasswordResetPhone(
+      requestPasswordResetPhoneDto.email,
+      requestPasswordResetPhoneDto.telefone,
+    );
+  }
+
+  /**
+   * Passo 2: Validar código de recuperação
+   * Valida o código enviado via WhatsApp
+   */
+  @Post('validate-password-reset-code')
+  async validatePasswordResetCode(@Body() validateCodeDto: ValidatePasswordResetCodeDto) {
+    return this.authService.validatePasswordResetCode(
+      validateCodeDto.code,
+      validateCodeDto.telefone,
+    );
+  }
+
+  /**
+   * Passo 3: Redefinir senha com código validado
+   * Redefine a senha após validação do código
+   */
+  @Post('reset-password-with-code')
+  async resetPasswordWithCode(@Body() resetPasswordWithCodeDto: ResetPasswordWithCodeDto) {
+    return this.authService.resetPasswordWithCode(
+      resetPasswordWithCodeDto.code,
+      resetPasswordWithCodeDto.telefone,
+      resetPasswordWithCodeDto.newPassword,
+    );
   }
 }
 

@@ -267,4 +267,14 @@ export declare class AuthService {
     resetPassword(token: string, newPassword: string): Promise<{
         message: string;
     }>;
+    requestPasswordResetPhone(email: string, telefone: string): Promise<{
+        message: string;
+    }>;
+    validatePasswordResetCode(code: string, telefone: string): Promise<{
+        valid: boolean;
+        message: string;
+    }>;
+    resetPasswordWithCode(code: string, telefone: string, newPassword: string): Promise<{
+        message: string;
+    }>;
 }

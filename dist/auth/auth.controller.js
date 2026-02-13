@@ -23,6 +23,9 @@ const google_auth_guard_1 = require("./guards/google-auth.guard");
 const facebook_auth_guard_1 = require("./guards/facebook-auth.guard");
 const request_password_reset_dto_1 = require("./dto/request-password-reset.dto");
 const reset_password_dto_1 = require("./dto/reset-password.dto");
+const request_password_reset_phone_dto_1 = require("./dto/request-password-reset-phone.dto");
+const validate_password_reset_code_dto_1 = require("./dto/validate-password-reset-code.dto");
+const reset_password_with_code_dto_1 = require("./dto/reset-password-with-code.dto");
 let AuthController = class AuthController {
     authService;
     clientesMasterService;
@@ -189,6 +192,15 @@ let AuthController = class AuthController {
     async resetPassword(resetPasswordDto) {
         return this.authService.resetPassword(resetPasswordDto.token, resetPasswordDto.newPassword);
     }
+    async forgotPasswordPhone(requestPasswordResetPhoneDto) {
+        return this.authService.requestPasswordResetPhone(requestPasswordResetPhoneDto.email, requestPasswordResetPhoneDto.telefone);
+    }
+    async validatePasswordResetCode(validateCodeDto) {
+        return this.authService.validatePasswordResetCode(validateCodeDto.code, validateCodeDto.telefone);
+    }
+    async resetPasswordWithCode(resetPasswordWithCodeDto) {
+        return this.authService.resetPasswordWithCode(resetPasswordWithCodeDto.code, resetPasswordWithCodeDto.telefone, resetPasswordWithCodeDto.newPassword);
+    }
 };
 exports.AuthController = AuthController;
 __decorate([
@@ -326,6 +338,27 @@ __decorate([
     __metadata("design:paramtypes", [reset_password_dto_1.ResetPasswordDto]),
     __metadata("design:returntype", Promise)
 ], AuthController.prototype, "resetPassword", null);
+__decorate([
+    (0, common_1.Post)('forgot-password-phone'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [request_password_reset_phone_dto_1.RequestPasswordResetPhoneDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "forgotPasswordPhone", null);
+__decorate([
+    (0, common_1.Post)('validate-password-reset-code'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [validate_password_reset_code_dto_1.ValidatePasswordResetCodeDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "validatePasswordResetCode", null);
+__decorate([
+    (0, common_1.Post)('reset-password-with-code'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [reset_password_with_code_dto_1.ResetPasswordWithCodeDto]),
+    __metadata("design:returntype", Promise)
+], AuthController.prototype, "resetPasswordWithCode", null);
 exports.AuthController = AuthController = __decorate([
     (0, common_1.Controller)('auth'),
     __metadata("design:paramtypes", [auth_service_1.AuthService,

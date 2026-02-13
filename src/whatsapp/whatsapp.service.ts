@@ -48,5 +48,10 @@ export class WhatsAppService {
     const message = `Olá ${nome}! Seu código de verificação é: ${code}. Este código expira em 15 minutos.`;
     await this.sendMessage(phoneNumber, message);
   }
+
+  async sendPasswordResetCode(phoneNumber: string, code: string, nome: string): Promise<void> {
+    const message = `Olá ${nome}! Seu código de recuperação de senha é: ${code}. Este código expira em 15 minutos.`;
+    await this.sendMessage(phoneNumber, message);
+  }
 }
 
