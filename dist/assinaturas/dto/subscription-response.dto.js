@@ -22,6 +22,7 @@ class SubscriptionResponseDto {
     status;
     planoId;
     couponId;
+    nextDueDate;
     createdAt;
     updatedAt;
 }

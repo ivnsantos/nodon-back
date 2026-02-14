@@ -148,13 +148,18 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     return Number(result?.total || 0);
   }
 
-  async getTotalTokensByUserInPeriod(userId: string, dataInicio: Date): Promise<number> {
-    const result = await this.conversationRepository
+  async getTotalTokensByUserInPeriod(userId: string, dataInicio: Date, dataFim?: Date): Promise<number> {
+    const queryBuilder = this.conversationRepository
       .createQueryBuilder('c')
       .select('SUM(c.total_tokens)', 'total')
       .where('c.user_id = :userId', { userId })
-      .andWhere('c.created_at >= :dataInicio', { dataInicio })
-      .getRawOne();
+      .andWhere('c.created_at >= :dataInicio', { dataInicio });
+    
+    if (dataFim) {
+      queryBuilder.andWhere('c.created_at <= :dataFim', { dataFim });
+    }
+    
+    const result = await queryBuilder.getRawOne();
     return Number(result?.total || 0);
   }
 
@@ -167,13 +172,18 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     return Number(result?.total || 0);
   }
 
-  async getTotalTokensByClienteMasterInPeriod(clienteMasterId: string, dataInicio: Date): Promise<number> {
-    const result = await this.conversationRepository
+  async getTotalTokensByClienteMasterInPeriod(clienteMasterId: string, dataInicio: Date, dataFim?: Date): Promise<number> {
+    const queryBuilder = this.conversationRepository
       .createQueryBuilder('c')
       .select('SUM(c.total_tokens)', 'total')
       .where('c.cliente_master_id = :clienteMasterId', { clienteMasterId })
-      .andWhere('c.created_at >= :dataInicio', { dataInicio })
-      .getRawOne();
+      .andWhere('c.created_at >= :dataInicio', { dataInicio });
+    
+    if (dataFim) {
+      queryBuilder.andWhere('c.created_at <= :dataFim', { dataFim });
+    }
+    
+    const result = await queryBuilder.getRawOne();
     return Number(result?.total || 0);
   }
 

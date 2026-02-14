@@ -105,6 +105,57 @@ export class AssinaturasController {
     return this.assinaturasService.getDashboardInfo(idClienteMaster, req.user.tipo);
   }
 
+  @Get('analises')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
+  async getAnalisesInfo(
+    @Request() req,
+    @Headers('x-user-comum-id') userComumIdHeader?: string,
+    @Query('clienteMasterId') clienteMasterId?: string,
+    @Query('usuario') usuario?: string,
+  ) {
+    let clienteMasterIdFinal = clienteMasterId;
+
+    // Se foi passado "usuario" (ID do UserComum) via header ou query
+    const userComumId = userComumIdHeader || usuario;
+    if (userComumId) {
+      const userComum = await this.userComumService.findById(userComumId);
+      if (!userComum) {
+        throw new NotFoundException('Usuário não encontrado');
+      }
+      if (userComum.userId !== req.user.id) {
+        throw new ForbiddenException('Você não tem permissão para acessar este usuário');
+      }
+      clienteMasterIdFinal = userComum.clienteMasterId;
+    }
+
+    // Se foi passado "clienteMasterId"
+    if (clienteMasterIdFinal) {
+      // Validar se o usuário logado tem vínculo com esse ClienteMaster
+      if (req.user.tipo === 'master') {
+        const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
+        const temVinculo = clientesMaster.some(cm => cm.id === clienteMasterIdFinal);
+        if (!temVinculo) {
+          throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+        }
+      } else {
+        const usuariosComuns = await this.userComumService.findByUserId(req.user.id);
+        const temVinculo = usuariosComuns.some(uc => uc.clienteMasterId === clienteMasterIdFinal);
+        if (!temVinculo) {
+          throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+        }
+      }
+    } else {
+      // Se nenhum parâmetro foi fornecido, buscar o primeiro ClienteMaster do UserBase
+      const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
+      if (!clientesMaster || clientesMaster.length === 0) {
+        throw new NotFoundException('Cliente Master não encontrado para este usuário');
+      }
+      clienteMasterIdFinal = clientesMaster[0].id;
+    }
+
+    return this.assinaturasService.getAnalisesInfo(clienteMasterIdFinal, req.user.id, req.user.tipo);
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   async findOne(@Param('id') id: string) {

@@ -15,51 +15,6 @@ export declare class AssinaturasController {
     }>;
     findMy(req: any): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto | null>;
     getDashboard(req: any, userComumIdHeader?: string, clienteMasterId?: string, usuario?: string): Promise<{
-        clienteMasterId: string;
-        tokensChat: {
-            tokensUtilizados: number;
-            limitePlano: number;
-            porcentagemUso: number;
-            tokensUtilizadosMes?: undefined;
-            ultimaAtualizacao?: undefined;
-        };
-        analises: {
-            analisesRestantes: number;
-            limitePlano: number;
-            porcentagemUso: number;
-            analisesFeitas?: undefined;
-            analisesFeitasMes?: undefined;
-        };
-        assinatura?: undefined;
-        usuarios?: undefined;
-        cartao?: undefined;
-    } | {
-        clienteMasterId: string;
-        tokensChat: {
-            tokensUtilizados: number;
-            tokensUtilizadosMes: number;
-            limitePlano: number;
-            porcentagemUso: number;
-            ultimaAtualizacao: Date;
-        };
-        analises: {
-            analisesFeitas: number;
-            analisesFeitasMes: number;
-            analisesRestantes: number;
-            limitePlano: number;
-            porcentagemUso: number;
-        };
-        assinatura: {
-            status: string;
-            valorMensal: number;
-            dataInicio: string | null;
-            proximaRenovacao: string | null;
-        } | null;
-        usuarios: {
-            quantidade: number;
-        };
-        cartao: any;
-    } | {
         clienteMaster: {
             id: string;
             nomeEmpresa: string;
@@ -100,6 +55,65 @@ export declare class AssinaturasController {
         assinatura: {
             status: string;
         } | null;
+    } | {
+        clienteMasterId: string;
+        tokensChat: {
+            tokensUtilizados: number;
+            limitePlano: number;
+            porcentagemUso: number;
+            tokensUtilizadosMes?: undefined;
+            ultimaAtualizacao?: undefined;
+        };
+        analises: {
+            analisesRestantes: number;
+            limitePlano: number;
+            porcentagemUso: number;
+            analisesFeitas?: undefined;
+            analisesFeitasMes?: undefined;
+        };
+        assinatura?: undefined;
+        usuarios?: undefined;
+        cartao?: undefined;
+    } | {
+        clienteMasterId: string;
+        tokensChat: {
+            tokensUtilizados: number;
+            tokensUtilizadosMes: number;
+            limitePlano: number;
+            porcentagemUso: number;
+            ultimaAtualizacao: Date;
+        };
+        analises: {
+            analisesFeitas: number;
+            analisesFeitasMes: number;
+            analisesRestantes: number;
+            limitePlano: number;
+            porcentagemUso: number;
+        };
+        assinatura: {
+            status: string;
+            valorMensal: number;
+            dataInicio: string | null;
+            dataFim: string | null;
+            proximaRenovacao: string | null;
+            nextDueDate: string | null;
+        } | null;
+        usuarios: {
+            quantidade: number;
+        };
+        cartao: any;
+    }>;
+    getAnalisesInfo(req: any, userComumIdHeader?: string, clienteMasterId?: string, usuario?: string): Promise<{
+        limitePlano: number;
+        analisesUsadas: number;
+        analisesRestantes: number;
+        porcentagemUso: number;
+        passouDoLimite: boolean;
+        aviso: string | null;
+        periodo: {
+            dataInicio: string | null;
+            dataFim: string | null;
+        };
     }>;
     findOne(id: string): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto>;
 }

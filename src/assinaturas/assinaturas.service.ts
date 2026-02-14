@@ -341,6 +341,7 @@ export class AssinaturasService {
       creditCardBrand: creditCardBrand ?? undefined,
       status: 'PENDING',
       asaasResponse: JSON.stringify(asaasSubscription),
+      nextDueDate: this.parseNextDueDate(asaasSubscription.nextDueDate),
     };
     const assinatura = this.assinaturaRepository.create(assinaturaData);
 
@@ -552,6 +553,7 @@ export class AssinaturasService {
       creditCardBrand: creditCardBrand ?? undefined,
       status: 'PENDING',
       asaasResponse: JSON.stringify(asaasSubscription),
+      nextDueDate: this.parseNextDueDate(asaasSubscription.nextDueDate),
     };
     const assinatura = this.assinaturaRepository.create(assinaturaData);
 
@@ -665,29 +667,46 @@ export class AssinaturasService {
       quantidadeUsuarios = usuarios.length;
     }
 
-    // Calcula o ciclo de faturamento atual baseado na data de criação da assinatura
+    // Calcula o período da assinatura usando nextDueDate da ASAAS
+    // nextDueDate define o INÍCIO da assinatura, o FIM é 1 mês depois
     const agora = new Date();
-    let dataInicioFaturamento: Date | null = null;
+    let dataInicioAssinatura: Date | null = null;
+    let dataFimAssinatura: Date | null = null;
     let proximaRenovacao: string | null = null;
 
-    if (assinaturaEntity && assinaturaEntity.createdAt) {
-      const dataInicio = new Date(assinaturaEntity.createdAt);
-      const diaFaturamento = dataInicio.getDate();
-      
-      // Calcula a data de início do ciclo atual
-      const inicioCicloAtual = new Date(agora.getFullYear(), agora.getMonth(), diaFaturamento);
-      
-      // Se ainda não chegou o dia de faturamento neste mês, o ciclo começou no mês anterior
-      if (agora.getDate() < diaFaturamento) {
-        inicioCicloAtual.setMonth(inicioCicloAtual.getMonth() - 1);
+    if (assinaturaEntity) {
+      // Se tem nextDueDate da ASAAS, usa ele como data de INÍCIO do período
+      if (assinaturaEntity.nextDueDate) {
+        // Usa parseNextDueDate para garantir conversão correta (pode vir como string ou Date)
+        dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+        
+        if (dataInicioAssinatura) {
+          // Data de fim é 1 mês após o início (nextDueDate)
+          dataFimAssinatura = new Date(dataInicioAssinatura);
+          dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+          
+          proximaRenovacao = dataFimAssinatura.toISOString().split('T')[0];
+        }
+      } else if (assinaturaEntity.createdAt) {
+        // Fallback: se não tem nextDueDate, calcula baseado em createdAt (comportamento antigo)
+        dataInicioAssinatura = new Date(assinaturaEntity.createdAt);
+        const diaFaturamento = dataInicioAssinatura.getDate();
+        
+        const mesesDesdeInicio = Math.floor(
+          (agora.getTime() - dataInicioAssinatura.getTime()) / (1000 * 60 * 60 * 24 * 30)
+        );
+        
+        const proxima = new Date(dataInicioAssinatura);
+        proxima.setMonth(proxima.getMonth() + mesesDesdeInicio + 1);
+        proxima.setDate(diaFaturamento);
+        
+        if (proxima <= agora) {
+          proxima.setMonth(proxima.getMonth() + 1);
+        }
+        
+        dataFimAssinatura = proxima;
+        proximaRenovacao = proxima.toISOString().split('T')[0];
       }
-      
-      dataInicioFaturamento = inicioCicloAtual;
-      
-      // Próxima renovação é 1 mês após o início do ciclo atual
-      const proxima = new Date(inicioCicloAtual);
-      proxima.setMonth(proxima.getMonth() + 1);
-      proximaRenovacao = proxima.toISOString().split('T')[0];
     }
 
     // Busca histórico do mês atual (calendário)
@@ -710,42 +729,57 @@ export class AssinaturasService {
     // Busca tokens do chat da tabela chat_conversations
     const tokensChatUsados = await this.chatService.getTotalTokensByClienteMaster(clienteMaster.id);
     
-    // Calcula tokens do ciclo de faturamento atual
-    let tokensChatUsadosMes = 0;
-    let analisesFeitasCiclo = 0;
+    // Calcula tokens e análises do período da assinatura (desde criação até próxima renovação)
+    let tokensChatUsadosPeriodo = 0;
+    let analisesFeitasPeriodo = 0;
     
-    if (dataInicioFaturamento) {
-      // Busca tokens do chat no período do ciclo de faturamento
-      tokensChatUsadosMes = await this.chatService.getTotalTokensByClienteMasterInPeriod(clienteMaster.id, dataInicioFaturamento);
+    if (dataInicioAssinatura) {
+      // Busca tokens do chat no período completo da assinatura (desde criação até próxima renovação)
+      tokensChatUsadosPeriodo = await this.chatService.getTotalTokensByClienteMasterInPeriod(
+        clienteMaster.id, 
+        dataInicioAssinatura,
+        dataFimAssinatura || agora // Se não tem data fim, usa data atual
+      );
       
-      // Filtra históricos de análises que estão dentro do ciclo de faturamento atual
+      // Filtra históricos de análises que estão dentro do período da assinatura
+      // Verifica se há interseção entre o período do histórico e o período da assinatura
+      const dataFimComparacao = dataFimAssinatura || agora;
+      
       for (const h of todosHistoricos) {
-        const dataHistorico = new Date(h.ano, h.mes - 1, 1); // Primeiro dia do mês do histórico
-        const fimMesHistorico = new Date(h.ano, h.mes, 0); // Último dia do mês do histórico
+        const inicioMesHistorico = new Date(h.ano, h.mes - 1, 1); // Primeiro dia do mês do histórico
+        const fimMesHistorico = new Date(h.ano, h.mes, 0, 23, 59, 59, 999); // Último dia do mês do histórico
         
-        // Se o mês do histórico está no ciclo de faturamento atual
-        if (fimMesHistorico >= dataInicioFaturamento && dataHistorico <= agora) {
-          analisesFeitasCiclo += Number(h.analisesFeitas || 0);
+        // Verifica se há interseção entre os períodos:
+        // - O início do mês do histórico está dentro do período da assinatura OU
+        // - O fim do mês do histórico está dentro do período da assinatura OU
+        // - O período da assinatura está completamente dentro do mês do histórico
+        const temIntersecao = 
+          (inicioMesHistorico >= dataInicioAssinatura && inicioMesHistorico <= dataFimComparacao) ||
+          (fimMesHistorico >= dataInicioAssinatura && fimMesHistorico <= dataFimComparacao) ||
+          (inicioMesHistorico <= dataInicioAssinatura && fimMesHistorico >= dataFimComparacao);
+        
+        if (temIntersecao) {
+          analisesFeitasPeriodo += Number(h.analisesFeitas || 0);
         }
       }
     } else {
       // Se não tem assinatura, usa total do chat e mês atual do calendário
-      tokensChatUsadosMes = tokensChatUsados;
-      analisesFeitasCiclo = Number(historicoAtual?.analisesFeitas || 0);
+      tokensChatUsadosPeriodo = tokensChatUsados;
+      analisesFeitasPeriodo = Number(historicoAtual?.analisesFeitas || 0);
     }
 
     const tokensChatLimite = plano ? Number(plano.tokenChat) : 0;
     const porcentagemUsoTokens = tokensChatLimite > 0 
-      ? Math.min(100, Math.round((tokensChatUsadosMes / tokensChatLimite) * 100)) 
+      ? Math.min(100, Math.round((tokensChatUsadosPeriodo / tokensChatLimite) * 100)) 
       : 0;
 
     // Calcula informações de análises
     const analisesFeitas = todosHistoricos.reduce((sum, h) => sum + Number(h.analisesFeitas || 0), 0);
-    const analisesFeitasMes = analisesFeitasCiclo; // Análises do ciclo de faturamento atual
+    // analisesFeitasPeriodo já foi calculado acima
     const analisesLimite = plano ? Number(plano.limiteAnalises) : 0;
-    const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasMes);
+    const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasPeriodo);
     const porcentagemUsoAnalises = analisesLimite > 0 
-      ? Math.min(100, Math.round((analisesFeitasMes / analisesLimite) * 100)) 
+      ? Math.min(100, Math.round((analisesFeitasPeriodo / analisesLimite) * 100)) 
       : 0;
 
     // Informações do cartão
@@ -765,7 +799,7 @@ export class AssinaturasService {
       return {
         clienteMasterId: clienteMaster.id,
         tokensChat: {
-          tokensUtilizados: tokensChatUsadosMes,
+          tokensUtilizados: tokensChatUsadosPeriodo,
           limitePlano: tokensChatLimite,
           porcentagemUso: porcentagemUsoTokens,
         },
@@ -782,14 +816,14 @@ export class AssinaturasService {
       clienteMasterId: clienteMaster.id,
       tokensChat: {
         tokensUtilizados: tokensChatUsados,
-        tokensUtilizadosMes: tokensChatUsadosMes,
+        tokensUtilizadosMes: tokensChatUsadosPeriodo, // Tokens do período da assinatura
         limitePlano: tokensChatLimite,
         porcentagemUso: porcentagemUsoTokens,
         ultimaAtualizacao: historicoAtual?.updatedAt || clienteMaster.updatedAt,
       },
       analises: {
         analisesFeitas: analisesFeitas,
-        analisesFeitasMes: analisesFeitasMes,
+        analisesFeitasMes: analisesFeitasPeriodo,
         analisesRestantes: analisesRestantes,
         limitePlano: analisesLimite,
         porcentagemUso: porcentagemUsoAnalises,
@@ -798,8 +832,12 @@ export class AssinaturasService {
         ? {
             status: assinaturaEntity.status,
             valorMensal: Number(assinaturaEntity.value),
-            dataInicio: assinaturaEntity.createdAt ? assinaturaEntity.createdAt.toISOString().split('T')[0] : null,
+            dataInicio: dataInicioAssinatura ? dataInicioAssinatura.toISOString().split('T')[0] : null,
+            dataFim: dataFimAssinatura ? dataFimAssinatura.toISOString().split('T')[0] : null,
             proximaRenovacao: proximaRenovacao,
+            nextDueDate: assinaturaEntity.nextDueDate 
+              ? (this.parseNextDueDate(assinaturaEntity.nextDueDate)?.toISOString().split('T')[0] || null)
+              : null,
           }
         : null,
       usuarios: {
@@ -849,18 +887,96 @@ export class AssinaturasService {
       },
     });
 
-    const tokensChatUsadosMes = Number(historicoAtual?.tokensUtilizados || 0);
+    // Calcula o período da assinatura usando nextDueDate da ASAAS
+    // nextDueDate define o INÍCIO da assinatura, o FIM é 1 mês depois
+    const agoraPeriodo = new Date();
+    let dataInicioAssinatura: Date | null = null;
+    let dataFimAssinatura: Date | null = null;
+
+    if (assinaturaEntity) {
+      // Se tem nextDueDate da ASAAS, usa ele como data de INÍCIO do período
+      if (assinaturaEntity.nextDueDate) {
+        // Usa parseNextDueDate para garantir conversão correta (pode vir como string ou Date)
+        dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+        
+        if (dataInicioAssinatura) {
+          // Data de fim é 1 mês após o início (nextDueDate)
+          dataFimAssinatura = new Date(dataInicioAssinatura);
+          dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+        }
+      } else if (assinaturaEntity.createdAt) {
+        // Fallback: se não tem nextDueDate, calcula baseado em createdAt
+        dataInicioAssinatura = new Date(assinaturaEntity.createdAt);
+        const diaFaturamento = dataInicioAssinatura.getDate();
+        
+        const mesesDesdeInicio = Math.floor(
+          (agoraPeriodo.getTime() - dataInicioAssinatura.getTime()) / (1000 * 60 * 60 * 24 * 30)
+        );
+        
+        const proxima = new Date(dataInicioAssinatura);
+        proxima.setMonth(proxima.getMonth() + mesesDesdeInicio + 1);
+        proxima.setDate(diaFaturamento);
+        
+        if (proxima <= agoraPeriodo) {
+          proxima.setMonth(proxima.getMonth() + 1);
+        }
+        
+        dataFimAssinatura = proxima;
+      }
+    }
+
+    // Calcula tokens e análises do período da assinatura
+    let tokensChatUsadosPeriodo = 0;
+    let analisesFeitasPeriodo = 0;
+
+    if (dataInicioAssinatura) {
+      tokensChatUsadosPeriodo = await this.chatService.getTotalTokensByClienteMasterInPeriod(
+        clienteMaster.id,
+        dataInicioAssinatura,
+        dataFimAssinatura || agora
+      );
+
+      // Busca todos os históricos e filtra pelo período da assinatura
+      const todosHistoricos = await this.historicoRepository.find({
+        where: { clienteMasterId: clienteMaster.id },
+      });
+
+      // Verifica se há interseção entre o período do histórico e o período da assinatura
+      const dataFimComparacao = dataFimAssinatura || agora;
+      
+      for (const h of todosHistoricos) {
+        const inicioMesHistorico = new Date(h.ano, h.mes - 1, 1); // Primeiro dia do mês do histórico
+        const fimMesHistorico = new Date(h.ano, h.mes, 0, 23, 59, 59, 999); // Último dia do mês do histórico
+        
+        // Verifica se há interseção entre os períodos:
+        // - O início do mês do histórico está dentro do período da assinatura OU
+        // - O fim do mês do histórico está dentro do período da assinatura OU
+        // - O período da assinatura está completamente dentro do mês do histórico
+        const temIntersecao = 
+          (inicioMesHistorico >= dataInicioAssinatura && inicioMesHistorico <= dataFimComparacao) ||
+          (fimMesHistorico >= dataInicioAssinatura && fimMesHistorico <= dataFimComparacao) ||
+          (inicioMesHistorico <= dataInicioAssinatura && fimMesHistorico >= dataFimComparacao);
+        
+        if (temIntersecao) {
+          analisesFeitasPeriodo += Number(h.analisesFeitas || 0);
+        }
+      }
+    } else {
+      // Se não tem assinatura, usa mês atual
+      tokensChatUsadosPeriodo = Number(historicoAtual?.tokensUtilizados || 0);
+      analisesFeitasPeriodo = Number(historicoAtual?.analisesFeitas || 0);
+    }
+
     const tokensChatLimite = plano ? Number(plano.tokenChat) : 0;
     const porcentagemUsoTokens = tokensChatLimite > 0 
-      ? Math.min(100, Math.round((tokensChatUsadosMes / tokensChatLimite) * 100)) 
+      ? Math.min(100, Math.round((tokensChatUsadosPeriodo / tokensChatLimite) * 100)) 
       : 0;
 
     // Calcula informações de análises
-    const analisesFeitasMes = Number(historicoAtual?.analisesFeitas || 0);
     const analisesLimite = plano ? Number(plano.limiteAnalises) : 0;
-    const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasMes);
+    const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasPeriodo);
     const porcentagemUsoAnalises = analisesLimite > 0 
-      ? Math.min(100, Math.round((analisesFeitasMes / analisesLimite) * 100)) 
+      ? Math.min(100, Math.round((analisesFeitasPeriodo / analisesLimite) * 100)) 
       : 0;
 
     // Retorna dados completos para usuário comum
@@ -875,7 +991,7 @@ export class AssinaturasService {
       clienteMasterId: clienteMaster.id,
       usuarioId: userComum.id,
       tokensChat: {
-        tokensUtilizados: tokensChatUsadosMes,
+        tokensUtilizados: tokensChatUsadosPeriodo,
         limitePlano: tokensChatLimite,
         porcentagemUso: porcentagemUsoTokens,
       },
@@ -909,6 +1025,169 @@ export class AssinaturasService {
   }
 
 
+  /**
+   * Retorna apenas informações sobre análises do período da assinatura
+   */
+  async getAnalisesInfo(clienteMasterId: string, userId: string, userTipo: string) {
+    // Busca o ClienteMaster pelo ID fornecido
+    const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
+
+    if (!clienteMaster) {
+      throw new NotFoundException('Cliente Master não encontrado');
+    }
+
+    // Verifica permissão
+    if (userTipo === 'master') {
+      const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+      const temAcesso = clientesMaster.some((cm) => cm.id === clienteMasterId);
+      if (!temAcesso) {
+        throw new BadRequestException('Você não tem permissão para acessar este recurso');
+      }
+    } else {
+      const usuariosComuns = await this.userComumService.findByUserId(userId);
+      const temAcesso = usuariosComuns.some((uc) => uc.clienteMasterId === clienteMasterId);
+      if (!temAcesso) {
+        throw new BadRequestException('Você não tem permissão para acessar este recurso');
+      }
+    }
+
+    // Busca assinatura
+    const assinaturaEntity = await this.assinaturaRepository.findOne({
+      where: { userId: clienteMaster.id },
+      relations: ['plano'],
+      order: { createdAt: 'DESC' },
+    });
+
+    // Busca plano
+    let plano: any = null;
+    if (assinaturaEntity && assinaturaEntity.planoId) {
+      plano = await this.planosService.findById(assinaturaEntity.planoId);
+    }
+
+    const limitePlano = plano ? Number(plano.limiteAnalises) : 0;
+
+    // Calcula o período da assinatura usando nextDueDate
+    const agora = new Date();
+    let dataInicioAssinatura: Date | null = null;
+    let dataFimAssinatura: Date | null = null;
+
+    if (assinaturaEntity) {
+      if (assinaturaEntity.nextDueDate) {
+        dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+        if (dataInicioAssinatura) {
+          dataFimAssinatura = new Date(dataInicioAssinatura);
+          dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+        }
+      } else if (assinaturaEntity.createdAt) {
+        // Fallback
+        dataInicioAssinatura = new Date(assinaturaEntity.createdAt);
+        const diaFaturamento = dataInicioAssinatura.getDate();
+        const mesesDesdeInicio = Math.floor(
+          (agora.getTime() - dataInicioAssinatura.getTime()) / (1000 * 60 * 60 * 24 * 30)
+        );
+        const proxima = new Date(dataInicioAssinatura);
+        proxima.setMonth(proxima.getMonth() + mesesDesdeInicio + 1);
+        proxima.setDate(diaFaturamento);
+        if (proxima <= agora) {
+          proxima.setMonth(proxima.getMonth() + 1);
+        }
+        dataFimAssinatura = proxima;
+      }
+    }
+
+    // Busca todos os históricos
+    const todosHistoricos = await this.historicoRepository.find({
+      where: { clienteMasterId: clienteMaster.id },
+    });
+
+    // Calcula análises do período da assinatura
+    let analisesFeitasPeriodo = 0;
+
+    if (dataInicioAssinatura) {
+      const dataFimComparacao = dataFimAssinatura || agora;
+
+      for (const h of todosHistoricos) {
+        const inicioMesHistorico = new Date(h.ano, h.mes - 1, 1);
+        const fimMesHistorico = new Date(h.ano, h.mes, 0, 23, 59, 59, 999);
+
+        const temIntersecao =
+          (inicioMesHistorico >= dataInicioAssinatura && inicioMesHistorico <= dataFimComparacao) ||
+          (fimMesHistorico >= dataInicioAssinatura && fimMesHistorico <= dataFimComparacao) ||
+          (inicioMesHistorico <= dataInicioAssinatura && fimMesHistorico >= dataFimComparacao);
+
+        if (temIntersecao) {
+          analisesFeitasPeriodo += Number(h.analisesFeitas || 0);
+        }
+      }
+    } else {
+      // Se não tem assinatura, usa total de todos os históricos
+      analisesFeitasPeriodo = todosHistoricos.reduce((sum, h) => sum + Number(h.analisesFeitas || 0), 0);
+    }
+
+    // Verifica se passou do limite
+    const passouDoLimite = limitePlano > 0 && analisesFeitasPeriodo > limitePlano;
+    const analisesRestantes = Math.max(0, limitePlano - analisesFeitasPeriodo);
+    const porcentagemUso = limitePlano > 0
+      ? Math.min(100, Math.round((analisesFeitasPeriodo / limitePlano) * 100))
+      : 0;
+
+    return {
+      limitePlano,
+      analisesUsadas: analisesFeitasPeriodo,
+      analisesRestantes,
+      porcentagemUso,
+      passouDoLimite,
+      aviso: passouDoLimite
+        ? `Limite de análises excedido! Você já utilizou ${analisesFeitasPeriodo} de ${limitePlano} análises permitidas neste período. O limite será renovado na próxima data de faturamento.`
+        : null,
+      periodo: {
+        dataInicio: dataInicioAssinatura ? dataInicioAssinatura.toISOString().split('T')[0] : null,
+        dataFim: dataFimAssinatura ? dataFimAssinatura.toISOString().split('T')[0] : null,
+      },
+    };
+  }
+
+  /**
+   * Converte nextDueDate de string (formato "YYYY-MM-DD") para Date
+   * Garante que a conversão seja feita corretamente sem problemas de timezone
+   */
+  private parseNextDueDate(nextDueDate: string | Date | null | undefined): Date | null {
+    if (!nextDueDate) {
+      return null;
+    }
+
+    // Se já é Date, retorna diretamente
+    if (nextDueDate instanceof Date) {
+      return isNaN(nextDueDate.getTime()) ? null : nextDueDate;
+    }
+
+    // Se é string, converte para Date
+    if (typeof nextDueDate === 'string') {
+      // Formato esperado: "YYYY-MM-DD"
+      // Usa UTC para evitar problemas de timezone
+      const [year, month, day] = nextDueDate.split('-').map(Number);
+      
+      // Valida se os valores são válidos
+      if (!year || !month || !day || isNaN(year) || isNaN(month) || isNaN(day)) {
+        console.warn(`⚠️ Data inválida recebida: ${nextDueDate}`);
+        return null;
+      }
+
+      // Cria Date em UTC (meio-dia UTC para evitar problemas de timezone)
+      const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+      
+      // Valida se a data é válida
+      if (isNaN(date.getTime())) {
+        console.warn(`⚠️ Data inválida recebida: ${nextDueDate}`);
+        return null;
+      }
+
+      return date;
+    }
+
+    return null;
+  }
+
   private toResponseDto(subscription: Assinatura): SubscriptionResponseDto {
     return {
       id: subscription.id,
@@ -931,6 +1210,7 @@ export class AssinaturasService {
       status: subscription.status,
       planoId: subscription.planoId,
       couponId: subscription.couponId,
+      nextDueDate: subscription.nextDueDate,
       createdAt: subscription.createdAt,
       updatedAt: subscription.updatedAt,
     };

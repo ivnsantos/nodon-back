@@ -19,6 +19,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { AnamnesesModule } from './anamneses/anamneses.module';
 import { QuestionariosModule } from './questionarios/questionarios.module';
 import { TreatmentsModule } from './treatments/treatments.module';
+import { AnotacoesModule } from './anotacoes/anotacoes.module';
 import { TypeOrmConfigService } from './config/typeorm.config';
 import { PlanosService } from './planos/planos.service';
 
@@ -59,6 +60,7 @@ import { PlanosService } from './planos/planos.service';
     AnamnesesModule,
     QuestionariosModule,
     TreatmentsModule,
+    AnotacoesModule,
   ],
 })
 export class AppModule implements OnModuleInit {

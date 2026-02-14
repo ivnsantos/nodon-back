@@ -19,6 +19,7 @@ export class SubscriptionResponseDto {
   status: string;
   planoId: string;
   couponId?: string;
+  nextDueDate?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

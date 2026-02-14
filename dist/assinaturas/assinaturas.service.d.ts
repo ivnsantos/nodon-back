@@ -80,7 +80,9 @@ export declare class AssinaturasService {
             status: string;
             valorMensal: number;
             dataInicio: string | null;
+            dataFim: string | null;
             proximaRenovacao: string | null;
+            nextDueDate: string | null;
         } | null;
         usuarios: {
             quantidade: number;
@@ -129,5 +131,18 @@ export declare class AssinaturasService {
             status: string;
         } | null;
     }>;
+    getAnalisesInfo(clienteMasterId: string, userId: string, userTipo: string): Promise<{
+        limitePlano: number;
+        analisesUsadas: number;
+        analisesRestantes: number;
+        porcentagemUso: number;
+        passouDoLimite: boolean;
+        aviso: string | null;
+        periodo: {
+            dataInicio: string | null;
+            dataFim: string | null;
+        };
+    }>;
+    private parseNextDueDate;
     private toResponseDto;
 }

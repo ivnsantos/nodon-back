@@ -308,6 +308,7 @@ let AssinaturasService = class AssinaturasService {
             creditCardBrand: creditCardBrand ?? undefined,
             status: 'PENDING',
             asaasResponse: JSON.stringify(asaasSubscription),
+            nextDueDate: this.parseNextDueDate(asaasSubscription.nextDueDate),
         };
         const assinatura = this.assinaturaRepository.create(assinaturaData);
         try {
@@ -471,6 +472,7 @@ let AssinaturasService = class AssinaturasService {
             creditCardBrand: creditCardBrand ?? undefined,
             status: 'PENDING',
             asaasResponse: JSON.stringify(asaasSubscription),
+            nextDueDate: this.parseNextDueDate(asaasSubscription.nextDueDate),
         };
         const assinatura = this.assinaturaRepository.create(assinaturaData);
         try {
@@ -550,19 +552,31 @@ let AssinaturasService = class AssinaturasService {
             quantidadeUsuarios = usuarios.length;
         }
         const agora = new Date();
-        let dataInicioFaturamento = null;
+        let dataInicioAssinatura = null;
+        let dataFimAssinatura = null;
         let proximaRenovacao = null;
-        if (assinaturaEntity && assinaturaEntity.createdAt) {
-            const dataInicio = new Date(assinaturaEntity.createdAt);
-            const diaFaturamento = dataInicio.getDate();
-            const inicioCicloAtual = new Date(agora.getFullYear(), agora.getMonth(), diaFaturamento);
-            if (agora.getDate() < diaFaturamento) {
-                inicioCicloAtual.setMonth(inicioCicloAtual.getMonth() - 1);
+        if (assinaturaEntity) {
+            if (assinaturaEntity.nextDueDate) {
+                dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+                if (dataInicioAssinatura) {
+                    dataFimAssinatura = new Date(dataInicioAssinatura);
+                    dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+                    proximaRenovacao = dataFimAssinatura.toISOString().split('T')[0];
+                }
             }
-            dataInicioFaturamento = inicioCicloAtual;
-            const proxima = new Date(inicioCicloAtual);
-            proxima.setMonth(proxima.getMonth() + 1);
-            proximaRenovacao = proxima.toISOString().split('T')[0];
+            else if (assinaturaEntity.createdAt) {
+                dataInicioAssinatura = new Date(assinaturaEntity.createdAt);
+                const diaFaturamento = dataInicioAssinatura.getDate();
+                const mesesDesdeInicio = Math.floor((agora.getTime() - dataInicioAssinatura.getTime()) / (1000 * 60 * 60 * 24 * 30));
+                const proxima = new Date(dataInicioAssinatura);
+                proxima.setMonth(proxima.getMonth() + mesesDesdeInicio + 1);
+                proxima.setDate(diaFaturamento);
+                if (proxima <= agora) {
+                    proxima.setMonth(proxima.getMonth() + 1);
+                }
+                dataFimAssinatura = proxima;
+                proximaRenovacao = proxima.toISOString().split('T')[0];
+            }
         }
         const ano = agora.getFullYear();
         const mes = agora.getMonth() + 1;
@@ -577,32 +591,35 @@ let AssinaturasService = class AssinaturasService {
             where: { clienteMasterId: clienteMaster.id },
         });
         const tokensChatUsados = await this.chatService.getTotalTokensByClienteMaster(clienteMaster.id);
-        let tokensChatUsadosMes = 0;
-        let analisesFeitasCiclo = 0;
-        if (dataInicioFaturamento) {
-            tokensChatUsadosMes = await this.chatService.getTotalTokensByClienteMasterInPeriod(clienteMaster.id, dataInicioFaturamento);
+        let tokensChatUsadosPeriodo = 0;
+        let analisesFeitasPeriodo = 0;
+        if (dataInicioAssinatura) {
+            tokensChatUsadosPeriodo = await this.chatService.getTotalTokensByClienteMasterInPeriod(clienteMaster.id, dataInicioAssinatura, dataFimAssinatura || agora);
+            const dataFimComparacao = dataFimAssinatura || agora;
             for (const h of todosHistoricos) {
-                const dataHistorico = new Date(h.ano, h.mes - 1, 1);
-                const fimMesHistorico = new Date(h.ano, h.mes, 0);
-                if (fimMesHistorico >= dataInicioFaturamento && dataHistorico <= agora) {
-                    analisesFeitasCiclo += Number(h.analisesFeitas || 0);
+                const inicioMesHistorico = new Date(h.ano, h.mes - 1, 1);
+                const fimMesHistorico = new Date(h.ano, h.mes, 0, 23, 59, 59, 999);
+                const temIntersecao = (inicioMesHistorico >= dataInicioAssinatura && inicioMesHistorico <= dataFimComparacao) ||
+                    (fimMesHistorico >= dataInicioAssinatura && fimMesHistorico <= dataFimComparacao) ||
+                    (inicioMesHistorico <= dataInicioAssinatura && fimMesHistorico >= dataFimComparacao);
+                if (temIntersecao) {
+                    analisesFeitasPeriodo += Number(h.analisesFeitas || 0);
                 }
             }
         }
         else {
-            tokensChatUsadosMes = tokensChatUsados;
-            analisesFeitasCiclo = Number(historicoAtual?.analisesFeitas || 0);
+            tokensChatUsadosPeriodo = tokensChatUsados;
+            analisesFeitasPeriodo = Number(historicoAtual?.analisesFeitas || 0);
         }
         const tokensChatLimite = plano ? Number(plano.tokenChat) : 0;
         const porcentagemUsoTokens = tokensChatLimite > 0
-            ? Math.min(100, Math.round((tokensChatUsadosMes / tokensChatLimite) * 100))
+            ? Math.min(100, Math.round((tokensChatUsadosPeriodo / tokensChatLimite) * 100))
             : 0;
         const analisesFeitas = todosHistoricos.reduce((sum, h) => sum + Number(h.analisesFeitas || 0), 0);
-        const analisesFeitasMes = analisesFeitasCiclo;
         const analisesLimite = plano ? Number(plano.limiteAnalises) : 0;
-        const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasMes);
+        const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasPeriodo);
         const porcentagemUsoAnalises = analisesLimite > 0
-            ? Math.min(100, Math.round((analisesFeitasMes / analisesLimite) * 100))
+            ? Math.min(100, Math.round((analisesFeitasPeriodo / analisesLimite) * 100))
             : 0;
         let cartao = null;
         if (assinaturaEntity && assinaturaEntity.creditCardNumber && assinaturaEntity.creditCardBrand) {
@@ -617,7 +634,7 @@ let AssinaturasService = class AssinaturasService {
             return {
                 clienteMasterId: clienteMaster.id,
                 tokensChat: {
-                    tokensUtilizados: tokensChatUsadosMes,
+                    tokensUtilizados: tokensChatUsadosPeriodo,
                     limitePlano: tokensChatLimite,
                     porcentagemUso: porcentagemUsoTokens,
                 },
@@ -632,14 +649,14 @@ let AssinaturasService = class AssinaturasService {
             clienteMasterId: clienteMaster.id,
             tokensChat: {
                 tokensUtilizados: tokensChatUsados,
-                tokensUtilizadosMes: tokensChatUsadosMes,
+                tokensUtilizadosMes: tokensChatUsadosPeriodo,
                 limitePlano: tokensChatLimite,
                 porcentagemUso: porcentagemUsoTokens,
                 ultimaAtualizacao: historicoAtual?.updatedAt || clienteMaster.updatedAt,
             },
             analises: {
                 analisesFeitas: analisesFeitas,
-                analisesFeitasMes: analisesFeitasMes,
+                analisesFeitasMes: analisesFeitasPeriodo,
                 analisesRestantes: analisesRestantes,
                 limitePlano: analisesLimite,
                 porcentagemUso: porcentagemUsoAnalises,
@@ -648,8 +665,12 @@ let AssinaturasService = class AssinaturasService {
                 ? {
                     status: assinaturaEntity.status,
                     valorMensal: Number(assinaturaEntity.value),
-                    dataInicio: assinaturaEntity.createdAt ? assinaturaEntity.createdAt.toISOString().split('T')[0] : null,
+                    dataInicio: dataInicioAssinatura ? dataInicioAssinatura.toISOString().split('T')[0] : null,
+                    dataFim: dataFimAssinatura ? dataFimAssinatura.toISOString().split('T')[0] : null,
                     proximaRenovacao: proximaRenovacao,
+                    nextDueDate: assinaturaEntity.nextDueDate
+                        ? (this.parseNextDueDate(assinaturaEntity.nextDueDate)?.toISOString().split('T')[0] || null)
+                        : null,
                 }
                 : null,
             usuarios: {
@@ -686,16 +707,61 @@ let AssinaturasService = class AssinaturasService {
                 mes,
             },
         });
-        const tokensChatUsadosMes = Number(historicoAtual?.tokensUtilizados || 0);
+        const agoraPeriodo = new Date();
+        let dataInicioAssinatura = null;
+        let dataFimAssinatura = null;
+        if (assinaturaEntity) {
+            if (assinaturaEntity.nextDueDate) {
+                dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+                if (dataInicioAssinatura) {
+                    dataFimAssinatura = new Date(dataInicioAssinatura);
+                    dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+                }
+            }
+            else if (assinaturaEntity.createdAt) {
+                dataInicioAssinatura = new Date(assinaturaEntity.createdAt);
+                const diaFaturamento = dataInicioAssinatura.getDate();
+                const mesesDesdeInicio = Math.floor((agoraPeriodo.getTime() - dataInicioAssinatura.getTime()) / (1000 * 60 * 60 * 24 * 30));
+                const proxima = new Date(dataInicioAssinatura);
+                proxima.setMonth(proxima.getMonth() + mesesDesdeInicio + 1);
+                proxima.setDate(diaFaturamento);
+                if (proxima <= agoraPeriodo) {
+                    proxima.setMonth(proxima.getMonth() + 1);
+                }
+                dataFimAssinatura = proxima;
+            }
+        }
+        let tokensChatUsadosPeriodo = 0;
+        let analisesFeitasPeriodo = 0;
+        if (dataInicioAssinatura) {
+            tokensChatUsadosPeriodo = await this.chatService.getTotalTokensByClienteMasterInPeriod(clienteMaster.id, dataInicioAssinatura, dataFimAssinatura || agora);
+            const todosHistoricos = await this.historicoRepository.find({
+                where: { clienteMasterId: clienteMaster.id },
+            });
+            const dataFimComparacao = dataFimAssinatura || agora;
+            for (const h of todosHistoricos) {
+                const inicioMesHistorico = new Date(h.ano, h.mes - 1, 1);
+                const fimMesHistorico = new Date(h.ano, h.mes, 0, 23, 59, 59, 999);
+                const temIntersecao = (inicioMesHistorico >= dataInicioAssinatura && inicioMesHistorico <= dataFimComparacao) ||
+                    (fimMesHistorico >= dataInicioAssinatura && fimMesHistorico <= dataFimComparacao) ||
+                    (inicioMesHistorico <= dataInicioAssinatura && fimMesHistorico >= dataFimComparacao);
+                if (temIntersecao) {
+                    analisesFeitasPeriodo += Number(h.analisesFeitas || 0);
+                }
+            }
+        }
+        else {
+            tokensChatUsadosPeriodo = Number(historicoAtual?.tokensUtilizados || 0);
+            analisesFeitasPeriodo = Number(historicoAtual?.analisesFeitas || 0);
+        }
         const tokensChatLimite = plano ? Number(plano.tokenChat) : 0;
         const porcentagemUsoTokens = tokensChatLimite > 0
-            ? Math.min(100, Math.round((tokensChatUsadosMes / tokensChatLimite) * 100))
+            ? Math.min(100, Math.round((tokensChatUsadosPeriodo / tokensChatLimite) * 100))
             : 0;
-        const analisesFeitasMes = Number(historicoAtual?.analisesFeitas || 0);
         const analisesLimite = plano ? Number(plano.limiteAnalises) : 0;
-        const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasMes);
+        const analisesRestantes = Math.max(0, analisesLimite - analisesFeitasPeriodo);
         const porcentagemUsoAnalises = analisesLimite > 0
-            ? Math.min(100, Math.round((analisesFeitasMes / analisesLimite) * 100))
+            ? Math.min(100, Math.round((analisesFeitasPeriodo / analisesLimite) * 100))
             : 0;
         return {
             clienteMaster: {
@@ -708,7 +774,7 @@ let AssinaturasService = class AssinaturasService {
             clienteMasterId: clienteMaster.id,
             usuarioId: userComum.id,
             tokensChat: {
-                tokensUtilizados: tokensChatUsadosMes,
+                tokensUtilizados: tokensChatUsadosPeriodo,
                 limitePlano: tokensChatLimite,
                 porcentagemUso: porcentagemUsoTokens,
             },
@@ -740,6 +806,121 @@ let AssinaturasService = class AssinaturasService {
             } : null,
         };
     }
+    async getAnalisesInfo(clienteMasterId, userId, userTipo) {
+        const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
+        if (!clienteMaster) {
+            throw new common_1.NotFoundException('Cliente Master não encontrado');
+        }
+        if (userTipo === 'master') {
+            const clientesMaster = await this.clientesMasterService.findByUserId(userId);
+            const temAcesso = clientesMaster.some((cm) => cm.id === clienteMasterId);
+            if (!temAcesso) {
+                throw new common_1.BadRequestException('Você não tem permissão para acessar este recurso');
+            }
+        }
+        else {
+            const usuariosComuns = await this.userComumService.findByUserId(userId);
+            const temAcesso = usuariosComuns.some((uc) => uc.clienteMasterId === clienteMasterId);
+            if (!temAcesso) {
+                throw new common_1.BadRequestException('Você não tem permissão para acessar este recurso');
+            }
+        }
+        const assinaturaEntity = await this.assinaturaRepository.findOne({
+            where: { userId: clienteMaster.id },
+            relations: ['plano'],
+            order: { createdAt: 'DESC' },
+        });
+        let plano = null;
+        if (assinaturaEntity && assinaturaEntity.planoId) {
+            plano = await this.planosService.findById(assinaturaEntity.planoId);
+        }
+        const limitePlano = plano ? Number(plano.limiteAnalises) : 0;
+        const agora = new Date();
+        let dataInicioAssinatura = null;
+        let dataFimAssinatura = null;
+        if (assinaturaEntity) {
+            if (assinaturaEntity.nextDueDate) {
+                dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+                if (dataInicioAssinatura) {
+                    dataFimAssinatura = new Date(dataInicioAssinatura);
+                    dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+                }
+            }
+            else if (assinaturaEntity.createdAt) {
+                dataInicioAssinatura = new Date(assinaturaEntity.createdAt);
+                const diaFaturamento = dataInicioAssinatura.getDate();
+                const mesesDesdeInicio = Math.floor((agora.getTime() - dataInicioAssinatura.getTime()) / (1000 * 60 * 60 * 24 * 30));
+                const proxima = new Date(dataInicioAssinatura);
+                proxima.setMonth(proxima.getMonth() + mesesDesdeInicio + 1);
+                proxima.setDate(diaFaturamento);
+                if (proxima <= agora) {
+                    proxima.setMonth(proxima.getMonth() + 1);
+                }
+                dataFimAssinatura = proxima;
+            }
+        }
+        const todosHistoricos = await this.historicoRepository.find({
+            where: { clienteMasterId: clienteMaster.id },
+        });
+        let analisesFeitasPeriodo = 0;
+        if (dataInicioAssinatura) {
+            const dataFimComparacao = dataFimAssinatura || agora;
+            for (const h of todosHistoricos) {
+                const inicioMesHistorico = new Date(h.ano, h.mes - 1, 1);
+                const fimMesHistorico = new Date(h.ano, h.mes, 0, 23, 59, 59, 999);
+                const temIntersecao = (inicioMesHistorico >= dataInicioAssinatura && inicioMesHistorico <= dataFimComparacao) ||
+                    (fimMesHistorico >= dataInicioAssinatura && fimMesHistorico <= dataFimComparacao) ||
+                    (inicioMesHistorico <= dataInicioAssinatura && fimMesHistorico >= dataFimComparacao);
+                if (temIntersecao) {
+                    analisesFeitasPeriodo += Number(h.analisesFeitas || 0);
+                }
+            }
+        }
+        else {
+            analisesFeitasPeriodo = todosHistoricos.reduce((sum, h) => sum + Number(h.analisesFeitas || 0), 0);
+        }
+        const passouDoLimite = limitePlano > 0 && analisesFeitasPeriodo > limitePlano;
+        const analisesRestantes = Math.max(0, limitePlano - analisesFeitasPeriodo);
+        const porcentagemUso = limitePlano > 0
+            ? Math.min(100, Math.round((analisesFeitasPeriodo / limitePlano) * 100))
+            : 0;
+        return {
+            limitePlano,
+            analisesUsadas: analisesFeitasPeriodo,
+            analisesRestantes,
+            porcentagemUso,
+            passouDoLimite,
+            aviso: passouDoLimite
+                ? `Limite de análises excedido! Você já utilizou ${analisesFeitasPeriodo} de ${limitePlano} análises permitidas neste período. O limite será renovado na próxima data de faturamento.`
+                : null,
+            periodo: {
+                dataInicio: dataInicioAssinatura ? dataInicioAssinatura.toISOString().split('T')[0] : null,
+                dataFim: dataFimAssinatura ? dataFimAssinatura.toISOString().split('T')[0] : null,
+            },
+        };
+    }
+    parseNextDueDate(nextDueDate) {
+        if (!nextDueDate) {
+            return null;
+        }
+        if (nextDueDate instanceof Date) {
+            return isNaN(nextDueDate.getTime()) ? null : nextDueDate;
+        }
+        if (typeof nextDueDate === 'string') {
+            const [year, month, day] = nextDueDate.split('-').map(Number);
+            if (!year || !month || !day || isNaN(year) || isNaN(month) || isNaN(day)) {
+                console.warn(`⚠️ Data inválida recebida: ${nextDueDate}`);
+                return null;
+            }
+            const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+            if (isNaN(date.getTime())) {
+                console.warn(`⚠️ Data inválida recebida: ${nextDueDate}`);
+                return null;
+            }
+            return date;
+        }
+        return null;
+    }
     toResponseDto(subscription) {
         return {
             id: subscription.id,
@@ -762,6 +943,7 @@ let AssinaturasService = class AssinaturasService {
             status: subscription.status,
             planoId: subscription.planoId,
             couponId: subscription.couponId,
+            nextDueDate: subscription.nextDueDate,
             createdAt: subscription.createdAt,
             updatedAt: subscription.updatedAt,
         };

@@ -23,6 +23,7 @@ export declare class Assinatura {
     creditCardToken: string;
     status: string;
     asaasResponse: string;
+    nextDueDate: Date | null;
     adminId: string;
     creditCardNumber: string;
     creditCardBrand: string;

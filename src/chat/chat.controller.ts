@@ -98,33 +98,41 @@ export class ChatController {
     // Buscar total de tokens de todas as conversas (histórico completo)
     const totalUsedTokens = await this.chatService.getTotalTokensByUser(userId);
     
-    // Calcular data de início do ciclo de faturamento
-    let dataInicioFaturamento: Date | null = null;
+    // Calcular período da assinatura usando nextDueDate
+    // nextDueDate define o INÍCIO, o FIM é 1 mês depois
+    let dataInicioAssinatura: Date | null = null;
+    let dataFimAssinatura: Date | null = null;
 
     if (clienteMasterId) {
       try {
-        const dashboardInfo = await this.assinaturasService.getDashboardInfo(clienteMasterId, req.user.tipo);
-        if (dashboardInfo?.assinatura?.proximaRenovacao) {
-          // Calcular data de início do ciclo (1 mês antes da próxima renovação)
-          const proxRenovacao = new Date(dashboardInfo.assinatura.proximaRenovacao);
-          dataInicioFaturamento = new Date(proxRenovacao);
-          dataInicioFaturamento.setMonth(dataInicioFaturamento.getMonth() - 1);
+        const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
+        if (assinatura && assinatura.nextDueDate) {
+          // nextDueDate é o INÍCIO da assinatura
+          dataInicioAssinatura = new Date(assinatura.nextDueDate);
+          
+          // FIM é 1 mês depois do início
+          dataFimAssinatura = new Date(dataInicioAssinatura);
+          dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
         }
       } catch (error) {
         console.warn('⚠️ Não foi possível obter info de assinatura:', error.message);
       }
     }
 
-    // Buscar conversas do ciclo atual ou todas se não tiver ciclo definido
+    // Buscar conversas do período da assinatura ou todas se não tiver assinatura
     let conversations;
-    let totalUsedTokensMes = 0;
+    let totalUsedTokensPeriodo = 0;
 
-    if (dataInicioFaturamento) {
-      conversations = await this.chatService.getConversationsByUserInPeriod(userId, dataInicioFaturamento);
-      totalUsedTokensMes = await this.chatService.getTotalTokensByUserInPeriod(userId, dataInicioFaturamento);
+    if (dataInicioAssinatura) {
+      conversations = await this.chatService.getConversationsByUserInPeriod(userId, dataInicioAssinatura);
+      totalUsedTokensPeriodo = await this.chatService.getTotalTokensByUserInPeriod(
+        userId, 
+        dataInicioAssinatura,
+        dataFimAssinatura || undefined
+      );
     } else {
       conversations = await this.chatService.getConversationsByUser(userId);
-      totalUsedTokensMes = totalUsedTokens;
+      totalUsedTokensPeriodo = totalUsedTokens;
     }
     
     const result = conversations.map((c) => ({
@@ -141,7 +149,7 @@ export class ChatController {
       data: {
         conversations: result,
         totalUsedTokens,
-        totalUsedTokensMes,
+        totalUsedTokensPeriodo,
       },
     };
   }
@@ -180,17 +188,28 @@ export class ChatController {
           const dashboardInfo = await this.assinaturasService.getDashboardInfo(clienteMasterId, req.user.tipo);
           const limitePlano = dashboardInfo?.tokensChat?.limitePlano || 0;
           
-          if (limitePlano > 0 && dashboardInfo?.assinatura?.proximaRenovacao) {
-            const proxRenovacao = new Date(dashboardInfo.assinatura.proximaRenovacao);
-            const dataInicioFaturamento = new Date(proxRenovacao);
-            dataInicioFaturamento.setMonth(dataInicioFaturamento.getMonth() - 1);
-            
-            const tokensUsadosMes = await this.chatService.getTotalTokensByUserInPeriod(req.user.id, dataInicioFaturamento);
-            
-            if (tokensUsadosMes >= limitePlano) {
-              res.write(`data: ${JSON.stringify({ type: 'error', message: 'Limite de tokens do mês atingido. Aguarde a próxima renovação ou faça upgrade do plano.' })}\n\n`);
-              res.end();
-              return;
+          if (limitePlano > 0) {
+            // Busca a assinatura para obter o nextDueDate (início da assinatura)
+            const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
+            if (assinatura && assinatura.nextDueDate) {
+              // nextDueDate é o INÍCIO da assinatura
+              const dataInicioAssinatura = new Date(assinatura.nextDueDate);
+              
+              // FIM é 1 mês depois do início
+              const dataFimAssinatura = new Date(dataInicioAssinatura);
+              dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+              
+              const tokensUsadosPeriodo = await this.chatService.getTotalTokensByUserInPeriod(
+                req.user.id,
+                dataInicioAssinatura,
+                dataFimAssinatura
+              );
+              
+              if (tokensUsadosPeriodo >= limitePlano) {
+                res.write(`data: ${JSON.stringify({ type: 'error', message: 'Limite de tokens do período da assinatura atingido. Aguarde a próxima renovação ou faça upgrade do plano.' })}\n\n`);
+                res.end();
+                return;
+              }
             }
           }
         } catch (error) {
@@ -328,15 +347,26 @@ export class ChatController {
         const dashboardInfo = await this.assinaturasService.getDashboardInfo(clienteMasterId, req.user.tipo);
         const limitePlano = dashboardInfo?.tokensChat?.limitePlano || 0;
         
-        if (limitePlano > 0 && dashboardInfo?.assinatura?.proximaRenovacao) {
-          const proxRenovacao = new Date(dashboardInfo.assinatura.proximaRenovacao);
-          const dataInicioFaturamento = new Date(proxRenovacao);
-          dataInicioFaturamento.setMonth(dataInicioFaturamento.getMonth() - 1);
-          
-          const tokensUsadosMes = await this.chatService.getTotalTokensByUserInPeriod(req.user.id, dataInicioFaturamento);
-          
-          if (tokensUsadosMes >= limitePlano) {
-            throw new ForbiddenException('Limite de tokens do mês atingido. Aguarde a próxima renovação ou faça upgrade do plano.');
+        if (limitePlano > 0) {
+          // Busca a assinatura para obter o nextDueDate (início da assinatura)
+          const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
+          if (assinatura && assinatura.nextDueDate) {
+            // nextDueDate é o INÍCIO da assinatura
+            const dataInicioAssinatura = new Date(assinatura.nextDueDate);
+            
+            // FIM é 1 mês depois do início
+            const dataFimAssinatura = new Date(dataInicioAssinatura);
+            dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+            
+            const tokensUsadosPeriodo = await this.chatService.getTotalTokensByUserInPeriod(
+              req.user.id, 
+              dataInicioAssinatura,
+              dataFimAssinatura
+            );
+            
+            if (tokensUsadosPeriodo >= limitePlano) {
+              throw new ForbiddenException('Limite de tokens do período da assinatura atingido. Aguarde a próxima renovação ou faça upgrade do plano.');
+            }
           }
         }
       } catch (error) {

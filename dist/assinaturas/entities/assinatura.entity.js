@@ -36,6 +36,7 @@ let Assinatura = class Assinatura {
     creditCardToken;
     status;
     asaasResponse;
+    nextDueDate;
     adminId;
     creditCardNumber;
     creditCardBrand;
@@ -132,6 +133,10 @@ __decorate([
     (0, typeorm_1.Column)({ type: 'text', name: 'asaas_response', nullable: true }),
     __metadata("design:type", String)
 ], Assinatura.prototype, "asaasResponse", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'next_due_date', type: 'date', nullable: true }),
+    __metadata("design:type", Object)
+], Assinatura.prototype, "nextDueDate", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'admin_id', nullable: true }),
     __metadata("design:type", String)

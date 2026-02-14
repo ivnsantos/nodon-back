@@ -77,6 +77,9 @@ export class Assinatura {
   @Column({ type: 'text', name: 'asaas_response', nullable: true })
   asaasResponse: string;
 
+  @Column({ name: 'next_due_date', type: 'date', nullable: true })
+  nextDueDate: Date | null;
+
   @Column({ name: 'admin_id', nullable: true })
   adminId: string;
 

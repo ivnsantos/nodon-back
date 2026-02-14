@@ -78,6 +78,44 @@ let AssinaturasController = class AssinaturasController {
         const idClienteMaster = clientesMaster[0].id;
         return this.assinaturasService.getDashboardInfo(idClienteMaster, req.user.tipo);
     }
+    async getAnalisesInfo(req, userComumIdHeader, clienteMasterId, usuario) {
+        let clienteMasterIdFinal = clienteMasterId;
+        const userComumId = userComumIdHeader || usuario;
+        if (userComumId) {
+            const userComum = await this.userComumService.findById(userComumId);
+            if (!userComum) {
+                throw new common_1.NotFoundException('Usuário não encontrado');
+            }
+            if (userComum.userId !== req.user.id) {
+                throw new common_1.ForbiddenException('Você não tem permissão para acessar este usuário');
+            }
+            clienteMasterIdFinal = userComum.clienteMasterId;
+        }
+        if (clienteMasterIdFinal) {
+            if (req.user.tipo === 'master') {
+                const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
+                const temVinculo = clientesMaster.some(cm => cm.id === clienteMasterIdFinal);
+                if (!temVinculo) {
+                    throw new common_1.ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+                }
+            }
+            else {
+                const usuariosComuns = await this.userComumService.findByUserId(req.user.id);
+                const temVinculo = usuariosComuns.some(uc => uc.clienteMasterId === clienteMasterIdFinal);
+                if (!temVinculo) {
+                    throw new common_1.ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+                }
+            }
+        }
+        else {
+            const clientesMaster = await this.clientesMasterService.findByUserId(req.user.id);
+            if (!clientesMaster || clientesMaster.length === 0) {
+                throw new common_1.NotFoundException('Cliente Master não encontrado para este usuário');
+            }
+            clienteMasterIdFinal = clientesMaster[0].id;
+        }
+        return this.assinaturasService.getAnalisesInfo(clienteMasterIdFinal, req.user.id, req.user.tipo);
+    }
     async findOne(id) {
         return this.assinaturasService.findById(id);
     }
@@ -125,6 +163,17 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, String, String]),
     __metadata("design:returntype", Promise)
 ], AssinaturasController.prototype, "getDashboard", null);
+__decorate([
+    (0, common_1.Get)('analises'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, validate_resource_access_guard_1.ValidateResourceAccessGuard),
+    __param(0, (0, common_1.Request)()),
+    __param(1, (0, common_1.Headers)('x-user-comum-id')),
+    __param(2, (0, common_1.Query)('clienteMasterId')),
+    __param(3, (0, common_1.Query)('usuario')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String, String]),
+    __metadata("design:returntype", Promise)
+], AssinaturasController.prototype, "getAnalisesInfo", null);
 __decorate([
     (0, common_1.Get)(':id'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
