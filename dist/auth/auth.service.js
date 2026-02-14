@@ -231,14 +231,6 @@ let AuthService = class AuthService {
                     }
                 }
             }
-            else {
-                try {
-                    await this.emailService.sendVerificationCode(userBase.email, verificationToken, userBase.nome);
-                }
-                catch (error) {
-                    console.error('Erro ao enviar email de verificação:', error);
-                }
-            }
         }
         return {
             message: isVerified

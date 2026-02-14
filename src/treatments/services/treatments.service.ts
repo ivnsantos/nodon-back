@@ -7,7 +7,7 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, ILike } from 'typeorm';
 import { Treatment } from '../entities/treatment.entity';
 import { TreatmentProduct } from '../entities/treatment-product.entity';
 import { Product } from '../entities/product.entity';
@@ -113,6 +113,32 @@ export class TreatmentsService {
       relations: ['treatmentProducts', 'treatmentProducts.product', 'treatmentProducts.product.category'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  /**
+   * Busca tratamentos por nome (busca parcial e case-insensitive)
+   * Retorna apenas tratamentos vinculados ao clienteMaster especificado
+   */
+  async buscarPorNome(nome: string, clienteMasterId: string, userId: string, userTipo: string): Promise<Treatment[]> {
+    if (!nome || nome.trim().length === 0) {
+      throw new BadRequestException('Nome é obrigatório para busca');
+    }
+
+    if (!clienteMasterId) {
+      throw new BadRequestException('Cliente Master ID é obrigatório');
+    }
+
+    await this.verificarPermissao(userId, userTipo, clienteMasterId);
+
+    return this.treatmentRepository
+      .createQueryBuilder('treatment')
+      .leftJoinAndSelect('treatment.treatmentProducts', 'treatmentProduct')
+      .leftJoinAndSelect('treatmentProduct.product', 'product')
+      .leftJoinAndSelect('product.category', 'category')
+      .where('treatment.clienteMasterId = :clienteMasterId', { clienteMasterId })
+      .andWhere('treatment.name ILIKE :nome', { nome: `%${nome.trim()}%` })
+      .orderBy('treatment.name', 'ASC')
+      .getMany();
   }
 
   /**

@@ -12,30 +12,31 @@ import {
   BadRequestException,
   Query,
 } from '@nestjs/common';
-import { TreatmentsService } from '../services/treatments.service';
-import { CreateTreatmentDto } from '../dto/create-treatment.dto';
-import { UpdateTreatmentDto } from '../dto/update-treatment.dto';
-import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { ValidateResourceAccessGuard } from '../../auth/guards/validate-resource-access.guard';
-import { UserComumService } from '../../users/services/user-comum.service';
+import { OrcamentosService } from './orcamentos.service';
+import { CreateOrcamentoDto } from './dto/create-orcamento.dto';
+import { UpdateOrcamentoDto } from './dto/update-orcamento.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ValidateResourceAccessGuard } from '../auth/guards/validate-resource-access.guard';
+import { UserComumService } from '../users/services/user-comum.service';
+import { StatusOrcamento } from './entities/orcamento.entity';
 
-@Controller('treatments')
+@Controller('orcamentos')
 @UseGuards(JwtAuthGuard)
-export class TreatmentsController {
+export class OrcamentosController {
   constructor(
-    private readonly treatmentsService: TreatmentsService,
+    private readonly orcamentosService: OrcamentosService,
     private readonly userComumService: UserComumService,
   ) {}
 
   @Post()
   @UseGuards(ValidateResourceAccessGuard)
   async create(
+    @Request() req,
     @Headers('x-cliente-master-id') clienteMasterIdHeader: string,
     @Headers('x-user-comum-id') userComumIdHeader: string,
-    @Body() createTreatmentDto: CreateTreatmentDto,
-    @Request() req,
+    @Body() createOrcamentoDto: CreateOrcamentoDto,
   ) {
-    let clienteMasterId = clienteMasterIdHeader || createTreatmentDto.clienteMasterId;
+    let clienteMasterId = clienteMasterIdHeader || createOrcamentoDto.clienteMasterId;
 
     if (userComumIdHeader) {
       const userComum = await this.userComumService.findById(userComumIdHeader);
@@ -51,49 +52,19 @@ export class TreatmentsController {
       );
     }
 
-    createTreatmentDto.clienteMasterId = clienteMasterId;
-    return this.treatmentsService.create(createTreatmentDto, req.user.id, req.user.tipo);
-  }
-
-  @Get('buscar')
-  @UseGuards(ValidateResourceAccessGuard)
-  async buscarPorNome(
-    @Headers('x-cliente-master-id') clienteMasterIdHeader: string,
-    @Headers('x-user-comum-id') userComumIdHeader: string,
-    @Query('clienteMasterId') clienteMasterIdQuery: string | null,
-    @Query('nome') nome: string,
-    @Request() req,
-  ) {
-    if (!nome || nome.trim().length === 0) {
-      throw new BadRequestException('Parâmetro "nome" é obrigatório');
-    }
-
-    let clienteMasterId = clienteMasterIdHeader || clienteMasterIdQuery;
-
-    if (userComumIdHeader) {
-      const userComum = await this.userComumService.findById(userComumIdHeader);
-      if (!userComum) {
-        throw new BadRequestException('UserComum não encontrado');
-      }
-      clienteMasterId = userComum.clienteMasterId;
-    }
-
-    if (!clienteMasterId) {
-      throw new BadRequestException(
-        'Header X-Cliente-Master-Id ou X-User-Comum-Id é obrigatório, ou forneça clienteMasterId na query',
-      );
-    }
-
-    return this.treatmentsService.buscarPorNome(nome, clienteMasterId, req.user.id, req.user.tipo);
+    createOrcamentoDto.clienteMasterId = clienteMasterId;
+    return this.orcamentosService.create(createOrcamentoDto, req.user.id, req.user.tipo);
   }
 
   @Get()
   @UseGuards(ValidateResourceAccessGuard)
   async findAll(
+    @Request() req,
     @Headers('x-cliente-master-id') clienteMasterIdHeader: string,
     @Headers('x-user-comum-id') userComumIdHeader: string,
     @Query('clienteMasterId') clienteMasterIdQuery: string | null,
-    @Request() req,
+    @Query('pacienteId') pacienteId?: string,
+    @Query('status') status?: StatusOrcamento,
   ) {
     let clienteMasterId = clienteMasterIdHeader || clienteMasterIdQuery;
 
@@ -111,35 +82,82 @@ export class TreatmentsController {
       );
     }
 
-    return this.treatmentsService.findAll(clienteMasterId, req.user.id, req.user.tipo);
+    return this.orcamentosService.findAll(clienteMasterId, req.user.id, req.user.tipo, pacienteId, status);
+  }
+
+  @Get('analytics')
+  @UseGuards(ValidateResourceAccessGuard)
+  async getAnalytics(
+    @Request() req,
+    @Headers('x-cliente-master-id') clienteMasterIdHeader: string,
+    @Headers('x-user-comum-id') userComumIdHeader: string,
+    @Query('clienteMasterId') clienteMasterIdQuery: string | null,
+    @Query('dataInicio') dataInicio?: string,
+    @Query('dataFim') dataFim?: string,
+  ) {
+    let clienteMasterId = clienteMasterIdHeader || clienteMasterIdQuery;
+
+    if (userComumIdHeader) {
+      const userComum = await this.userComumService.findById(userComumIdHeader);
+      if (!userComum) {
+        throw new BadRequestException('UserComum não encontrado');
+      }
+      clienteMasterId = userComum.clienteMasterId;
+    }
+
+    if (!clienteMasterId) {
+      throw new BadRequestException(
+        'Header X-Cliente-Master-Id ou X-User-Comum-Id é obrigatório, ou forneça clienteMasterId na query',
+      );
+    }
+
+    return this.orcamentosService.getAnalytics(clienteMasterId, req.user.id, req.user.tipo, dataInicio, dataFim);
+  }
+
+  @Get('paciente/:pacienteId')
+  @UseGuards(ValidateResourceAccessGuard)
+  async findByPaciente(
+    @Param('pacienteId') pacienteId: string,
+    @Request() req,
+    @Headers('x-cliente-master-id') clienteMasterIdHeader: string,
+    @Headers('x-user-comum-id') userComumIdHeader: string,
+    @Query('clienteMasterId') clienteMasterIdQuery: string | null,
+  ) {
+    let clienteMasterId = clienteMasterIdHeader || clienteMasterIdQuery;
+
+    if (userComumIdHeader) {
+      const userComum = await this.userComumService.findById(userComumIdHeader);
+      if (!userComum) {
+        throw new BadRequestException('UserComum não encontrado');
+      }
+      clienteMasterId = userComum.clienteMasterId;
+    }
+
+    if (!clienteMasterId) {
+      throw new BadRequestException(
+        'Header X-Cliente-Master-Id ou X-User-Comum-Id é obrigatório, ou forneça clienteMasterId na query',
+      );
+    }
+
+    return this.orcamentosService.findByPaciente(pacienteId, clienteMasterId, req.user.id, req.user.tipo);
   }
 
   @Get(':id')
   @UseGuards(ValidateResourceAccessGuard)
   async findOne(@Param('id') id: string, @Request() req) {
-    return this.treatmentsService.findOne(id, req.user.id, req.user.tipo);
+    return this.orcamentosService.findOne(id, req.user.id, req.user.tipo);
   }
 
   @Patch(':id')
   @UseGuards(ValidateResourceAccessGuard)
-  async update(
-    @Param('id') id: string,
-    @Body() updateTreatmentDto: UpdateTreatmentDto,
-    @Request() req,
-  ) {
-    return this.treatmentsService.update(id, updateTreatmentDto, req.user.id, req.user.tipo);
+  async update(@Param('id') id: string, @Body() updateOrcamentoDto: UpdateOrcamentoDto, @Request() req) {
+    return this.orcamentosService.update(id, updateOrcamentoDto, req.user.id, req.user.tipo);
   }
 
   @Delete(':id')
   @UseGuards(ValidateResourceAccessGuard)
   async remove(@Param('id') id: string, @Request() req) {
-    return this.treatmentsService.remove(id, req.user.id, req.user.tipo);
-  }
-
-  @Get(':id/calculate-cost')
-  @UseGuards(ValidateResourceAccessGuard)
-  async calculateCost(@Param('id') id: string, @Request() req) {
-    return this.treatmentsService.calculateTreatmentCost(id, req.user.id, req.user.tipo);
+    return this.orcamentosService.remove(id, req.user.id, req.user.tipo);
   }
 }
 

@@ -32,6 +32,7 @@ const anamneses_module_1 = require("./anamneses/anamneses.module");
 const questionarios_module_1 = require("./questionarios/questionarios.module");
 const treatments_module_1 = require("./treatments/treatments.module");
 const anotacoes_module_1 = require("./anotacoes/anotacoes.module");
+const orcamentos_module_1 = require("./orcamentos/orcamentos.module");
 const typeorm_config_1 = require("./config/typeorm.config");
 const planos_service_1 = require("./planos/planos.service");
 let AppModule = class AppModule {
@@ -89,6 +90,7 @@ exports.AppModule = AppModule = __decorate([
             questionarios_module_1.QuestionariosModule,
             treatments_module_1.TreatmentsModule,
             anotacoes_module_1.AnotacoesModule,
+            orcamentos_module_1.OrcamentosModule,
         ],
     }),
     __metadata("design:paramtypes", [planos_service_1.PlanosService])

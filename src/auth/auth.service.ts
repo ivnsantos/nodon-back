@@ -269,17 +269,6 @@ export class AuthService {
             console.error('Erro ao enviar email de verificação:', emailError);
           }
         }
-      } else {
-        // Se não tem telefone, enviar por email
-        try {
-          await this.emailService.sendVerificationCode(
-            userBase.email,
-            verificationToken,
-            userBase.nome,
-          );
-        } catch (error) {
-          console.error('Erro ao enviar email de verificação:', error);
-        }
       }
     }
 
