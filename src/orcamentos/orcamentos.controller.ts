@@ -15,6 +15,7 @@ import {
 import { OrcamentosService } from './orcamentos.service';
 import { CreateOrcamentoDto } from './dto/create-orcamento.dto';
 import { UpdateOrcamentoDto } from './dto/update-orcamento.dto';
+import { UpdateItemStatusDto } from './dto/update-item-status.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ValidateResourceAccessGuard } from '../auth/guards/validate-resource-access.guard';
 import { UserComumService } from '../users/services/user-comum.service';
@@ -114,6 +115,65 @@ export class OrcamentosController {
     return this.orcamentosService.getAnalytics(clienteMasterId, req.user.id, req.user.tipo, dataInicio, dataFim);
   }
 
+  @Get('graficos-mensais')
+  @UseGuards(ValidateResourceAccessGuard)
+  async getGraficosMensais(
+    @Request() req,
+    @Headers('x-cliente-master-id') clienteMasterIdHeader: string,
+    @Headers('x-user-comum-id') userComumIdHeader: string,
+    @Query('clienteMasterId') clienteMasterIdQuery: string | null,
+    @Query('mes') mes: string,
+  ) {
+    let clienteMasterId = clienteMasterIdHeader || clienteMasterIdQuery;
+
+    if (userComumIdHeader) {
+      const userComum = await this.userComumService.findById(userComumIdHeader);
+      if (!userComum) {
+        throw new BadRequestException('UserComum não encontrado');
+      }
+      clienteMasterId = userComum.clienteMasterId;
+    }
+
+    if (!clienteMasterId) {
+      throw new BadRequestException(
+        'Header X-Cliente-Master-Id ou X-User-Comum-Id é obrigatório, ou forneça clienteMasterId na query',
+      );
+    }
+
+    if (!mes) {
+      throw new BadRequestException('Parâmetro "mes" é obrigatório (formato: YYYY-MM)');
+    }
+
+    return this.orcamentosService.getGraficosMensais(clienteMasterId, req.user.id, req.user.tipo, mes);
+  }
+
+  @Get('dados-gerais')
+  @UseGuards(ValidateResourceAccessGuard)
+  async getDadosGerais(
+    @Request() req,
+    @Headers('x-cliente-master-id') clienteMasterIdHeader: string,
+    @Headers('x-user-comum-id') userComumIdHeader: string,
+    @Query('clienteMasterId') clienteMasterIdQuery: string | null,
+  ) {
+    let clienteMasterId = clienteMasterIdHeader || clienteMasterIdQuery;
+
+    if (userComumIdHeader) {
+      const userComum = await this.userComumService.findById(userComumIdHeader);
+      if (!userComum) {
+        throw new BadRequestException('UserComum não encontrado');
+      }
+      clienteMasterId = userComum.clienteMasterId;
+    }
+
+    if (!clienteMasterId) {
+      throw new BadRequestException(
+        'Header X-Cliente-Master-Id ou X-User-Comum-Id é obrigatório, ou forneça clienteMasterId na query',
+      );
+    }
+
+    return this.orcamentosService.getDadosGerais(clienteMasterId, req.user.id, req.user.tipo);
+  }
+
   @Get('paciente/:pacienteId')
   @UseGuards(ValidateResourceAccessGuard)
   async findByPaciente(
@@ -140,6 +200,17 @@ export class OrcamentosController {
     }
 
     return this.orcamentosService.findByPaciente(pacienteId, clienteMasterId, req.user.id, req.user.tipo);
+  }
+
+  @Patch(':orcamentoId/itens/:itemId/status')
+  @UseGuards(ValidateResourceAccessGuard)
+  async updateItemStatus(
+    @Param('orcamentoId') orcamentoId: string,
+    @Param('itemId') itemId: string,
+    @Body() updateStatusDto: UpdateItemStatusDto,
+    @Request() req,
+  ) {
+    return this.orcamentosService.updateItemStatus(orcamentoId, itemId, updateStatusDto.status, req.user.id, req.user.tipo);
   }
 
   @Get(':id')

@@ -17,6 +17,7 @@ import { CreateQuestionarioDto } from './dto/create-questionario.dto';
 import { UpdateQuestionarioDto } from './dto/update-questionario.dto';
 import { EnviarQuestionarioDto } from './dto/enviar-questionario.dto';
 import { ResponderQuestionarioDto } from './dto/responder-questionario.dto';
+import { EnviarFeedbackWhatsAppDto } from './dto/enviar-feedback-whatsapp.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ValidateResourceAccessGuard } from '../auth/guards/validate-resource-access.guard';
 import { UserComumService } from '../users/services/user-comum.service';
@@ -170,6 +171,20 @@ export class QuestionariosController {
     @Request() req,
   ) {
     return this.questionariosService.responderQuestionario(responderQuestionarioDto, req.user.id, req.user.tipo);
+  }
+
+  @Post('enviar-whatsapp')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
+  async enviarFeedbackWhatsApp(
+    @Body() enviarFeedbackWhatsAppDto: EnviarFeedbackWhatsAppDto,
+    @Request() req,
+  ) {
+    return this.questionariosService.enviarFeedbackWhatsApp(
+      enviarFeedbackWhatsAppDto.respostaQuestionarioId,
+      enviarFeedbackWhatsAppDto.phoneNumber,
+      req.user.id,
+      req.user.tipo,
+    );
   }
 }
 

@@ -1,9 +1,13 @@
-import { IsString, IsOptional, IsArray, ValidateNested, IsEnum } from 'class-validator';
+import { IsString, IsOptional, IsArray, ValidateNested, IsEnum, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
-import { CreateItemOrcamentoDto } from './create-item-orcamento.dto';
+import { UpdateItemOrcamentoArrayDto } from './update-item-orcamento-array.dto';
 import { StatusOrcamento } from '../entities/orcamento.entity';
 
 export class UpdateOrcamentoDto {
+  @IsUUID()
+  @IsOptional()
+  pacienteId?: string; // Aceita mas não será processado (não faz sentido alterar paciente de um orçamento)
+
   @IsEnum(StatusOrcamento, { message: 'Status inválido' })
   @IsOptional()
   status?: StatusOrcamento;
@@ -14,8 +18,8 @@ export class UpdateOrcamentoDto {
 
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => CreateItemOrcamentoDto)
+  @Type(() => UpdateItemOrcamentoArrayDto)
   @IsOptional()
-  itens?: CreateItemOrcamentoDto[];
+  itens?: UpdateItemOrcamentoArrayDto[];
 }
 

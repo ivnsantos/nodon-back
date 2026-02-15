@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Questionario } from './entities/questionario.entity';
 import { PerguntaQuestionario, TipoRespostaQuestionario } from './entities/pergunta-questionario.entity';
 import { RespostaQuestionario } from './entities/resposta-questionario.entity';
@@ -19,6 +20,7 @@ import { ResponderQuestionarioDto } from './dto/responder-questionario.dto';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { PacientesService } from '../pacientes/pacientes.service';
 import { UserComumService } from '../users/services/user-comum.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 
 @Injectable()
 export class QuestionariosService {
@@ -36,6 +38,8 @@ export class QuestionariosService {
     @Inject(forwardRef(() => PacientesService))
     private pacientesService: PacientesService,
     private userComumService: UserComumService,
+    private whatsappService: WhatsAppService,
+    private configService: ConfigService,
   ) {}
 
   /**
@@ -437,6 +441,50 @@ export class QuestionariosService {
     await this.respostaQuestionarioRepository.save(respostaQuestionario);
 
     return this.findQuestionarioPublico(respostaQuestionarioId);
+  }
+
+  /**
+   * Envia o link do feedback/questionário via WhatsApp
+   */
+  async enviarFeedbackWhatsApp(
+    respostaQuestionarioId: string,
+    phoneNumber: string,
+    userId: string,
+    userTipo: string,
+  ): Promise<{ message: string; link: string }> {
+    // Buscar a resposta do questionário
+    const respostaQuestionario = await this.respostaQuestionarioRepository.findOne({
+      where: { id: respostaQuestionarioId },
+      relations: ['questionario'],
+    });
+
+    if (!respostaQuestionario) {
+      throw new NotFoundException('Resposta de questionário não encontrada');
+    }
+
+    // Verificar permissão
+    await this.verificarPermissao(userId, userTipo, respostaQuestionario.questionario.clienteMasterId);
+
+    // Verificar se o questionário foi enviado
+    if (!respostaQuestionario.enviada) {
+      throw new BadRequestException('Este questionário ainda não foi enviado');
+    }
+
+    // Gerar o link completo
+    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    const frontendUrl = isProduction
+      ? this.configService.get<string>('FRONTEND_URL_PROD', 'https://nodon.com.br')
+      : this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
+
+    const link = `${frontendUrl}/questionarios/resposta/${respostaQuestionarioId}`;
+
+    // Enviar via WhatsApp
+    await this.whatsappService.sendFeedbackLink(phoneNumber, link);
+
+    return {
+      message: 'Link de feedback enviado via WhatsApp com sucesso',
+      link,
+    };
   }
 }
 

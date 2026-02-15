@@ -53,5 +53,73 @@ export class WhatsAppService {
     const message = `Olá ${nome}! Seu código de recuperação de senha é: ${code}. Este código expira em 15 minutos.`;
     await this.sendMessage(phoneNumber, message);
   }
+
+  async sendFeedbackLink(phoneNumber: string, link: string): Promise<void> {
+    try {
+      const contentVariables = JSON.stringify({ '1': link });
+      
+      const response = await axios.post(
+        `${this.whatsappApiUrl}/api/whatsapp/send-feedback`,
+        {
+          phoneNumber,
+          contentVariables,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          validateStatus: (status) => status >= 200 && status < 300,
+        },
+      );
+
+      console.log(`✅ Link de feedback enviado via WhatsApp para ${phoneNumber}`, {
+        status: response.status,
+        data: response.data,
+      });
+    } catch (error) {
+      console.error('❌ Erro ao enviar link de feedback via WhatsApp:', {
+        phoneNumber,
+        error: error?.response?.data || error?.message,
+      });
+      throw new HttpException(
+        `Erro ao enviar link de feedback via WhatsApp: ${error?.response?.data?.message || error?.message}`,
+        error?.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  async sendAnamneseLink(phoneNumber: string, link: string): Promise<void> {
+    try {
+      const contentVariables = JSON.stringify({ '1': link });
+      
+      const response = await axios.post(
+        `${this.whatsappApiUrl}/api/whatsapp/send-anamneses`,
+        {
+          phoneNumber,
+          contentVariables,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          validateStatus: (status) => status >= 200 && status < 300,
+        },
+      );
+
+      console.log(`✅ Link de anamnese enviado via WhatsApp para ${phoneNumber}`, {
+        status: response.status,
+        data: response.data,
+      });
+    } catch (error) {
+      console.error('❌ Erro ao enviar link de anamnese via WhatsApp:', {
+        phoneNumber,
+        error: error?.response?.data || error?.message,
+      });
+      throw new HttpException(
+        `Erro ao enviar link de anamnese via WhatsApp: ${error?.response?.data?.message || error?.message}`,
+        error?.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }
 

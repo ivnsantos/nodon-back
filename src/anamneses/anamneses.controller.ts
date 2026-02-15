@@ -22,6 +22,7 @@ import { UpdateAnamneseDto } from './dto/update-anamnese.dto';
 import { VincularAnamnesePacienteDto } from './dto/vincular-anamnese-paciente.dto';
 import { ResponderAnamneseDto } from './dto/responder-anamnese.dto';
 import { AtivarAnamneseDto, DesativarAnamneseDto } from './dto/ativar-anamnese.dto';
+import { EnviarAnamneseWhatsAppDto } from './dto/enviar-anamnese-whatsapp.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ValidateResourceAccessGuard } from '../auth/guards/validate-resource-access.guard';
 import { UserComumService } from '../users/services/user-comum.service';
@@ -187,6 +188,20 @@ export class AnamnesesController {
   @Put('publica/responder')
   async responderAnamnesePublica(@Body() responderDto: ResponderAnamneseDto) {
     return this.anamnesesService.responderAnamnesePublica(responderDto);
+  }
+
+  @Post('enviar-whatsapp')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
+  async enviarAnamneseWhatsApp(
+    @Body() enviarAnamneseWhatsAppDto: EnviarAnamneseWhatsAppDto,
+    @Request() req,
+  ) {
+    return this.anamnesesService.enviarAnamneseWhatsApp(
+      enviarAnamneseWhatsAppDto.respostaAnamneseId,
+      enviarAnamneseWhatsAppDto.phoneNumber,
+      req.user.id,
+      req.user.tipo,
+    );
   }
 }
 

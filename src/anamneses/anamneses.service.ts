@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Anamnese } from './entities/anamnese.entity';
 import { PerguntaAnamnese, TipoResposta } from './entities/pergunta-anamnese.entity';
 import { RespostaAnamnese } from './entities/resposta-anamnese.entity';
@@ -19,6 +20,7 @@ import { ResponderAnamneseDto } from './dto/responder-anamnese.dto';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { PacientesService } from '../pacientes/pacientes.service';
 import { UserComumService } from '../users/services/user-comum.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 
 @Injectable()
 export class AnamnesesService {
@@ -36,6 +38,8 @@ export class AnamnesesService {
     @Inject(forwardRef(() => PacientesService))
     private pacientesService: PacientesService,
     private userComumService: UserComumService,
+    private whatsappService: WhatsAppService,
+    private configService: ConfigService,
   ) {}
 
   /**
@@ -658,6 +662,45 @@ export class AnamnesesService {
     if (clienteMaster.userId !== userId) {
       throw new ForbiddenException('Apenas o proprietário do consultório pode editar ou deletar anamneses');
     }
+  }
+
+  /**
+   * Envia o link da anamnese via WhatsApp
+   */
+  async enviarAnamneseWhatsApp(
+    respostaAnamneseId: string,
+    phoneNumber: string,
+    userId: string,
+    userTipo: string,
+  ): Promise<{ message: string; link: string }> {
+    // Buscar a resposta da anamnese
+    const respostaAnamnese = await this.respostaAnamneseRepository.findOne({
+      where: { id: respostaAnamneseId },
+      relations: ['anamnese'],
+    });
+
+    if (!respostaAnamnese) {
+      throw new NotFoundException('Resposta de anamnese não encontrada');
+    }
+
+    // Verificar permissão
+    await this.verificarPermissao(userId, userTipo, respostaAnamnese.anamnese.clienteMasterId);
+
+    // Gerar o link completo
+    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
+    const frontendUrl = isProduction
+      ? this.configService.get<string>('FRONTEND_URL_PROD', 'https://nodon.com.br')
+      : this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
+
+    const link = `${frontendUrl}/anamneses/publica/${respostaAnamneseId}`;
+
+    // Enviar via WhatsApp
+    await this.whatsappService.sendAnamneseLink(phoneNumber, link);
+
+    return {
+      message: 'Link de anamnese enviado via WhatsApp com sucesso',
+      link,
+    };
   }
 }
 
