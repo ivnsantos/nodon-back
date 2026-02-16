@@ -4,13 +4,16 @@ import { OrcamentosService } from './orcamentos.service';
 import { OrcamentosController } from './orcamentos.controller';
 import { Orcamento } from './entities/orcamento.entity';
 import { ItemOrcamento } from './entities/item-orcamento.entity';
+import { Treatment } from '../treatments/entities/treatment.entity';
+import { Consulta } from '../calendario/entities/consulta.entity';
+import { Paciente } from '../pacientes/entities/paciente.entity';
 import { ClientesMasterModule } from '../users/clientes-master.module';
 import { UsersModule } from '../users/users.module';
 import { PacientesModule } from '../pacientes/pacientes.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Orcamento, ItemOrcamento]),
+    TypeOrmModule.forFeature([Orcamento, ItemOrcamento, Treatment, Consulta, Paciente]),
     forwardRef(() => ClientesMasterModule),
     forwardRef(() => UsersModule),
     forwardRef(() => PacientesModule),

@@ -7,9 +7,12 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Between } from 'typeorm';
 import { Orcamento, StatusOrcamento } from './entities/orcamento.entity';
 import { ItemOrcamento, StatusItemOrcamento } from './entities/item-orcamento.entity';
+import { Treatment } from '../treatments/entities/treatment.entity';
+import { Consulta } from '../calendario/entities/consulta.entity';
+import { Paciente } from '../pacientes/entities/paciente.entity';
 import { CreateOrcamentoDto } from './dto/create-orcamento.dto';
 import { UpdateOrcamentoDto } from './dto/update-orcamento.dto';
 import { ClientesMasterService } from '../users/clientes-master.service';
@@ -24,6 +27,12 @@ export class OrcamentosService {
     private orcamentoRepository: Repository<Orcamento>,
     @InjectRepository(ItemOrcamento)
     private itemOrcamentoRepository: Repository<ItemOrcamento>,
+    @InjectRepository(Treatment)
+    private treatmentRepository: Repository<Treatment>,
+    @InjectRepository(Consulta)
+    private consultaRepository: Repository<Consulta>,
+    @InjectRepository(Paciente)
+    private pacienteRepository: Repository<Paciente>,
     @Inject(forwardRef(() => ClientesMasterService))
     private clientesMasterService: ClientesMasterService,
     private userComumService: UserComumService,
@@ -480,6 +489,7 @@ export class OrcamentosService {
     const orcamentosQuery = await this.orcamentoRepository
       .createQueryBuilder('orcamento')
       .leftJoinAndSelect('orcamento.itens', 'item')
+      .leftJoinAndSelect('item.tratamento', 'tratamento')
       .where('orcamento.clienteMasterId = :clienteMasterId', { clienteMasterId })
       .andWhere('orcamento.createdAt >= :dataInicio', { dataInicio })
       .andWhere('orcamento.createdAt <= :dataFim', { dataFim })
@@ -565,6 +575,40 @@ export class OrcamentosService {
         .reduce((sum, item) => sum + Number(item.preco || 0) * (item.quantidade || 1), 0),
     };
 
+    // Analisar top 5 tratamentos mais vendidos do mês
+    const tratamentosMap = new Map<string, { tratamento: Treatment; quantidade: number; valorTotal: number }>();
+
+    todosItens.forEach((item) => {
+      if (item.tratamentoId && item.tratamento) {
+        const tratamentoId = item.tratamentoId;
+        const quantidadeItem = item.quantidade || 1;
+        const valorItem = Number(item.preco || 0) * quantidadeItem;
+
+        if (tratamentosMap.has(tratamentoId)) {
+          const existente = tratamentosMap.get(tratamentoId)!;
+          existente.quantidade += quantidadeItem;
+          existente.valorTotal += valorItem;
+        } else {
+          tratamentosMap.set(tratamentoId, {
+            tratamento: item.tratamento,
+            quantidade: quantidadeItem,
+            valorTotal: valorItem,
+          });
+        }
+      }
+    });
+
+    // Converter para array, ordenar por quantidade e pegar top 5
+    const topTratamentos = Array.from(tratamentosMap.values())
+      .sort((a, b) => b.quantidade - a.quantidade)
+      .slice(0, 5)
+      .map((t) => ({
+        id: t.tratamento.id,
+        name: t.tratamento.name,
+        quantidade: t.quantidade,
+        valorTotal: Number(t.valorTotal.toFixed(2)),
+      }));
+
     return {
       mes,
       resumo: {
@@ -594,6 +638,7 @@ export class OrcamentosService {
           PERDIDO: Number(valorPorStatusItens.PERDIDO.toFixed(2)),
         },
       },
+      topTratamentos,
     };
   }
 
@@ -614,6 +659,7 @@ export class OrcamentosService {
     const orcamentos = await this.orcamentoRepository
       .createQueryBuilder('orcamento')
       .leftJoinAndSelect('orcamento.itens', 'item')
+      .leftJoinAndSelect('item.tratamento', 'tratamento')
       .leftJoinAndSelect('orcamento.paciente', 'paciente')
       .where('orcamento.clienteMasterId = :clienteMasterId', { clienteMasterId })
       .andWhere('orcamento.createdAt >= :dataInicio', { dataInicio })
@@ -706,6 +752,50 @@ export class OrcamentosService {
     // Taxa de pagamento de itens
     const taxaPagamentoItens = totalItens > 0 ? (itensPorStatus.PAGO / totalItens) * 100 : 0;
 
+    // Analisar tratamentos mais vendidos
+    const tratamentosMap = new Map<string, { tratamento: Treatment; quantidade: number; valorTotal: number }>();
+
+    todosItens.forEach((item) => {
+      if (item.tratamentoId && item.tratamento) {
+        const tratamentoId = item.tratamentoId;
+        const quantidadeItem = item.quantidade || 1;
+        const valorItem = Number(item.preco || 0) * quantidadeItem;
+
+        if (tratamentosMap.has(tratamentoId)) {
+          const existente = tratamentosMap.get(tratamentoId)!;
+          existente.quantidade += quantidadeItem;
+          existente.valorTotal += valorItem;
+        } else {
+          tratamentosMap.set(tratamentoId, {
+            tratamento: item.tratamento,
+            quantidade: quantidadeItem,
+            valorTotal: valorItem,
+          });
+        }
+      }
+    });
+
+    // Converter para array e ordenar por quantidade (mais vendido primeiro)
+    const tratamentosArray = Array.from(tratamentosMap.values()).sort((a, b) => b.quantidade - a.quantidade);
+
+    // Tratamento mais vendido
+    const tratamentoMaisVendido = tratamentosArray.length > 0
+      ? {
+          id: tratamentosArray[0].tratamento.id,
+          name: tratamentosArray[0].tratamento.name,
+          quantidade: tratamentosArray[0].quantidade,
+          valorTotal: Number(tratamentosArray[0].valorTotal.toFixed(2)),
+        }
+      : null;
+
+    // Top 10 tratamentos para gráficos
+    const topTratamentos = tratamentosArray.slice(0, 10).map((t) => ({
+      id: t.tratamento.id,
+      name: t.tratamento.name,
+      quantidade: t.quantidade,
+      valorTotal: Number(t.valorTotal.toFixed(2)),
+    }));
+
     // Formatar mês atual no formato YYYY-MM
     const mesAtual = `${ano}-${String(mes).padStart(2, '0')}`;
 
@@ -740,6 +830,480 @@ export class OrcamentosService {
         },
         taxaPagamento: Number(taxaPagamentoItens.toFixed(2)),
       },
+      tratamentos: {
+        maisVendido: tratamentoMaisVendido,
+        topTratamentos,
+      },
+    };
+  }
+
+  /**
+   * Retorna todos os orçamentos que possuem itens pagos, filtrados por mês e ano
+   */
+  async buscarOrcamentosComItensPagos(
+    mes: number,
+    ano: number,
+    clienteMasterId: string,
+    userId: string,
+    userTipo: string,
+  ): Promise<{
+    orcamentos: Array<{
+      id: string;
+      pacienteId: string;
+      paciente: {
+        id: string;
+        nome: string;
+        cpf: string;
+      };
+      status: StatusOrcamento;
+      valorTotal: number;
+      itensPagos: Array<{
+        id: string;
+        nome: string;
+        preco: number;
+        quantidade: number;
+        tratamentoId: string | null;
+        tratamento: {
+          id: string;
+          name: string;
+          custo: number;
+          lucro: number;
+        } | null;
+        lucroItem: number;
+        valorBrutoItem: number;
+      }>;
+      lucroTotal: number;
+      valorBrutoTotal: number;
+      createdAt: Date;
+    }>;
+    resumo: {
+      valorBrutoTotalGeral: number;
+      lucroTotalGeral: number;
+      quantidadeOrcamentos: number;
+      quantidadeItensPagos: number;
+    };
+  }> {
+    await this.verificarPermissao(userId, userTipo, clienteMasterId);
+
+    // Calcular início e fim do mês
+    const dataInicio = new Date(ano, mes - 1, 1);
+    const dataFim = new Date(ano, mes, 0, 23, 59, 59, 999);
+
+    // Buscar orçamentos criados no mês/ano especificado
+    const orcamentos = await this.orcamentoRepository.find({
+      where: {
+        clienteMasterId,
+        createdAt: Between(dataInicio, dataFim),
+      },
+      relations: ['paciente', 'itens', 'itens.tratamento'],
+      order: { createdAt: 'DESC' },
+    });
+
+    // Filtrar apenas orçamentos que têm pelo menos um item PAGO
+    const orcamentosComItensPagos = orcamentos.filter((orcamento) =>
+      orcamento.itens.some((item) => item.status === StatusItemOrcamento.PAGO),
+    );
+
+    // Processar cada orçamento
+    const orcamentosProcessados = orcamentosComItensPagos.map((orcamento) => {
+      // Filtrar apenas itens PAGOS
+      const itensPagos = orcamento.itens.filter((item) => item.status === StatusItemOrcamento.PAGO);
+
+      // Processar cada item pago
+      const itensProcessados = itensPagos.map((item) => {
+        const valorBrutoItem = Number(item.preco) * item.quantidade;
+        let lucroItem = 0;
+
+        // Se o item tem tratamentoId, calcular o lucro
+        if (item.tratamentoId && item.tratamento) {
+          const custoTratamento = Number(item.tratamento.custo) || 0;
+          const custoTotalItem = custoTratamento * item.quantidade;
+          lucroItem = valorBrutoItem - custoTotalItem;
+        }
+
+        return {
+          id: item.id,
+          nome: item.nome,
+          preco: Number(item.preco),
+          quantidade: item.quantidade,
+          tratamentoId: item.tratamentoId,
+          tratamento: item.tratamento
+            ? {
+                id: item.tratamento.id,
+                name: item.tratamento.name,
+                custo: Number(item.tratamento.custo),
+                lucro: Number(item.tratamento.lucro),
+              }
+            : null,
+          lucroItem: Number(lucroItem.toFixed(2)),
+          valorBrutoItem: Number(valorBrutoItem.toFixed(2)),
+        };
+      });
+
+      // Calcular totais do orçamento
+      const lucroTotal = itensProcessados.reduce((acc, item) => acc + item.lucroItem, 0);
+      const valorBrutoTotal = itensProcessados.reduce((acc, item) => acc + item.valorBrutoItem, 0);
+
+      return {
+        id: orcamento.id,
+        pacienteId: orcamento.pacienteId,
+        paciente: {
+          id: orcamento.paciente.id,
+          nome: orcamento.paciente.nome || '',
+          cpf: orcamento.paciente.cpf || '',
+        },
+        status: orcamento.status,
+        valorTotal: Number(orcamento.valorTotal),
+        itensPagos: itensProcessados,
+        lucroTotal: Number(lucroTotal.toFixed(2)),
+        valorBrutoTotal: Number(valorBrutoTotal.toFixed(2)),
+        createdAt: orcamento.createdAt,
+      };
+    });
+
+    // Calcular resumo geral
+    const valorBrutoTotalGeral = orcamentosProcessados.reduce(
+      (acc, orcamento) => acc + orcamento.valorBrutoTotal,
+      0,
+    );
+    const lucroTotalGeral = orcamentosProcessados.reduce((acc, orcamento) => acc + orcamento.lucroTotal, 0);
+    const quantidadeItensPagos = orcamentosProcessados.reduce(
+      (acc, orcamento) => acc + orcamento.itensPagos.length,
+      0,
+    );
+
+    return {
+      orcamentos: orcamentosProcessados,
+      resumo: {
+        valorBrutoTotalGeral: Number(valorBrutoTotalGeral.toFixed(2)),
+        lucroTotalGeral: Number(lucroTotalGeral.toFixed(2)),
+        quantidadeOrcamentos: orcamentosProcessados.length,
+        quantidadeItensPagos,
+      },
+    };
+  }
+
+  /**
+   * Retorna analytics de clientes (pacientes)
+   */
+  async getAnalyticsClientes(
+    clienteMasterId: string,
+    userId: string,
+    userTipo: string,
+    mes?: number,
+    ano?: number,
+  ) {
+    await this.verificarPermissao(userId, userTipo, clienteMasterId);
+
+    // Se mês e ano não forem fornecidos, usar o mês atual
+    const agora = new Date();
+    const mesAtual = mes || agora.getMonth() + 1;
+    const anoAtual = ano || agora.getFullYear();
+
+    // 1. Top 5 clientes que mais pagaram tratamentos em QUANTIDADE
+    const itensPagos = await this.itemOrcamentoRepository
+      .createQueryBuilder('item')
+      .leftJoinAndSelect('item.orcamento', 'orcamento')
+      .leftJoinAndSelect('orcamento.paciente', 'paciente')
+      .where('item.status = :status', { status: StatusItemOrcamento.PAGO })
+      .andWhere('orcamento.clienteMasterId = :clienteMasterId', { clienteMasterId })
+      .getMany();
+
+    const clientesPorQuantidade = new Map<
+      string,
+      { paciente: Paciente; quantidade: number; valorTotal: number }
+    >();
+
+    itensPagos.forEach((item) => {
+      const pacienteId = item.orcamento.pacienteId;
+      const quantidadeItem = item.quantidade || 1;
+      const valorItem = Number(item.preco || 0) * quantidadeItem;
+
+      if (clientesPorQuantidade.has(pacienteId)) {
+        const existente = clientesPorQuantidade.get(pacienteId)!;
+        existente.quantidade += quantidadeItem;
+        existente.valorTotal += valorItem;
+      } else {
+        clientesPorQuantidade.set(pacienteId, {
+          paciente: item.orcamento.paciente,
+          quantidade: quantidadeItem,
+          valorTotal: valorItem,
+        });
+      }
+    });
+
+    const top5Quantidade = Array.from(clientesPorQuantidade.values())
+      .sort((a, b) => b.quantidade - a.quantidade)
+      .slice(0, 5)
+      .map((c) => ({
+        id: c.paciente.id,
+        nome: c.paciente.nome || '',
+        cpf: c.paciente.cpf || '',
+        quantidade: c.quantidade,
+        valorTotal: Number(c.valorTotal.toFixed(2)),
+      }));
+
+    // 2. Top 5 clientes que mais pagaram tratamentos em VALOR (dinheiro)
+    const top5Valor = Array.from(clientesPorQuantidade.values())
+      .sort((a, b) => b.valorTotal - a.valorTotal)
+      .slice(0, 5)
+      .map((c) => ({
+        id: c.paciente.id,
+        nome: c.paciente.nome || '',
+        cpf: c.paciente.cpf || '',
+        quantidade: c.quantidade,
+        valorTotal: Number(c.valorTotal.toFixed(2)),
+      }));
+
+    // 3. Clientes com mais agendamentos feitos
+    const consultas = await this.consultaRepository
+      .createQueryBuilder('consulta')
+      .leftJoinAndSelect('consulta.paciente', 'paciente')
+      .where('consulta.clienteMasterId = :clienteMasterId', { clienteMasterId })
+      .getMany();
+
+    const clientesPorAgendamentos = new Map<string, { paciente: Paciente; quantidade: number }>();
+
+    consultas.forEach((consulta) => {
+      const pacienteId = consulta.pacienteId;
+      if (clientesPorAgendamentos.has(pacienteId)) {
+        const existente = clientesPorAgendamentos.get(pacienteId)!;
+        existente.quantidade += 1;
+      } else {
+        clientesPorAgendamentos.set(pacienteId, {
+          paciente: consulta.paciente,
+          quantidade: 1,
+        });
+      }
+    });
+
+    const topAgendamentos = Array.from(clientesPorAgendamentos.values())
+      .sort((a, b) => b.quantidade - a.quantidade)
+      .map((c) => ({
+        id: c.paciente.id,
+        nome: c.paciente.nome || '',
+        cpf: c.paciente.cpf || '',
+        quantidadeAgendamentos: c.quantidade,
+      }));
+
+    // 4. Clientes que têm aniversário no mês
+    const pacientesComAniversario = await this.pacienteRepository
+      .createQueryBuilder('paciente')
+      .where('paciente.clienteMasterId = :clienteMasterId', { clienteMasterId })
+      .andWhere('paciente.dataNascimento IS NOT NULL')
+      .getMany();
+
+    const aniversariantes = pacientesComAniversario
+      .filter((paciente) => {
+        if (!paciente.dataNascimento) return false;
+        const dataNasc = new Date(paciente.dataNascimento);
+        const mesNasc = dataNasc.getMonth() + 1; // getMonth() retorna 0-11
+        return mesNasc === mesAtual;
+      })
+      .map((paciente) => {
+        const dataNasc = new Date(paciente.dataNascimento!);
+        const diaAniversario = dataNasc.getDate();
+        return {
+          id: paciente.id,
+          nome: paciente.nome || '',
+          cpf: paciente.cpf || '',
+          dataNascimento: paciente.dataNascimento,
+          diaAniversario,
+          telefone: paciente.telefone || '',
+          email: paciente.email || '',
+        };
+      })
+      .sort((a, b) => a.diaAniversario - b.diaAniversario); // Ordenar por dia do mês
+
+    return {
+      mes: `${anoAtual}-${String(mesAtual).padStart(2, '0')}`,
+      top5ClientesQuantidade: top5Quantidade,
+      top5ClientesValor: top5Valor,
+      topAgendamentos,
+      aniversariantes,
+    };
+  }
+
+  /**
+   * Retorna analytics gerais de clientes (todos os tempos)
+   * - Cliente com mais orçamentos com itens PAGOS
+   * - Cliente com maior quantidade de dinheiro pago
+   */
+  async getAnalyticsClientesGeral(clienteMasterId: string, userId: string, userTipo: string) {
+    await this.verificarPermissao(userId, userTipo, clienteMasterId);
+
+    // Buscar todos os orçamentos com itens pagos
+    const orcamentosComItensPagos = await this.orcamentoRepository
+      .createQueryBuilder('orcamento')
+      .leftJoinAndSelect('orcamento.itens', 'item')
+      .leftJoinAndSelect('orcamento.paciente', 'paciente')
+      .where('orcamento.clienteMasterId = :clienteMasterId', { clienteMasterId })
+      .andWhere('item.status = :status', { status: StatusItemOrcamento.PAGO })
+      .getMany();
+
+    // Mapa para contar orçamentos e valores por cliente
+    const clientesMap = new Map<
+      string,
+      {
+        paciente: Paciente;
+        quantidadeOrcamentos: number;
+        quantidadeItensPagos: number;
+        valorTotalPago: number;
+      }
+    >();
+
+    orcamentosComItensPagos.forEach((orcamento) => {
+      const pacienteId = orcamento.pacienteId;
+      const itensPagos = orcamento.itens.filter((item) => item.status === StatusItemOrcamento.PAGO);
+      const valorTotalItensPagos = itensPagos.reduce(
+        (sum, item) => sum + Number(item.preco || 0) * (item.quantidade || 1),
+        0,
+      );
+
+      if (clientesMap.has(pacienteId)) {
+        const existente = clientesMap.get(pacienteId)!;
+        existente.quantidadeOrcamentos += 1;
+        existente.quantidadeItensPagos += itensPagos.length;
+        existente.valorTotalPago += valorTotalItensPagos;
+      } else {
+        clientesMap.set(pacienteId, {
+          paciente: orcamento.paciente,
+          quantidadeOrcamentos: 1,
+          quantidadeItensPagos: itensPagos.length,
+          valorTotalPago: valorTotalItensPagos,
+        });
+      }
+    });
+
+    const clientesArray = Array.from(clientesMap.values());
+
+    // Top 10 clientes com mais orçamentos com itens PAGOS
+    const topClientesMaisOrcamentos = clientesArray
+      .sort((a, b) => b.quantidadeOrcamentos - a.quantidadeOrcamentos)
+      .slice(0, 10)
+      .map((c) => ({
+        id: c.paciente.id,
+        nome: c.paciente.nome || '',
+        cpf: c.paciente.cpf || '',
+        quantidadeOrcamentos: c.quantidadeOrcamentos,
+        quantidadeItensPagos: c.quantidadeItensPagos,
+        valorTotalPago: Number(c.valorTotalPago.toFixed(2)),
+      }));
+
+    // Top 10 clientes com maior quantidade de dinheiro pago
+    const topClientesMaiorValor = clientesArray
+      .sort((a, b) => b.valorTotalPago - a.valorTotalPago)
+      .slice(0, 10)
+      .map((c) => ({
+        id: c.paciente.id,
+        nome: c.paciente.nome || '',
+        cpf: c.paciente.cpf || '',
+        quantidadeOrcamentos: c.quantidadeOrcamentos,
+        quantidadeItensPagos: c.quantidadeItensPagos,
+        valorTotalPago: Number(c.valorTotalPago.toFixed(2)),
+      }));
+
+    return {
+      topClientesMaisOrcamentos,
+      topClientesMaiorValor,
+    };
+  }
+
+  /**
+   * Retorna analytics de clientes por mês
+   * - Cliente com mais orçamentos com itens PAGOS no mês
+   * - Cliente com maior quantidade de dinheiro pago no mês
+   */
+  async getAnalyticsClientesPorMes(
+    clienteMasterId: string,
+    userId: string,
+    userTipo: string,
+    mes: number,
+    ano: number,
+  ) {
+    await this.verificarPermissao(userId, userTipo, clienteMasterId);
+
+    // Calcular início e fim do mês
+    const dataInicio = new Date(ano, mes - 1, 1, 0, 0, 0, 0);
+    const dataFim = new Date(ano, mes, 0, 23, 59, 59, 999);
+
+    // Buscar orçamentos criados no mês com itens pagos
+    const orcamentosComItensPagos = await this.orcamentoRepository
+      .createQueryBuilder('orcamento')
+      .leftJoinAndSelect('orcamento.itens', 'item')
+      .leftJoinAndSelect('orcamento.paciente', 'paciente')
+      .where('orcamento.clienteMasterId = :clienteMasterId', { clienteMasterId })
+      .andWhere('orcamento.createdAt >= :dataInicio', { dataInicio })
+      .andWhere('orcamento.createdAt <= :dataFim', { dataFim })
+      .andWhere('item.status = :status', { status: StatusItemOrcamento.PAGO })
+      .getMany();
+
+    // Mapa para contar orçamentos e valores por cliente
+    const clientesMap = new Map<
+      string,
+      {
+        paciente: Paciente;
+        quantidadeOrcamentos: number;
+        quantidadeItensPagos: number;
+        valorTotalPago: number;
+      }
+    >();
+
+    orcamentosComItensPagos.forEach((orcamento) => {
+      const pacienteId = orcamento.pacienteId;
+      const itensPagos = orcamento.itens.filter((item) => item.status === StatusItemOrcamento.PAGO);
+      const valorTotalItensPagos = itensPagos.reduce(
+        (sum, item) => sum + Number(item.preco || 0) * (item.quantidade || 1),
+        0,
+      );
+
+      if (clientesMap.has(pacienteId)) {
+        const existente = clientesMap.get(pacienteId)!;
+        existente.quantidadeOrcamentos += 1;
+        existente.quantidadeItensPagos += itensPagos.length;
+        existente.valorTotalPago += valorTotalItensPagos;
+      } else {
+        clientesMap.set(pacienteId, {
+          paciente: orcamento.paciente,
+          quantidadeOrcamentos: 1,
+          quantidadeItensPagos: itensPagos.length,
+          valorTotalPago: valorTotalItensPagos,
+        });
+      }
+    });
+
+    const clientesArray = Array.from(clientesMap.values());
+
+    // Top 10 clientes com mais orçamentos com itens PAGOS no mês
+    const topClientesMaisOrcamentos = clientesArray
+      .sort((a, b) => b.quantidadeOrcamentos - a.quantidadeOrcamentos)
+      .slice(0, 10)
+      .map((c) => ({
+        id: c.paciente.id,
+        nome: c.paciente.nome || '',
+        cpf: c.paciente.cpf || '',
+        quantidadeOrcamentos: c.quantidadeOrcamentos,
+        quantidadeItensPagos: c.quantidadeItensPagos,
+        valorTotalPago: Number(c.valorTotalPago.toFixed(2)),
+      }));
+
+    // Top 10 clientes com maior quantidade de dinheiro pago no mês
+    const topClientesMaiorValor = clientesArray
+      .sort((a, b) => b.valorTotalPago - a.valorTotalPago)
+      .slice(0, 10)
+      .map((c) => ({
+        id: c.paciente.id,
+        nome: c.paciente.nome || '',
+        cpf: c.paciente.cpf || '',
+        quantidadeOrcamentos: c.quantidadeOrcamentos,
+        quantidadeItensPagos: c.quantidadeItensPagos,
+        valorTotalPago: Number(c.valorTotalPago.toFixed(2)),
+      }));
+
+    return {
+      mes: `${ano}-${String(mes).padStart(2, '0')}`,
+      topClientesMaisOrcamentos,
+      topClientesMaiorValor,
     };
   }
 }
