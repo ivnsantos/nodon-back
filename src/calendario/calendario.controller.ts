@@ -25,9 +25,9 @@ import { CreateConsultaDto } from './dto/create-consulta.dto';
 import { UpdateConsultaDto } from './dto/update-consulta.dto';
 import { ListConsultasQueryDto } from './dto/list-consultas-query.dto';
 import { ListConsultasPeriodoQueryDto } from './dto/list-consultas-periodo-query.dto';
+import { CadastrarPacienteVincularAgendamentoDto } from './dto/cadastrar-paciente-vincular-agendamento.dto';
 
 @Controller('calendario')
-@UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
 export class CalendarioController {
   constructor(
     private calendarioService: CalendarioService,
@@ -37,6 +37,7 @@ export class CalendarioController {
   // ========== TIPOS DE CONSULTA ==========
 
   @Get('tipos')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
   async listarTiposConsulta(
     @Headers('x-cliente-master-id') clienteMasterId: string,
   ) {
@@ -88,6 +89,7 @@ export class CalendarioController {
   }
 
   @Put('tipos/:id')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
   async atualizarTipoConsulta(
     @Param('id') id: string,
     @Headers('x-cliente-master-id') clienteMasterId: string,
@@ -116,6 +118,7 @@ export class CalendarioController {
   }
 
   @Delete('tipos/:id')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
   async excluirTipoConsulta(
     @Param('id') id: string,
     @Headers('x-cliente-master-id') clienteMasterId: string,
@@ -159,10 +162,12 @@ export class CalendarioController {
             nome: consulta.tipoConsulta.nome,
             cor: consulta.tipoConsulta.cor,
           },
-          paciente: {
-            id: consulta.paciente.id,
-            nome: consulta.paciente.nome,
-          },
+          paciente: consulta.paciente
+            ? {
+                id: consulta.paciente.id,
+                nome: consulta.paciente.nome,
+              }
+            : null,
           profissional: consulta.profissional
             ? {
                 id: consulta.profissional.id,
@@ -182,7 +187,120 @@ export class CalendarioController {
     };
   }
 
+  // Rota pública - não requer autenticação
+  @Get('consultas/publica/:id')
+  async buscarConsultaPublica(@Param('id') id: string) {
+    const consulta = await this.calendarioService.findConsultaSemPaciente(id);
+
+    return {
+      statusCode: 200,
+      message: 'Agendamento encontrado',
+      data: {
+        consulta: {
+          id: consulta.id,
+          tipoConsultaId: consulta.tipoConsultaId,
+          tipoConsulta: consulta.tipoConsulta
+            ? {
+                id: consulta.tipoConsulta.id,
+                nome: consulta.tipoConsulta.nome,
+                cor: consulta.tipoConsulta.cor,
+              }
+            : null,
+          pacienteId: consulta.pacienteId,
+          profissionalId: consulta.profissionalId,
+          profissional: consulta.profissional
+            ? {
+                id: consulta.profissional.id,
+                nome: consulta.profissional.user?.nome || 'Profissional',
+              }
+            : null,
+          titulo: consulta.titulo,
+          dataConsulta: consulta.dataConsulta,
+          horaConsulta: consulta.horaConsulta,
+          observacoes: consulta.observacoes,
+          status: consulta.status,
+          clienteMasterId: consulta.clienteMasterId,
+          clienteMaster: consulta.clienteMaster
+            ? {
+                id: consulta.clienteMaster.id,
+                nomeEmpresa: consulta.clienteMaster.nomeEmpresa,
+              }
+            : null,
+          createdAt: consulta.createdAt,
+          updatedAt: consulta.updatedAt,
+        },
+      },
+    };
+  }
+
+  // Rota pública - cadastrar paciente e vincular ao agendamento
+  @Post('consultas/publica/cadastrar-paciente')
+  @HttpCode(HttpStatus.CREATED)
+  async cadastrarPacienteEVincularAgendamento(
+    @Body() cadastrarDto: CadastrarPacienteVincularAgendamentoDto,
+  ) {
+    const { paciente, consulta } = await this.calendarioService.cadastrarPacienteEVincularAgendamento(
+      cadastrarDto.consultaId,
+      cadastrarDto.dadosPessoais,
+      cadastrarDto.endereco,
+    );
+
+    return {
+      statusCode: 201,
+      message: 'Paciente cadastrado e vinculado ao agendamento com sucesso',
+      data: {
+        paciente: {
+          id: paciente.id,
+          nome: paciente.nome,
+          cpf: paciente.cpf,
+          email: paciente.email,
+          telefone: paciente.telefone,
+          dataNascimento: paciente.dataNascimento,
+          clienteMasterId: paciente.clienteMasterId,
+          createdAt: paciente.createdAt,
+        },
+        consulta: {
+          id: consulta.id,
+          tipoConsultaId: consulta.tipoConsultaId,
+          tipoConsulta: consulta.tipoConsulta
+            ? {
+                id: consulta.tipoConsulta.id,
+                nome: consulta.tipoConsulta.nome,
+                cor: consulta.tipoConsulta.cor,
+              }
+            : null,
+          pacienteId: consulta.pacienteId,
+          paciente: consulta.paciente
+            ? {
+                id: consulta.paciente.id,
+                nome: consulta.paciente.nome,
+                cpf: consulta.paciente.cpf,
+                email: consulta.paciente.email,
+                telefone: consulta.paciente.telefone,
+              }
+            : null,
+          profissionalId: consulta.profissionalId,
+          profissional: consulta.profissional
+            ? {
+                id: consulta.profissional.id,
+                nome: consulta.profissional.user?.nome || 'Profissional',
+              }
+            : null,
+          titulo: consulta.titulo,
+          dataConsulta: consulta.dataConsulta,
+          horaConsulta: consulta.horaConsulta,
+          observacoes: consulta.observacoes,
+          status: consulta.status,
+          clienteMasterId: consulta.clienteMasterId,
+          createdAt: consulta.createdAt,
+          updatedAt: consulta.updatedAt,
+        },
+      },
+    };
+  }
+
   @Get('consultas/:id')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
   async buscarConsultaPorId(
     @Param('id') id: string,
     @Headers('x-cliente-master-id') clienteMasterId: string,
@@ -203,12 +321,14 @@ export class CalendarioController {
             nome: consulta.tipoConsulta.nome,
             cor: consulta.tipoConsulta.cor,
           },
-          paciente: {
-            id: consulta.paciente.id,
-            nome: consulta.paciente.nome,
-            email: consulta.paciente.email,
-            telefone: consulta.paciente.telefone,
-          },
+          paciente: consulta.paciente
+            ? {
+                id: consulta.paciente.id,
+                nome: consulta.paciente.nome,
+                email: consulta.paciente.email,
+                telefone: consulta.paciente.telefone,
+              }
+            : null,
           profissional: consulta.profissional
             ? {
                 id: consulta.profissional.id,
@@ -230,6 +350,7 @@ export class CalendarioController {
   }
 
   @Post('consultas/create')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
   @HttpCode(HttpStatus.CREATED)
   async criarConsulta(
     @Headers('x-cliente-master-id') clienteMasterId: string,
@@ -352,6 +473,7 @@ export class CalendarioController {
   }
 
   @Put('consultas/alterar/:id')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
   async atualizarConsulta(
     @Param('id') id: string,
     @Headers('x-cliente-master-id') clienteMasterId: string,
@@ -380,10 +502,12 @@ export class CalendarioController {
             nome: consultaCompleta.tipoConsulta.nome,
             cor: consultaCompleta.tipoConsulta.cor,
           },
-          paciente: {
-            id: consultaCompleta.paciente.id,
-            nome: consultaCompleta.paciente.nome,
-          },
+          paciente: consultaCompleta.paciente
+            ? {
+                id: consultaCompleta.paciente.id,
+                nome: consultaCompleta.paciente.nome,
+              }
+            : null,
           profissional: consultaCompleta.profissional
             ? {
                 id: consultaCompleta.profissional.id,
@@ -404,6 +528,7 @@ export class CalendarioController {
   }
 
   @Delete('consultas/:id')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
   async excluirConsulta(
     @Param('id') id: string,
     @Headers('x-cliente-master-id') clienteMasterId: string,
@@ -417,6 +542,7 @@ export class CalendarioController {
   }
 
   @Get('consultas/periodo/geral')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
   async listarConsultasPorPeriodo(
     @Headers('x-cliente-master-id') clienteMasterIdHeader: string,
     @Headers('x-user-comum-id') userComumIdHeader: string,

@@ -32,6 +32,111 @@ export class CalendarioService {
     private userBaseRepository: Repository<UserBase>,
   ) {}
 
+  /**
+   * Busca um agendamento por ID, mas só retorna se não houver paciente vinculado
+   */
+  async findConsultaSemPaciente(id: string): Promise<Consulta> {
+    const consulta = await this.consultaRepository.findOne({
+      where: { id },
+      relations: ['tipoConsulta', 'clienteMaster', 'profissional'],
+    });
+
+    if (!consulta) {
+      throw new NotFoundException('Agendamento não encontrado');
+    }
+
+    // Verificar se há paciente vinculado
+    if (consulta.pacienteId) {
+      throw new BadRequestException('Este agendamento possui paciente vinculado e não pode ser acessado por esta rota');
+    }
+
+    return consulta;
+  }
+
+  /**
+   * Cadastra um paciente e vincula ao agendamento (rota pública)
+   */
+  async cadastrarPacienteEVincularAgendamento(
+    consultaId: string,
+    dadosPessoais: {
+      nome?: string;
+      cpf?: string;
+      dataNascimento?: string;
+      email?: string;
+      telefone?: string;
+    },
+    endereco?: {
+      cep?: string;
+      rua?: string;
+      numero?: string;
+      complemento?: string;
+      bairro?: string;
+      cidade?: string;
+      estado?: string;
+    },
+  ): Promise<{ paciente: Paciente; consulta: Consulta }> {
+    // Buscar a consulta
+    const consulta = await this.consultaRepository.findOne({
+      where: { id: consultaId },
+      relations: ['clienteMaster'],
+    });
+
+    if (!consulta) {
+      throw new NotFoundException('Agendamento não encontrado');
+    }
+
+    // Verificar se já tem paciente vinculado
+    if (consulta.pacienteId) {
+      throw new BadRequestException('Este agendamento já possui paciente vinculado');
+    }
+
+    // Verificar se tem clienteMasterId
+    if (!consulta.clienteMasterId) {
+      throw new BadRequestException('Agendamento não possui cliente master vinculado');
+    }
+
+    // Converter dataNascimento de string para Date
+    const dataNascimento = dadosPessoais.dataNascimento
+      ? new Date(dadosPessoais.dataNascimento)
+      : null;
+
+    // Criar paciente
+    const paciente = new Paciente();
+    paciente.clienteMasterId = consulta.clienteMasterId;
+    paciente.nome = dadosPessoais.nome || null;
+    paciente.cpf = dadosPessoais.cpf || null;
+    paciente.dataNascimento = dataNascimento;
+    paciente.email = dadosPessoais.email || null;
+    paciente.telefone = dadosPessoais.telefone || null;
+    paciente.status = null; // Status inicial
+    paciente.cep = endereco?.cep || null;
+    paciente.rua = endereco?.rua || null;
+    paciente.numero = endereco?.numero || null;
+    paciente.complemento = endereco?.complemento || null;
+    paciente.bairro = endereco?.bairro || null;
+    paciente.cidade = endereco?.cidade || null;
+    paciente.estado = endereco?.estado || null;
+    paciente.necessidades = null;
+    paciente.observacoes = null;
+
+    const pacienteSalvo = await this.pacienteRepository.save(paciente);
+
+    // Vincular paciente ao agendamento
+    consulta.pacienteId = pacienteSalvo.id;
+    const consultaAtualizada = await this.consultaRepository.save(consulta);
+
+    // Buscar consulta com relacionamentos
+    const consultaCompleta = await this.consultaRepository.findOne({
+      where: { id: consultaId },
+      relations: ['tipoConsulta', 'clienteMaster', 'profissional', 'paciente'],
+    });
+
+    return {
+      paciente: pacienteSalvo,
+      consulta: consultaCompleta!,
+    };
+  }
+
   // ========== TIPOS DE CONSULTA ==========
 
   async findAllTiposConsulta(clienteMasterId: string): Promise<TipoConsulta[]> {
@@ -153,8 +258,12 @@ export class CalendarioService {
       }
     }
 
-    if (filters?.pacienteId) {
-      where.pacienteId = filters.pacienteId;
+    if (filters?.pacienteId !== undefined) {
+      if (filters.pacienteId === null) {
+        where.pacienteId = IsNull();
+      } else {
+        where.pacienteId = filters.pacienteId;
+      }
     }
 
     if (filters?.tipoConsultaId) {
@@ -214,16 +323,21 @@ export class CalendarioService {
       }
       console.log('✅ Tipo de consulta encontrado:', tipoConsulta.nome);
 
-      console.log('🔍 Validando paciente:', createDto.pacienteId);
-      // Validar paciente
-      const paciente = await this.pacienteRepository.findOne({
-        where: { id: createDto.pacienteId, clienteMasterId },
-      });
+      // Validar paciente apenas se fornecido
+      let paciente: Paciente | null = null;
+      if (createDto.pacienteId) {
+        console.log('🔍 Validando paciente:', createDto.pacienteId);
+        paciente = await this.pacienteRepository.findOne({
+          where: { id: createDto.pacienteId, clienteMasterId },
+        });
 
-      if (!paciente) {
-        throw new NotFoundException('Paciente não encontrado');
+        if (!paciente) {
+          throw new NotFoundException('Paciente não encontrado');
+        }
+        console.log('✅ Paciente encontrado:', paciente.nome);
+      } else {
+        console.log('ℹ️ Nenhum paciente fornecido - consulta será criada sem paciente');
       }
-      console.log('✅ Paciente encontrado:', paciente.nome);
 
     // Determinar profissional
     let profissionalId: string | null = null;
@@ -277,7 +391,11 @@ export class CalendarioService {
     // Gerar título automaticamente se não fornecido
     let titulo = createDto.titulo;
     if (!titulo) {
-      titulo = `${tipoConsulta.nome} - ${paciente.nome}`;
+      if (paciente) {
+        titulo = `${tipoConsulta.nome} - ${paciente.nome}`;
+      } else {
+        titulo = tipoConsulta.nome;
+      }
     }
 
     // Validação de sobreposição de horários removida - permite múltiplas consultas no mesmo horário
@@ -302,7 +420,7 @@ export class CalendarioService {
       const consulta = this.consultaRepository.create({
         clienteMasterId,
         tipoConsultaId: createDto.tipoConsultaId,
-        pacienteId: createDto.pacienteId,
+        pacienteId: createDto.pacienteId || null,
         profissionalId,
         titulo,
         dataConsulta: new Date(createDto.dataConsulta),
@@ -346,17 +464,23 @@ export class CalendarioService {
       consulta.tipoConsultaId = updateDto.tipoConsultaId;
     }
 
-    // Validar paciente se fornecido
-    if (updateDto.pacienteId) {
-      const paciente = await this.pacienteRepository.findOne({
-        where: { id: updateDto.pacienteId, clienteMasterId },
-      });
+    // Validar paciente se fornecido (ou permitir remover se for null)
+    if (updateDto.pacienteId !== undefined) {
+      if (updateDto.pacienteId === null) {
+        // Permitir remover o paciente da consulta
+        consulta.pacienteId = null;
+      } else {
+        // Validar se o paciente existe
+        const paciente = await this.pacienteRepository.findOne({
+          where: { id: updateDto.pacienteId, clienteMasterId },
+        });
 
-      if (!paciente) {
-        throw new NotFoundException('Paciente não encontrado');
+        if (!paciente) {
+          throw new NotFoundException('Paciente não encontrado');
+        }
+
+        consulta.pacienteId = updateDto.pacienteId;
       }
-
-      consulta.pacienteId = updateDto.pacienteId;
     }
 
     // Atualizar profissional se fornecido
@@ -387,12 +511,18 @@ export class CalendarioService {
       const tipoConsulta = await this.tipoConsultaRepository.findOne({
         where: { id: consulta.tipoConsultaId },
       });
-      const paciente = await this.pacienteRepository.findOne({
-        where: { id: consulta.pacienteId },
-      });
+      
+      let paciente: Paciente | null = null;
+      if (consulta.pacienteId) {
+        paciente = await this.pacienteRepository.findOne({
+          where: { id: consulta.pacienteId },
+        });
+      }
 
       if (tipoConsulta && paciente) {
         consulta.titulo = `${tipoConsulta.nome} - ${paciente.nome}`;
+      } else if (tipoConsulta) {
+        consulta.titulo = tipoConsulta.nome;
       }
     }
 

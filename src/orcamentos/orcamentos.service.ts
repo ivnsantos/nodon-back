@@ -1066,6 +1066,11 @@ export class OrcamentosService {
 
     consultas.forEach((consulta) => {
       const pacienteId = consulta.pacienteId;
+      // Ignorar consultas sem paciente
+      if (!pacienteId || !consulta.paciente) {
+        return;
+      }
+      
       if (clientesPorAgendamentos.has(pacienteId)) {
         const existente = clientesPorAgendamentos.get(pacienteId)!;
         existente.quantidade += 1;

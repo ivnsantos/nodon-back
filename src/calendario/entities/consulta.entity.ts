@@ -41,12 +41,12 @@ export class Consulta {
   @JoinColumn({ name: 'tipo_consulta_id' })
   tipoConsulta: TipoConsulta;
 
-  @Column({ name: 'paciente_id' })
-  pacienteId: string;
+  @Column({ name: 'paciente_id', nullable: true })
+  pacienteId: string | null;
 
-  @ManyToOne(() => Paciente, { onDelete: 'SET NULL' })
+  @ManyToOne(() => Paciente, { onDelete: 'SET NULL', nullable: true })
   @JoinColumn({ name: 'paciente_id' })
-  paciente: Paciente;
+  paciente: Paciente | null;
 
   @Column({ name: 'profissional_id', nullable: true })
   profissionalId: string | null;

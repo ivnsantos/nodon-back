@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsUUID,
   Matches,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateConsultaDto {
@@ -12,9 +13,10 @@ export class CreateConsultaDto {
   @IsNotEmpty()
   tipoConsultaId: string;
 
+  @IsOptional()
+  @ValidateIf((o) => o.pacienteId !== null && o.pacienteId !== undefined && o.pacienteId !== '')
   @IsUUID()
-  @IsNotEmpty()
-  pacienteId: string;
+  pacienteId?: string | null;
 
   @IsUUID()
   @IsOptional()
