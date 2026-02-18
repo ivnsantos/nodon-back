@@ -98,6 +98,7 @@ export class AsaasService {
       headers: {
         'Content-Type': 'application/json',
         access_token: this.apiKey,
+        'User-Agent': 'NodonDentista-assinatura',
       },
     });
   }
