@@ -255,9 +255,8 @@ export class AssinaturasService {
       }
     }
 
-    // Calcula a data de vencimento (dia atual)
-    const nextDueDate = new Date();
-    const nextDueDateString = nextDueDate.toISOString().split('T')[0];
+    // Calcula a data de vencimento (dia atual) - usando fuso horário do Brasil
+    const nextDueDateString = this.getDataAtualBrasil();
 
     // 6. Prepara dados da assinatura com desconto se cupom válido
     // Garantir que o valor seja um número (converter de decimal para número)
@@ -478,9 +477,8 @@ export class AssinaturasService {
       }
     }
 
-    // Calcula a data de vencimento (dia atual)
-    const nextDueDate = new Date();
-    const nextDueDateString = nextDueDate.toISOString().split('T')[0];
+    // Calcula a data de vencimento (dia atual) - usando fuso horário do Brasil
+    const nextDueDateString = this.getDataAtualBrasil();
 
     // 7. Prepara dados da assinatura com desconto se cupom válido
     const subscriptionData: any = {
@@ -1137,6 +1135,27 @@ export class AssinaturasService {
         dataFim: dataFimAssinatura ? dataFimAssinatura.toISOString().split('T')[0] : null,
       },
     };
+  }
+
+  /**
+   * Retorna a data atual no fuso horário do Brasil (America/Sao_Paulo)
+   * no formato YYYY-MM-DD
+   */
+  private getDataAtualBrasil(): string {
+    const agora = new Date();
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    
+    const partes = formatter.formatToParts(agora);
+    const ano = partes.find(p => p.type === 'year')?.value || '0000';
+    const mes = partes.find(p => p.type === 'month')?.value.padStart(2, '0') || '00';
+    const dia = partes.find(p => p.type === 'day')?.value.padStart(2, '0') || '00';
+    
+    return `${ano}-${mes}-${dia}`;
   }
 
   /**

@@ -176,6 +176,8 @@ export class AsaasService {
 
   async createSubscription(data: CreateSubscriptionDto): Promise<any> {
     try {
+
+      console.log('✅ NextDueDate:', data.nextDueDate);
       const subscriptionPayload: any = {
         customer: data.customer,
         billingType: data.billingType,
