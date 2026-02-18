@@ -104,6 +104,11 @@ export class AsaasService {
 
   async createCustomer(data: CreateCustomerDto): Promise<string> {
     try {
+
+      console.log('✅ Criando cliente no Asaas:', data);
+      console.log('✅ ASAAS_API_URL:', this.apiUrl);
+      console.log('✅ ASAAS_API_KEY:', this.apiKey);
+
       const response = await this.axiosInstance.post('/customers', {
         name: data.name,
         email: data.email,
@@ -120,6 +125,7 @@ export class AsaasService {
 
       return response.data.id;
     } catch (error: any) {
+      console.log('✅ Erro ao criar cliente no Asaas:', error);
       console.error('Erro ao criar cliente no Asaas:', error.response?.data || error.message);
       throw new BadRequestException(
         `Erro ao criar cliente no Asaas: ${error.response?.data?.errors?.[0]?.description || error.message}`,
