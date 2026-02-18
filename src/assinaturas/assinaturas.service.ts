@@ -116,7 +116,83 @@ export class AssinaturasService {
 
     console.log('💰 Valor final que será enviado ao Asaas:', valorFinal);
 
-    // 3. Criar cliente na ASAAS
+    // 3. Verificar se já existe ClienteMaster com este email
+    let clienteMaster;
+    let userBase;
+    
+    try {
+      const existingClienteMaster = await this.clientesMasterService.findByEmail(createSubscriptionDto.email);
+      
+      if (existingClienteMaster) {
+        // Cliente já existe, usar o existente
+        clienteMaster = existingClienteMaster;
+        userBase = await this.userBaseService.findById(existingClienteMaster.userId);
+        
+        if (!userBase) {
+          throw new InternalServerErrorException('UserBase não encontrado para o ClienteMaster existente');
+        }
+
+        // Verificar se já existe assinatura ACTIVE para este cliente
+        const existingActiveSubscription = await this.assinaturaRepository.findOne({
+          where: { 
+            userId: clienteMaster.id,
+            status: 'ACTIVE',
+          },
+        });
+
+        if (existingActiveSubscription) {
+          throw new BadRequestException('Assinatura ativa. Fale com o Suporte.');
+        }
+      } else {
+        // Cliente não existe, criar novo UserBase e ClienteMaster
+        const hashedPassword = await bcrypt.hash(createSubscriptionDto.password, 10);
+        
+        // Verificar se já existe UserBase com este email (email é único)
+        const existingUserBase = await this.userBaseService.findByEmail(createSubscriptionDto.email);
+        
+        if (existingUserBase) {
+          throw new ConflictException('Já existe um usuário cadastrado com este e-mail');
+        }
+
+        // Gerar código de verificação (6 dígitos)
+        const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+        const tokenExpiresAt = new Date();
+        tokenExpiresAt.setMinutes(tokenExpiresAt.getMinutes() + 15);
+
+        // Criar UserBase com dados pessoais e de endereço
+        userBase = await this.userBaseService.create({
+          nome: createSubscriptionDto.name,
+          email: createSubscriptionDto.email,
+          password: hashedPassword,
+          cpf: createSubscriptionDto.cpf,
+          telefone: createSubscriptionDto.phone,
+          postalCode: createSubscriptionDto.postalCode,
+          address: createSubscriptionDto.address,
+          addressNumber: createSubscriptionDto.addressNumber,
+          complement: createSubscriptionDto.complement,
+          province: createSubscriptionDto.province,
+          city: createSubscriptionDto.city,
+          state: createSubscriptionDto.state,
+          isVerified: false,
+          verificationToken,
+          tokenExpiresAt,
+        });
+
+        // Criar ClienteMaster vinculado ao UserBase
+        clienteMaster = await this.clientesMasterService.create({
+          userId: userBase.id,
+        });
+      }
+    } catch (error: any) {
+      if (error instanceof ConflictException || error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Erro ao criar/obter cliente: ${error.message || 'Erro desconhecido'}`,
+      );
+    }
+
+    // 4. Criar cliente na ASAAS
     const asaasCustomerId = await this.asaasService.createCustomer({
       name: createSubscriptionDto.name,
       email: createSubscriptionDto.email,
@@ -131,7 +207,7 @@ export class AssinaturasService {
       state: createSubscriptionDto.state,
     });
 
-    // 4. Tokeniza cartão de crédito se necessário
+    // 5. Tokeniza cartão de crédito se necessário
     let creditCardToken: string | null = null;
     let creditCardNumber: string | null = null;
     let creditCardBrand: string | null = null;
@@ -183,7 +259,7 @@ export class AssinaturasService {
     const nextDueDate = new Date();
     const nextDueDateString = nextDueDate.toISOString().split('T')[0];
 
-    // 5. Prepara dados da assinatura com desconto se cupom válido
+    // 6. Prepara dados da assinatura com desconto se cupom válido
     // Garantir que o valor seja um número (converter de decimal para número)
     const valorParaAsaas = Number(valorFinal);
     
@@ -229,94 +305,10 @@ export class AssinaturasService {
       };
     }
 
-    // 6. Cria assinatura na ASAAS
+    // 7. Cria assinatura na ASAAS
     const asaasSubscription = await this.asaasService.createSubscription(subscriptionData);
 
-    // 7. Criar UserBase (usuário) primeiro - email é único
-    const hashedPassword = await bcrypt.hash(createSubscriptionDto.password, 10);
-    let userBase;
-    try {
-      // Verificar se já existe UserBase com este email (email é único)
-      const existingUserBase = await this.userBaseService.findByEmail(createSubscriptionDto.email);
-      
-      if (existingUserBase) {
-        throw new ConflictException('Já existe um usuário cadastrado com este e-mail');
-      }
-
-      // Verificar se já existe conta verificada com este email em outras tabelas
-      const existingClienteMaster = await this.clientesMasterService.findByEmail(createSubscriptionDto.email);
-      // Verificação de User removida - usar apenas UserBase
-      
-      // Se já existe uma conta verificada, a nova conta nasce verificada
-      // Buscar UserBase diretamente se ClienteMaster existir
-      let emailJaVerificado = false;
-      if (existingClienteMaster) {
-        const userBaseDoCliente = await this.userBaseService.findById(existingClienteMaster.userId);
-        emailJaVerificado = userBaseDoCliente?.isVerified || false;
-      }
-
-      // Gerar código de verificação (6 dígitos) - só se email não estiver verificado
-      let verificationToken: string | null = null;
-      let tokenExpiresAt: Date | null = null;
-      let isVerified = false;
-
-      if (emailJaVerificado) {
-        // Email já verificado em outra conta, nova conta nasce verificada
-        isVerified = true;
-      } else {
-        // Email não verificado, precisa gerar código
-        verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
-        tokenExpiresAt = new Date();
-        tokenExpiresAt.setMinutes(tokenExpiresAt.getMinutes() + 15);
-      }
-
-      // Criar UserBase com dados pessoais e de endereço
-      // No processo de assinatura, não envia email de verificação
-      userBase = await this.userBaseService.create({
-        nome: createSubscriptionDto.name,
-        email: createSubscriptionDto.email,
-        password: hashedPassword,
-        cpf: createSubscriptionDto.cpf,
-        telefone: createSubscriptionDto.phone,
-        postalCode: createSubscriptionDto.postalCode,
-        address: createSubscriptionDto.address,
-        addressNumber: createSubscriptionDto.addressNumber,
-        complement: createSubscriptionDto.complement,
-        province: createSubscriptionDto.province,
-        city: createSubscriptionDto.city,
-        state: createSubscriptionDto.state,
-        isVerified,
-        verificationToken,
-        tokenExpiresAt,
-      });
-
-      // Não enviar email de verificação durante o processo de assinatura
-      // O email de verificação será enviado apenas quando o usuário solicitar
-    } catch (error: any) {
-      if (error instanceof ConflictException) {
-        throw error;
-      }
-      throw new InternalServerErrorException(
-        `Erro ao criar usuário: ${error.message || 'Erro desconhecido'}`,
-      );
-    }
-
-    // 8. Criar ClienteMaster vinculado ao UserBase
-    // nomeEmpresa não é preenchido na criação - será preenchido depois pelo próprio cliente via API
-    let clienteMaster;
-    try {
-      clienteMaster = await this.clientesMasterService.create({
-        userId: userBase.id,
-        // nomeEmpresa não é preenchido - será atualizado depois pelo cliente via POST /clientes-master/meus-dados
-        // Outros campos da empresa serão preenchidos depois pelo cliente
-      });
-    } catch (error: any) {
-      throw new InternalServerErrorException(
-        `Erro ao criar cliente master: ${error.message || 'Erro desconhecido'}`,
-      );
-    }
-
-    // 9. Salva assinatura no banco de dados
+    // 8. Salva assinatura no banco de dados
     const assinaturaData: Partial<Assinatura> = {
       userId: clienteMaster.id,
       planoId: createSubscriptionDto.planoId,

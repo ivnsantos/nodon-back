@@ -134,6 +134,63 @@ let AssinaturasService = class AssinaturasService {
             throw new common_1.BadRequestException('O valor da assinatura deve ser maior que zero. Verifique o valor do plano.');
         }
         console.log('💰 Valor final que será enviado ao Asaas:', valorFinal);
+        let clienteMaster;
+        let userBase;
+        try {
+            const existingClienteMaster = await this.clientesMasterService.findByEmail(createSubscriptionDto.email);
+            if (existingClienteMaster) {
+                clienteMaster = existingClienteMaster;
+                userBase = await this.userBaseService.findById(existingClienteMaster.userId);
+                if (!userBase) {
+                    throw new common_1.InternalServerErrorException('UserBase não encontrado para o ClienteMaster existente');
+                }
+                const existingActiveSubscription = await this.assinaturaRepository.findOne({
+                    where: {
+                        userId: clienteMaster.id,
+                        status: 'ACTIVE',
+                    },
+                });
+                if (existingActiveSubscription) {
+                    throw new common_1.BadRequestException('Assinatura ativa. Fale com o Suporte.');
+                }
+            }
+            else {
+                const hashedPassword = await bcrypt.hash(createSubscriptionDto.password, 10);
+                const existingUserBase = await this.userBaseService.findByEmail(createSubscriptionDto.email);
+                if (existingUserBase) {
+                    throw new common_1.ConflictException('Já existe um usuário cadastrado com este e-mail');
+                }
+                const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+                const tokenExpiresAt = new Date();
+                tokenExpiresAt.setMinutes(tokenExpiresAt.getMinutes() + 15);
+                userBase = await this.userBaseService.create({
+                    nome: createSubscriptionDto.name,
+                    email: createSubscriptionDto.email,
+                    password: hashedPassword,
+                    cpf: createSubscriptionDto.cpf,
+                    telefone: createSubscriptionDto.phone,
+                    postalCode: createSubscriptionDto.postalCode,
+                    address: createSubscriptionDto.address,
+                    addressNumber: createSubscriptionDto.addressNumber,
+                    complement: createSubscriptionDto.complement,
+                    province: createSubscriptionDto.province,
+                    city: createSubscriptionDto.city,
+                    state: createSubscriptionDto.state,
+                    isVerified: false,
+                    verificationToken,
+                    tokenExpiresAt,
+                });
+                clienteMaster = await this.clientesMasterService.create({
+                    userId: userBase.id,
+                });
+            }
+        }
+        catch (error) {
+            if (error instanceof common_1.ConflictException || error instanceof common_1.BadRequestException) {
+                throw error;
+            }
+            throw new common_1.InternalServerErrorException(`Erro ao criar/obter cliente: ${error.message || 'Erro desconhecido'}`);
+        }
         const asaasCustomerId = await this.asaasService.createCustomer({
             name: createSubscriptionDto.name,
             email: createSubscriptionDto.email,
@@ -227,63 +284,6 @@ let AssinaturasService = class AssinaturasService {
             };
         }
         const asaasSubscription = await this.asaasService.createSubscription(subscriptionData);
-        const hashedPassword = await bcrypt.hash(createSubscriptionDto.password, 10);
-        let userBase;
-        try {
-            const existingUserBase = await this.userBaseService.findByEmail(createSubscriptionDto.email);
-            if (existingUserBase) {
-                throw new common_1.ConflictException('Já existe um usuário cadastrado com este e-mail');
-            }
-            const existingClienteMaster = await this.clientesMasterService.findByEmail(createSubscriptionDto.email);
-            let emailJaVerificado = false;
-            if (existingClienteMaster) {
-                const userBaseDoCliente = await this.userBaseService.findById(existingClienteMaster.userId);
-                emailJaVerificado = userBaseDoCliente?.isVerified || false;
-            }
-            let verificationToken = null;
-            let tokenExpiresAt = null;
-            let isVerified = false;
-            if (emailJaVerificado) {
-                isVerified = true;
-            }
-            else {
-                verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
-                tokenExpiresAt = new Date();
-                tokenExpiresAt.setMinutes(tokenExpiresAt.getMinutes() + 15);
-            }
-            userBase = await this.userBaseService.create({
-                nome: createSubscriptionDto.name,
-                email: createSubscriptionDto.email,
-                password: hashedPassword,
-                cpf: createSubscriptionDto.cpf,
-                telefone: createSubscriptionDto.phone,
-                postalCode: createSubscriptionDto.postalCode,
-                address: createSubscriptionDto.address,
-                addressNumber: createSubscriptionDto.addressNumber,
-                complement: createSubscriptionDto.complement,
-                province: createSubscriptionDto.province,
-                city: createSubscriptionDto.city,
-                state: createSubscriptionDto.state,
-                isVerified,
-                verificationToken,
-                tokenExpiresAt,
-            });
-        }
-        catch (error) {
-            if (error instanceof common_1.ConflictException) {
-                throw error;
-            }
-            throw new common_1.InternalServerErrorException(`Erro ao criar usuário: ${error.message || 'Erro desconhecido'}`);
-        }
-        let clienteMaster;
-        try {
-            clienteMaster = await this.clientesMasterService.create({
-                userId: userBase.id,
-            });
-        }
-        catch (error) {
-            throw new common_1.InternalServerErrorException(`Erro ao criar cliente master: ${error.message || 'Erro desconhecido'}`);
-        }
         const assinaturaData = {
             userId: clienteMaster.id,
             planoId: createSubscriptionDto.planoId,
