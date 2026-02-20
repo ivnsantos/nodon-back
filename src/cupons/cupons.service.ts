@@ -34,7 +34,8 @@ export class CuponsService {
   }
 
   async findByName(name: string): Promise<Cupom | null> {
-    return this.cupomRepository.findOne({ where: { name, active: true } });
+    const nameUpperCase = name.toUpperCase();
+    return this.cupomRepository.findOne({ where: { name: nameUpperCase, active: true } });
   }
 
   async update(id: string, data: Partial<Cupom>): Promise<Cupom> {

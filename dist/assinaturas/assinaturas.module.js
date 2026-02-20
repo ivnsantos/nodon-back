@@ -12,6 +12,8 @@ const typeorm_1 = require("@nestjs/typeorm");
 const assinaturas_service_1 = require("./assinaturas.service");
 const assinaturas_controller_1 = require("./assinaturas.controller");
 const assinatura_entity_1 = require("./entities/assinatura.entity");
+const recorrencia_entity_1 = require("./entities/recorrencia.entity");
+const cobranca_entity_1 = require("./entities/cobranca.entity");
 const cupom_entity_1 = require("../cupons/entities/cupom.entity");
 const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
 const planos_module_1 = require("../planos/planos.module");
@@ -28,7 +30,7 @@ exports.AssinaturasModule = AssinaturasModule;
 exports.AssinaturasModule = AssinaturasModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([assinatura_entity_1.Assinatura, cupom_entity_1.Cupom, historico_mensal_entity_1.HistoricoMensal]),
+            typeorm_1.TypeOrmModule.forFeature([assinatura_entity_1.Assinatura, recorrencia_entity_1.Recorrencia, cobranca_entity_1.Cobranca, cupom_entity_1.Cupom, historico_mensal_entity_1.HistoricoMensal]),
             planos_module_1.PlanosModule,
             cupons_module_1.CuponsModule,
             (0, common_1.forwardRef)(() => users_module_1.UsersModule),

@@ -14,9 +14,13 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AssinaturasController = void 0;
 const common_1 = require("@nestjs/common");
+const config_1 = require("@nestjs/config");
 const assinaturas_service_1 = require("./assinaturas.service");
 const create_subscription_dto_1 = require("./dto/create-subscription.dto");
 const create_simple_subscription_dto_1 = require("./dto/create-simple-subscription.dto");
+const create_payment_dto_1 = require("./dto/create-payment.dto");
+const create_customer_dto_1 = require("./dto/create-customer.dto");
+const checkout_complete_dto_1 = require("./dto/checkout-complete.dto");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 const validate_resource_access_guard_1 = require("../auth/guards/validate-resource-access.guard");
 const clientes_master_service_1 = require("../users/clientes-master.service");
@@ -25,10 +29,26 @@ let AssinaturasController = class AssinaturasController {
     assinaturasService;
     clientesMasterService;
     userComumService;
-    constructor(assinaturasService, clientesMasterService, userComumService) {
+    configService;
+    constructor(assinaturasService, clientesMasterService, userComumService, configService) {
         this.assinaturasService = assinaturasService;
         this.clientesMasterService = clientesMasterService;
         this.userComumService = userComumService;
+        this.configService = configService;
+    }
+    async createCustomer(createCustomerDto) {
+        const result = await this.assinaturasService.createCustomer(createCustomerDto);
+        return {
+            statusCode: 201,
+            message: 'Success',
+            data: {
+                asaasCustomerId: result.asaasCustomerId,
+                userId: result.userId,
+            },
+        };
+    }
+    async checkoutComplete(checkoutDto) {
+        return this.assinaturasService.checkoutComplete(checkoutDto);
     }
     async create(createSubscriptionDto) {
         return this.assinaturasService.create(createSubscriptionDto);
@@ -36,8 +56,8 @@ let AssinaturasController = class AssinaturasController {
     async createSimple(createSimpleSubscriptionDto, req) {
         return this.assinaturasService.createSimple(createSimpleSubscriptionDto, req.user);
     }
-    async checkPaymentStatus(userId) {
-        return this.assinaturasService.checkFirstPaymentStatus(userId);
+    async checkPaymentStatus(paymentId) {
+        return this.assinaturasService.checkPaymentStatus(paymentId);
     }
     async findMy(req) {
         return this.assinaturasService.findByUserId(req.user.id);
@@ -116,11 +136,62 @@ let AssinaturasController = class AssinaturasController {
         }
         return this.assinaturasService.getAnalisesInfo(clienteMasterIdFinal, req.user.id, req.user.tipo);
     }
+    async createPayment(createPaymentDto) {
+        return this.assinaturasService.createPayment(createPaymentDto);
+    }
     async findOne(id) {
         return this.assinaturasService.findById(id);
     }
+    async processarRecorrencias(cronSecret) {
+        const timestamp = new Date().toISOString();
+        console.log(`\n${'#'.repeat(80)}`);
+        console.log(`🚀 [${timestamp}] CRON ENDPOINT CHAMADO`);
+        console.log(`${'#'.repeat(80)}`);
+        const expectedSecret = this.configService.get('CRON_SECRET_KEY');
+        if (!expectedSecret) {
+            console.error('❌ CRON_SECRET_KEY não configurada nas variáveis de ambiente');
+            throw new common_1.InternalServerErrorException('Configuração de CRON não encontrada');
+        }
+        console.log(`🔐 Validando chave secreta...`);
+        console.log(`   Chave recebida: ${cronSecret ? 'PRESENTE' : 'AUSENTE'}`);
+        console.log(`   Chave esperada: ${expectedSecret ? 'CONFIGURADA' : 'NÃO CONFIGURADA'}`);
+        if (!cronSecret || cronSecret !== expectedSecret) {
+            console.error('❌ Tentativa de acesso ao CRON com chave inválida');
+            console.error(`   Chave recebida: ${cronSecret || 'VAZIA'}`);
+            console.error(`   Chave esperada: ${expectedSecret ? 'CONFIGURADA' : 'NÃO CONFIGURADA'}`);
+            throw new common_1.UnauthorizedException('Chave secreta inválida');
+        }
+        console.log(`✅ Chave secreta válida!`);
+        console.log(`🔄 Chamando service para processar recorrências...`);
+        const resultado = await this.assinaturasService.processarRecorrencias();
+        console.log(`\n${'#'.repeat(80)}`);
+        console.log(`✅ [${new Date().toISOString()}] CRON CONCLUÍDO COM SUCESSO`);
+        console.log(`   Processadas: ${resultado.processadas}`);
+        console.log(`   Sucessos: ${resultado.sucesso}`);
+        console.log(`   Falhas: ${resultado.falhas}`);
+        console.log(`${'#'.repeat(80)}\n`);
+        return {
+            statusCode: 200,
+            message: 'Processamento de recorrências concluído',
+            data: resultado,
+        };
+    }
 };
 exports.AssinaturasController = AssinaturasController;
+__decorate([
+    (0, common_1.Post)('customer'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_customer_dto_1.CreateCustomerDto]),
+    __metadata("design:returntype", Promise)
+], AssinaturasController.prototype, "createCustomer", null);
+__decorate([
+    (0, common_1.Post)('checkout'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [checkout_complete_dto_1.CheckoutCompleteDto]),
+    __metadata("design:returntype", Promise)
+], AssinaturasController.prototype, "checkoutComplete", null);
 __decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)()),
@@ -138,8 +209,8 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AssinaturasController.prototype, "createSimple", null);
 __decorate([
-    (0, common_1.Get)('check-payment-status/:userId'),
-    __param(0, (0, common_1.Param)('userId')),
+    (0, common_1.Get)('check-payment-status/:paymentId'),
+    __param(0, (0, common_1.Param)('paymentId')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
@@ -175,6 +246,14 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], AssinaturasController.prototype, "getAnalisesInfo", null);
 __decorate([
+    (0, common_1.Post)('pagamentos'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [create_payment_dto_1.CreatePaymentDto]),
+    __metadata("design:returntype", Promise)
+], AssinaturasController.prototype, "createPayment", null);
+__decorate([
     (0, common_1.Get)(':id'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Param)('id')),
@@ -182,10 +261,18 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], AssinaturasController.prototype, "findOne", null);
+__decorate([
+    (0, common_1.Post)('cron/processar-recorrencias'),
+    __param(0, (0, common_1.Headers)('x-cron-secret')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], AssinaturasController.prototype, "processarRecorrencias", null);
 exports.AssinaturasController = AssinaturasController = __decorate([
     (0, common_1.Controller)('assinaturas'),
     __metadata("design:paramtypes", [assinaturas_service_1.AssinaturasService,
         clientes_master_service_1.ClientesMasterService,
-        user_comum_service_1.UserComumService])
+        user_comum_service_1.UserComumService,
+        config_1.ConfigService])
 ], AssinaturasController);
 //# sourceMappingURL=assinaturas.controller.js.map

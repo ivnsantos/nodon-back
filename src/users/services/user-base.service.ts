@@ -30,6 +30,7 @@ export class UserBaseService {
     googleId?: string | null;
     facebookId?: string | null;
     foto?: string | null;
+    asaasCustomerId?: string | null;
   }): Promise<UserBase> {
     const userBase = this.userBaseRepository.create({
       nome: data.nome,
@@ -51,6 +52,7 @@ export class UserBaseService {
       googleId: data.googleId ?? null,
       facebookId: data.facebookId ?? null,
       foto: data.foto ?? null,
+      asaasCustomerId: data.asaasCustomerId ?? null,
     });
     return this.userBaseRepository.save(userBase);
   }

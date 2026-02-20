@@ -122,7 +122,7 @@ __decorate([
     __metadata("design:type", String)
 ], Assinatura.prototype, "billingType", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'credit_card_token', nullable: true }),
+    (0, typeorm_1.Column)({ name: 'credit_card_token' }),
     __metadata("design:type", String)
 ], Assinatura.prototype, "creditCardToken", void 0);
 __decorate([
@@ -142,11 +142,11 @@ __decorate([
     __metadata("design:type", String)
 ], Assinatura.prototype, "adminId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'credit_card_number', nullable: true }),
+    (0, typeorm_1.Column)({ name: 'credit_card_number' }),
     __metadata("design:type", String)
 ], Assinatura.prototype, "creditCardNumber", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'credit_card_brand', nullable: true }),
+    (0, typeorm_1.Column)({ name: 'credit_card_brand' }),
     __metadata("design:type", String)
 ], Assinatura.prototype, "creditCardBrand", void 0);
 __decorate([

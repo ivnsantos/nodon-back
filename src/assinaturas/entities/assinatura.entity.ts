@@ -68,7 +68,7 @@ export class Assinatura {
   @Column({ name: 'billing_type', nullable: true })
   billingType: string;
 
-  @Column({ name: 'credit_card_token', nullable: true })
+  @Column({ name: 'credit_card_token' })
   creditCardToken: string;
 
   @Column({ nullable: true })
@@ -83,10 +83,10 @@ export class Assinatura {
   @Column({ name: 'admin_id', nullable: true })
   adminId: string;
 
-  @Column({ name: 'credit_card_number', nullable: true })
+  @Column({ name: 'credit_card_number' })
   creditCardNumber: string;
 
-  @Column({ name: 'credit_card_brand', nullable: true })
+  @Column({ name: 'credit_card_brand' })
   creditCardBrand: string;
 
   @Column({ name: 'coupon_id', type: 'uuid', nullable: true })

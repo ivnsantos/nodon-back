@@ -45,6 +45,29 @@ interface CreateSubscriptionDto {
     };
     creditCard?: any;
 }
+interface CreatePaymentDto {
+    billingType: string;
+    customer: string;
+    value: number;
+    dueDate: string;
+    creditCard?: {
+        holderName: string;
+        number: string;
+        expiryMonth: string;
+        expiryYear: string;
+        ccv: string;
+    };
+    creditCardToken?: string;
+    creditCardHolderInfo?: {
+        name: string;
+        email: string;
+        postalCode: string;
+        addressNumber: string;
+        cpfCnpj: string;
+        phone: string;
+    };
+    remoteIp?: string;
+}
 export declare class AsaasService {
     private configService;
     private readonly apiUrl;
@@ -52,6 +75,7 @@ export declare class AsaasService {
     private readonly axiosInstance;
     constructor(configService: ConfigService);
     createCustomer(data: CreateCustomerDto): Promise<string>;
+    updateCustomer(customerId: string, data: CreateCustomerDto): Promise<void>;
     tokenizeCreditCard(data: TokenizeCreditCardDto): Promise<{
         creditCardToken: string;
         creditCardNumber: string;
@@ -59,6 +83,11 @@ export declare class AsaasService {
     }>;
     createSubscription(data: CreateSubscriptionDto): Promise<any>;
     getSubscriptionPayments(subscriptionId: string): Promise<any>;
+    createPayment(data: CreatePaymentDto): Promise<any>;
+    getPaymentStatus(paymentId: string): Promise<{
+        status: string;
+    }>;
+    getPayment(paymentId: string): Promise<any>;
     private detectCardBrand;
 }
 export {};

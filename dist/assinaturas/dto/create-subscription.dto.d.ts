@@ -18,9 +18,7 @@ export declare class CreateSubscriptionDto {
     planoId: string;
     billingType: BillingType;
     couponName?: string;
-    creditCardHolderName?: string;
+    creditCardToken?: string;
     creditCardNumber?: string;
-    creditCardExpiryMonth?: string;
-    creditCardExpiryYear?: string;
-    creditCardCcv?: string;
+    creditCardBrand?: string;
 }

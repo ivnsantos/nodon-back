@@ -38,7 +38,8 @@ let CuponsService = class CuponsService {
         return this.cupomRepository.findOne({ where: { id } });
     }
     async findByName(name) {
-        return this.cupomRepository.findOne({ where: { name, active: true } });
+        const nameUpperCase = name.toUpperCase();
+        return this.cupomRepository.findOne({ where: { name: nameUpperCase, active: true } });
     }
     async update(id, data) {
         await this.cupomRepository.update(id, data);

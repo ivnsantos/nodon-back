@@ -1,18 +1,30 @@
+import { ConfigService } from '@nestjs/config';
 import { AssinaturasService } from './assinaturas.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { CreateSimpleSubscriptionDto } from './dto/create-simple-subscription.dto';
+import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateCustomerDto } from './dto/create-customer.dto';
+import { CheckoutCompleteDto } from './dto/checkout-complete.dto';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { UserComumService } from '../users/services/user-comum.service';
 export declare class AssinaturasController {
     private assinaturasService;
     private clientesMasterService;
     private userComumService;
-    constructor(assinaturasService: AssinaturasService, clientesMasterService: ClientesMasterService, userComumService: UserComumService);
-    create(createSubscriptionDto: CreateSubscriptionDto): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto>;
-    createSimple(createSimpleSubscriptionDto: CreateSimpleSubscriptionDto, req: any): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto>;
-    checkPaymentStatus(userId: string): Promise<{
-        status: string;
+    private configService;
+    constructor(assinaturasService: AssinaturasService, clientesMasterService: ClientesMasterService, userComumService: UserComumService, configService: ConfigService);
+    createCustomer(createCustomerDto: CreateCustomerDto): Promise<{
+        statusCode: number;
+        message: string;
+        data: {
+            asaasCustomerId: string;
+            userId: string;
+        };
     }>;
+    checkoutComplete(checkoutDto: CheckoutCompleteDto): Promise<any>;
+    create(createSubscriptionDto: CreateSubscriptionDto): Promise<any>;
+    createSimple(createSimpleSubscriptionDto: CreateSimpleSubscriptionDto, req: any): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto>;
+    checkPaymentStatus(paymentId: string): Promise<any>;
     findMy(req: any): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto | null>;
     getDashboard(req: any, userComumIdHeader?: string, clienteMasterId?: string, usuario?: string): Promise<{
         clienteMasterId: string;
@@ -115,5 +127,20 @@ export declare class AssinaturasController {
             dataFim: string | null;
         };
     }>;
+    createPayment(createPaymentDto: CreatePaymentDto): Promise<any>;
     findOne(id: string): Promise<import("./dto/subscription-response.dto").SubscriptionResponseDto>;
+    processarRecorrencias(cronSecret: string): Promise<{
+        statusCode: number;
+        message: string;
+        data: {
+            processadas: number;
+            sucesso: number;
+            falhas: number;
+            detalhes: Array<{
+                assinaturaId: string;
+                status: string;
+                mensagem: string;
+            }>;
+        };
+    }>;
 }

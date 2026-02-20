@@ -32,11 +32,9 @@ class CreateSubscriptionDto {
     planoId;
     billingType;
     couponName;
-    creditCardHolderName;
+    creditCardToken;
     creditCardNumber;
-    creditCardExpiryMonth;
-    creditCardExpiryYear;
-    creditCardCcv;
+    creditCardBrand;
 }
 exports.CreateSubscriptionDto = CreateSubscriptionDto;
 __decorate([
@@ -106,7 +104,7 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
-], CreateSubscriptionDto.prototype, "creditCardHolderName", void 0);
+], CreateSubscriptionDto.prototype, "creditCardToken", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
@@ -116,15 +114,5 @@ __decorate([
     (0, class_validator_1.IsString)(),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
-], CreateSubscriptionDto.prototype, "creditCardExpiryMonth", void 0);
-__decorate([
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsOptional)(),
-    __metadata("design:type", String)
-], CreateSubscriptionDto.prototype, "creditCardExpiryYear", void 0);
-__decorate([
-    (0, class_validator_1.IsString)(),
-    (0, class_validator_1.IsOptional)(),
-    __metadata("design:type", String)
-], CreateSubscriptionDto.prototype, "creditCardCcv", void 0);
+], CreateSubscriptionDto.prototype, "creditCardBrand", void 0);
 //# sourceMappingURL=create-subscription.dto.js.map

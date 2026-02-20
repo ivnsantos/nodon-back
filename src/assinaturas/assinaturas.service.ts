@@ -6,14 +6,20 @@ import {
   BadRequestException,
   Inject,
   forwardRef,
+  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Assinatura } from './entities/assinatura.entity';
+import { Recorrencia } from './entities/recorrencia.entity';
+import { Cobranca } from './entities/cobranca.entity';
 import { Cupom } from '../cupons/entities/cupom.entity';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { CreateSimpleSubscriptionDto } from './dto/create-simple-subscription.dto';
+import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateCustomerDto } from './dto/create-customer.dto';
+import { CheckoutCompleteDto } from './dto/checkout-complete.dto';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import { AsaasService } from './services/asaas.service';
 import { PlanosService } from '../planos/planos.service';
@@ -28,10 +34,14 @@ import { UserComum } from '../users/entities/user-comum.entity';
 import { ChatService } from '../chat/chat.service';
 
 @Injectable()
-export class AssinaturasService {
+export class AssinaturasService implements OnModuleInit {
   constructor(
     @InjectRepository(Assinatura)
     private readonly assinaturaRepository: Repository<Assinatura>,
+    @InjectRepository(Recorrencia)
+    private readonly recorrenciaRepository: Repository<Recorrencia>,
+    @InjectRepository(Cobranca)
+    private readonly cobrancaRepository: Repository<Cobranca>,
     @InjectRepository(Cupom)
     private readonly cupomRepository: Repository<Cupom>,
     @InjectRepository(HistoricoMensal)
@@ -51,7 +61,7 @@ export class AssinaturasService {
 
   async create(
     createSubscriptionDto: CreateSubscriptionDto,
-  ): Promise<SubscriptionResponseDto> {
+  ): Promise<any> {
     // 1. Valida cupom se fornecido
     let coupon: Cupom | null = null;
     let couponId: string | null = null;
@@ -114,7 +124,7 @@ export class AssinaturasService {
       );
     }
 
-    console.log('💰 Valor final que será enviado ao Asaas:', valorFinal);
+    console.log('💰 Valor final da assinatura:', valorFinal);
 
     // 3. Verificar se já existe ClienteMaster com este email
     let clienteMaster;
@@ -193,127 +203,141 @@ export class AssinaturasService {
     }
 
     // 4. Criar cliente na ASAAS
-    const asaasCustomerId = await this.asaasService.createCustomer({
-      name: createSubscriptionDto.name,
-      email: createSubscriptionDto.email,
-      cpfCnpj: createSubscriptionDto.cpf.replace(/\D/g, ''), // Remove formatação
-      phone: createSubscriptionDto.phone.replace(/\D/g, ''), // Remove formatação
-      postalCode: createSubscriptionDto.postalCode.replace(/\D/g, ''), // Remove formatação
-      address: createSubscriptionDto.address,
-      addressNumber: createSubscriptionDto.addressNumber,
-      complement: createSubscriptionDto.complement,
-      province: createSubscriptionDto.province,
-      city: createSubscriptionDto.city,
-      state: createSubscriptionDto.state,
-    });
+    let asaasCustomerId: string;
+    try {
+      asaasCustomerId = await this.asaasService.createCustomer({
+        name: createSubscriptionDto.name,
+        email: createSubscriptionDto.email,
+        cpfCnpj: createSubscriptionDto.cpf.replace(/\D/g, ''),
+        phone: createSubscriptionDto.phone.replace(/\D/g, ''),
+        postalCode: createSubscriptionDto.postalCode.replace(/\D/g, ''),
+        address: createSubscriptionDto.address,
+        addressNumber: createSubscriptionDto.addressNumber,
+        complement: createSubscriptionDto.complement,
+        province: createSubscriptionDto.province,
+        city: createSubscriptionDto.city,
+        state: createSubscriptionDto.state,
+      });
+    } catch (error: any) {
+      throw new BadRequestException(
+        `Erro ao criar cliente na ASAAS: ${error.message || 'Erro desconhecido'}`,
+      );
+    }
 
-    // 5. Tokeniza cartão de crédito se necessário
+    // 5. Validar token do cartão já tokenizado no frontend (se necessário)
     let creditCardToken: string | null = null;
     let creditCardNumber: string | null = null;
     let creditCardBrand: string | null = null;
 
     if (createSubscriptionDto.billingType === 'CREDIT_CARD') {
-      if (
-        !createSubscriptionDto.creditCardHolderName ||
-        !createSubscriptionDto.creditCardNumber ||
-        !createSubscriptionDto.creditCardExpiryMonth ||
-        !createSubscriptionDto.creditCardExpiryYear ||
-        !createSubscriptionDto.creditCardCcv
-      ) {
-        throw new BadRequestException('Dados do cartão de crédito são obrigatórios');
+      if (!createSubscriptionDto.creditCardToken) {
+        throw new BadRequestException('Token do cartão de crédito é obrigatório. A tokenização deve ser feita no frontend.');
+      }
+
+      creditCardToken = createSubscriptionDto.creditCardToken;
+      creditCardNumber = createSubscriptionDto.creditCardNumber || null;
+      creditCardBrand = createSubscriptionDto.creditCardBrand || null;
+    }
+
+    // 6. Fazer cobrança avulsa na ASAAS
+    let paymentResult: any = null;
+    if (createSubscriptionDto.billingType === 'CREDIT_CARD') {
+      if (!creditCardToken) {
+        throw new BadRequestException('Token do cartão não foi gerado');
       }
 
       try {
-        const tokenizedCard = await this.asaasService.tokenizeCreditCard({
+        // Calcula a data de vencimento para hoje (data atual)
+        const dueDateString = this.getDataAtualBrasil();
+
+        // Criar pagamento avulso usando o token do cartão
+        paymentResult = await this.asaasService.createPayment({
+          billingType: 'CREDIT_CARD',
           customer: asaasCustomerId,
-          creditCard: {
-            holderName: createSubscriptionDto.creditCardHolderName,
-            number: createSubscriptionDto.creditCardNumber,
-            expiryMonth: createSubscriptionDto.creditCardExpiryMonth,
-            expiryYear: createSubscriptionDto.creditCardExpiryYear,
-            ccv: createSubscriptionDto.creditCardCcv,
-          },
-          creditCardHolderInfo: {
-            name: createSubscriptionDto.name,
-            email: createSubscriptionDto.email,
-            cpfCnpj: createSubscriptionDto.cpf.replace(/\D/g, ''),
-            postalCode: createSubscriptionDto.postalCode.replace(/\D/g, ''),
-            addressNumber: createSubscriptionDto.addressNumber,
-            addressComplement: createSubscriptionDto.complement || null,
-            phone: createSubscriptionDto.phone.replace(/\D/g, ''),
-            mobilePhone: createSubscriptionDto.phone.replace(/\D/g, ''),
-          },
+          value: valorFinal,
+          dueDate: dueDateString,
+          creditCardToken: creditCardToken,
         });
 
-        creditCardToken = tokenizedCard.creditCardToken;
-        creditCardNumber = tokenizedCard.creditCardNumber;
-        creditCardBrand = tokenizedCard.creditCardBrand;
+        // Registrar cobrança na tabela (SEMPRE registra, mesmo se não estiver aprovada)
+        // Se status não for CONFIRMED, registra com userId e assinaturaId = null
+        // Guarda dados necessários para criar assinatura depois se pagamento for confirmado
+        const statusConfirmado = paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED';
+        
+        await this.registrarCobranca({
+          userId: statusConfirmado ? clienteMaster.id : null, // null se não confirmado
+          asaasPaymentId: paymentResult.id,
+          asaasCustomerId: asaasCustomerId,
+          value: valorFinal,
+          billingType: 'CREDIT_CARD',
+          status: paymentResult.status,
+          dueDate: paymentResult.dueDate ? this.parseDataBrasil(paymentResult.dueDate) : null,
+          paymentDate: paymentResult.paymentDate ? this.parseDataBrasil(paymentResult.paymentDate) : null,
+          asaasResponse: JSON.stringify(paymentResult),
+          assinaturaId: null, // Sempre null inicialmente, será vinculada depois se confirmado
+          planoId: createSubscriptionDto.planoId,
+          couponId: couponId || null,
+          dadosAssinatura: JSON.stringify({
+            name: createSubscriptionDto.name,
+            email: createSubscriptionDto.email,
+            cpf: createSubscriptionDto.cpf,
+            phone: createSubscriptionDto.phone,
+            postalCode: createSubscriptionDto.postalCode,
+            address: createSubscriptionDto.address,
+            addressNumber: createSubscriptionDto.addressNumber,
+            complement: createSubscriptionDto.complement,
+            province: createSubscriptionDto.province,
+            city: createSubscriptionDto.city,
+            state: createSubscriptionDto.state,
+            billingType: createSubscriptionDto.billingType,
+            creditCardToken: creditCardToken,
+            creditCardNumber: creditCardNumber,
+            creditCardBrand: creditCardBrand,
+            userId: clienteMaster.id, // Guarda userId nos dados para usar depois
+          }),
+        });
+
+        // Se pagamento não foi aprovado, não lança erro - apenas registra
+        // A assinatura será criada depois quando o pagamento for confirmado
+        if (!statusConfirmado) {
+          console.log('⚠️ Pagamento criado mas não aprovado ainda. Status:', paymentResult.status);
+          console.log('📝 Cobrança registrada com userId=null. Será atualizada quando status mudar para CONFIRMED.');
+          // Retorna o paymentResult para o frontend poder verificar depois
+          return {
+            statusCode: 202,
+            message: 'Pagamento criado. Aguardando confirmação.',
+            data: {
+              pagamento: {
+                id: paymentResult.id,
+                status: paymentResult.status,
+                value: paymentResult.value,
+                dueDate: paymentResult.dueDate,
+                customer: paymentResult.customer,
+              },
+              assinatura: null,
+            },
+          };
+        }
+
+        console.log('✅ Pagamento aprovado:', paymentResult);
       } catch (error: any) {
+        console.error('❌ Erro ao processar pagamento:', error);
         throw new BadRequestException(
-          `Erro ao tokenizar cartão: ${error.message || 'Erro desconhecido'}`,
+          `Erro ao processar pagamento: ${error.message || 'Erro desconhecido'}`,
         );
       }
     }
 
-    // Calcula a data de vencimento (dia atual) - usando fuso horário do Brasil
-    const nextDueDateString = this.getDataAtualBrasil();
+    // 7. Calcula a data de vencimento da assinatura (1 mês à frente) - usando fuso horário do Brasil
+    const nextDueDateString = this.calcularProximoMes();
+    const nextDueDate = this.parseDataBrasil(nextDueDateString);
 
-    // 6. Prepara dados da assinatura com desconto se cupom válido
-    // Garantir que o valor seja um número (converter de decimal para número)
-    const valorParaAsaas = Number(valorFinal);
-    
-    console.log('📤 Enviando para Asaas:', {
-      customer: asaasCustomerId,
-      billingType: createSubscriptionDto.billingType,
-      value: valorParaAsaas,
-      planoNome: plano.nome,
-      planoId: plano.id,
-    });
-    
-    const subscriptionData: any = {
-      customer: asaasCustomerId,
-      billingType: createSubscriptionDto.billingType,
-      value: valorParaAsaas, // Valor do plano (valorPromocional ou valorOriginal)
-      nextDueDate: nextDueDateString,
-      cycle: 'MONTHLY',
-      description: `Assinatura ${plano.nome} NODON`,
-    };
-
-    // Adiciona desconto se cupom válido
-    if (coupon && coupon.active) {
-      subscriptionData.discount = {
-        value: Number(coupon.discountValue),
-        type: 'PERCENTAGE',
-      };
-    }
-
-    // Adiciona dados do cartão se for cartão de crédito
-    if (createSubscriptionDto.billingType === 'CREDIT_CARD') {
-      subscriptionData.creditCard = {
-        creditCardHolderName: createSubscriptionDto.creditCardHolderName,
-        creditCardHolderEmail: createSubscriptionDto.email,
-        creditCardHolderCpfCnpj: createSubscriptionDto.cpf.replace(/\D/g, ''),
-        creditCardHolderPhone: createSubscriptionDto.phone.replace(/\D/g, ''),
-        creditCardHolderPostalCode: createSubscriptionDto.postalCode.replace(/\D/g, ''),
-        creditCardHolderAddress: createSubscriptionDto.address,
-        creditCardHolderAddressNumber: createSubscriptionDto.addressNumber,
-        creditCardHolderAddressComplement: createSubscriptionDto.complement,
-        creditCardHolderProvince: createSubscriptionDto.province,
-        creditCardHolderCity: createSubscriptionDto.city,
-        creditCardHolderState: createSubscriptionDto.state,
-      };
-    }
-
-    // 7. Cria assinatura na ASAAS
-    const asaasSubscription = await this.asaasService.createSubscription(subscriptionData);
-
-    // 8. Salva assinatura no banco de dados
+    // 8. Criar assinatura no banco de dados
     const assinaturaData: Partial<Assinatura> = {
       userId: clienteMaster.id,
+      asaasCustomerId: asaasCustomerId, // ID do cliente criado na ASAAS
       planoId: createSubscriptionDto.planoId,
       couponId: couponId || undefined,
-      asaasCustomerId,
-      asaasSubscriptionId: asaasSubscription.id,
       name: createSubscriptionDto.name,
       email: createSubscriptionDto.email,
       cpf: createSubscriptionDto.cpf,
@@ -327,18 +351,55 @@ export class AssinaturasService {
       state: createSubscriptionDto.state,
       value: valorFinal,
       billingType: createSubscriptionDto.billingType,
-      creditCardToken: creditCardToken ?? undefined,
-      creditCardNumber: creditCardNumber ?? undefined,
-      creditCardBrand: creditCardBrand ?? undefined,
-      status: 'PENDING',
-      asaasResponse: JSON.stringify(asaasSubscription),
-      nextDueDate: this.parseNextDueDate(asaasSubscription.nextDueDate),
+      creditCardToken: creditCardToken || '',
+      creditCardNumber: creditCardNumber || '',
+      creditCardBrand: creditCardBrand || '',
+      status: 'ACTIVE',
+      nextDueDate: nextDueDate,
     };
     const assinatura = this.assinaturaRepository.create(assinaturaData);
 
     try {
       const savedSubscription = await this.assinaturaRepository.save(assinatura);
-      return this.toResponseDto(savedSubscription);
+      
+      // 9. Adiciona na tabela de recorrência (status sempre é ACTIVE ao criar)
+      await this.gerenciarRecorrencia(savedSubscription);
+      
+      // 10. Se pagamento foi aprovado, vincular assinatura à cobrança
+      // Não precisa atualizar status aqui porque acabamos de criar o pagamento e já temos o status atual
+      if (paymentResult && (paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED')) {
+        const cobranca = await this.cobrancaRepository.findOne({
+          where: { asaasPaymentId: paymentResult.id },
+        });
+        if (cobranca) {
+          cobranca.assinaturaId = savedSubscription.id;
+          // Atualiza userId se ainda não tiver
+          if (!cobranca.userId) {
+            cobranca.userId = savedSubscription.userId;
+          }
+          await this.cobrancaRepository.save(cobranca);
+          console.log(`✅ Assinatura ${savedSubscription.id} vinculada à cobrança ${cobranca.id} no checkout`);
+        }
+      }
+      
+      console.log('✅ Assinatura criada com sucesso:', savedSubscription.id);
+      
+      // Retornar pagamento aprovado e assinatura criada
+      return {
+        statusCode: 200,
+        message: 'Pagamento aprovado e assinatura criada com sucesso',
+        data: {
+          pagamento: paymentResult ? {
+            id: paymentResult.id,
+            status: paymentResult.status,
+            value: paymentResult.value,
+            dueDate: paymentResult.dueDate,
+            paymentDate: paymentResult.paymentDate,
+            customer: paymentResult.customer,
+          } : null,
+          assinatura: this.toResponseDto(savedSubscription),
+        },
+      };
     } catch (error: any) {
       throw new InternalServerErrorException(
         `Erro ao salvar assinatura no banco de dados: ${error.message || 'Erro desconhecido'}`,
@@ -401,130 +462,30 @@ export class AssinaturasService {
       if (valorFinal < 0) valorFinal = 0;
     }
 
-    // 4. Buscar assinatura existente para reutilizar asaasCustomerId se houver
-    const existingSubscription = await this.assinaturaRepository.findOne({
-      where: { userId: clienteMaster.id },
-      order: { createdAt: 'DESC' },
-    });
-
-    // 5. Criar ou atualizar cliente na ASAAS
-    let asaasCustomerId: string;
-    if (existingSubscription && existingSubscription.asaasCustomerId) {
-      // Usar o customer ID existente
-      asaasCustomerId = existingSubscription.asaasCustomerId;
-    } else {
-      // Criar novo cliente na ASAAS
-      asaasCustomerId = await this.asaasService.createCustomer({
-        name: userBase.nome,
-        email: userBase.email,
-        cpfCnpj: userBase.cpf.replace(/\D/g, ''), // Remove formatação
-        phone: userBase.telefone.replace(/\D/g, ''), // Remove formatação
-        postalCode: userBase.postalCode.replace(/\D/g, ''), // Remove formatação
-        address: userBase.address,
-        addressNumber: userBase.addressNumber || '',
-        complement: userBase.complement || '',
-        province: userBase.province || '',
-        city: userBase.city,
-        state: userBase.state,
-      });
-    }
-
-    // 6. Tokeniza cartão de crédito se necessário
+    // 4. Validar token do cartão já tokenizado no frontend (se necessário)
     let creditCardToken: string | null = null;
     let creditCardNumber: string | null = null;
     let creditCardBrand: string | null = null;
 
     if (createSimpleSubscriptionDto.billingType === 'CREDIT_CARD') {
-      if (
-        !createSimpleSubscriptionDto.creditCardHolderName ||
-        !createSimpleSubscriptionDto.creditCardNumber ||
-        !createSimpleSubscriptionDto.creditCardExpiryMonth ||
-        !createSimpleSubscriptionDto.creditCardExpiryYear ||
-        !createSimpleSubscriptionDto.creditCardCcv
-      ) {
-        throw new BadRequestException('Dados do cartão de crédito são obrigatórios');
+      if (!createSimpleSubscriptionDto.creditCardToken) {
+        throw new BadRequestException('Token do cartão de crédito é obrigatório. A tokenização deve ser feita no frontend.');
       }
 
-      try {
-        const tokenizedCard = await this.asaasService.tokenizeCreditCard({
-          customer: asaasCustomerId,
-          creditCard: {
-            holderName: createSimpleSubscriptionDto.creditCardHolderName,
-            number: createSimpleSubscriptionDto.creditCardNumber,
-            expiryMonth: createSimpleSubscriptionDto.creditCardExpiryMonth,
-            expiryYear: createSimpleSubscriptionDto.creditCardExpiryYear,
-            ccv: createSimpleSubscriptionDto.creditCardCcv,
-          },
-          creditCardHolderInfo: {
-            name: userBase.nome,
-            email: userBase.email,
-            cpfCnpj: userBase.cpf.replace(/\D/g, ''),
-            postalCode: userBase.postalCode.replace(/\D/g, ''),
-            addressNumber: userBase.addressNumber || '',
-            addressComplement: userBase.complement || null,
-            phone: userBase.telefone.replace(/\D/g, ''),
-            mobilePhone: userBase.telefone.replace(/\D/g, ''),
-          },
-        });
-
-        creditCardToken = tokenizedCard.creditCardToken;
-        creditCardNumber = tokenizedCard.creditCardNumber;
-        creditCardBrand = tokenizedCard.creditCardBrand;
-      } catch (error: any) {
-        throw new BadRequestException(
-          `Erro ao tokenizar cartão: ${error.message || 'Erro desconhecido'}`,
-        );
-      }
+      creditCardToken = createSimpleSubscriptionDto.creditCardToken;
+      creditCardNumber = createSimpleSubscriptionDto.creditCardNumber || null;
+      creditCardBrand = createSimpleSubscriptionDto.creditCardBrand || null;
     }
 
-    // Calcula a data de vencimento (dia atual) - usando fuso horário do Brasil
-    const nextDueDateString = this.getDataAtualBrasil();
+    // 5. Calcula a data de vencimento (1 mês à frente) - usando fuso horário do Brasil
+    const nextDueDateString = this.calcularProximoMes();
+    const nextDueDate = this.parseDataBrasil(nextDueDateString);
 
-    // 7. Prepara dados da assinatura com desconto se cupom válido
-    const subscriptionData: any = {
-      customer: asaasCustomerId,
-      billingType: createSimpleSubscriptionDto.billingType,
-      value: valorFinal,
-      nextDueDate: nextDueDateString,
-      cycle: 'MONTHLY',
-      description: `Assinatura ${plano.nome} NODON`,
-    };
-
-    // Adiciona desconto se cupom válido
-    if (coupon && coupon.active) {
-      subscriptionData.discount = {
-        value: Number(coupon.discountValue),
-        type: 'PERCENTAGE',
-      };
-    }
-
-    // Adiciona dados do cartão se for cartão de crédito
-    if (createSimpleSubscriptionDto.billingType === 'CREDIT_CARD') {
-      subscriptionData.creditCard = {
-        creditCardHolderName: createSimpleSubscriptionDto.creditCardHolderName,
-        creditCardHolderEmail: userBase.email,
-        creditCardHolderCpfCnpj: userBase.cpf.replace(/\D/g, ''),
-        creditCardHolderPhone: userBase.telefone.replace(/\D/g, ''),
-        creditCardHolderPostalCode: userBase.postalCode.replace(/\D/g, ''),
-        creditCardHolderAddress: userBase.address,
-        creditCardHolderAddressNumber: userBase.addressNumber || '',
-        creditCardHolderAddressComplement: userBase.complement || '',
-        creditCardHolderProvince: userBase.province || '',
-        creditCardHolderCity: userBase.city,
-        creditCardHolderState: userBase.state,
-      };
-    }
-
-    // 8. Cria assinatura na ASAAS
-    const asaasSubscription = await this.asaasService.createSubscription(subscriptionData);
-
-    // 9. Salva assinatura no banco de dados
+    // 6. Salva assinatura no banco de dados (sem criar assinatura na ASAAS)
     const assinaturaData: Partial<Assinatura> = {
       userId: clienteMaster.id,
       planoId: createSimpleSubscriptionDto.planoId,
       couponId: couponId || undefined,
-      asaasCustomerId,
-      asaasSubscriptionId: asaasSubscription.id,
       name: userBase.nome,
       email: userBase.email,
       cpf: userBase.cpf,
@@ -538,17 +499,20 @@ export class AssinaturasService {
       state: userBase.state,
       value: valorFinal,
       billingType: createSimpleSubscriptionDto.billingType,
-      creditCardToken: creditCardToken ?? undefined,
-      creditCardNumber: creditCardNumber ?? undefined,
-      creditCardBrand: creditCardBrand ?? undefined,
-      status: 'PENDING',
-      asaasResponse: JSON.stringify(asaasSubscription),
-      nextDueDate: this.parseNextDueDate(asaasSubscription.nextDueDate),
+      creditCardToken: creditCardToken || '',
+      creditCardNumber: creditCardNumber || '',
+      creditCardBrand: creditCardBrand || '',
+      status: 'ACTIVE',
+      nextDueDate: nextDueDate,
     };
     const assinatura = this.assinaturaRepository.create(assinaturaData);
 
     try {
       const savedSubscription = await this.assinaturaRepository.save(assinatura);
+      
+      // Adiciona na tabela de recorrência (status sempre é ACTIVE ao criar)
+      await this.gerenciarRecorrencia(savedSubscription);
+      
       return this.toResponseDto(savedSubscription);
     } catch (error: any) {
       throw new InternalServerErrorException(
@@ -603,7 +567,13 @@ export class AssinaturasService {
       // Se o status for CONFIRMED, atualiza a subscription para ACTIVE
       if (paymentStatus === 'CONFIRMED') {
         subscription.status = 'ACTIVE';
+        // Atualiza nextDueDate para 1 mês à frente se não estiver definido
+        if (!subscription.nextDueDate) {
+          subscription.nextDueDate = this.parseDataBrasil(this.calcularProximoMes());
+        }
         await this.assinaturaRepository.save(subscription);
+        // Gerencia a tabela de recorrência
+        await this.gerenciarRecorrencia(subscription);
         return { status: 'CONFIRMED' };
       }
 
@@ -614,6 +584,227 @@ export class AssinaturasService {
         `Erro ao verificar status do pagamento: ${error.message || 'Erro desconhecido'}`,
       );
     }
+  }
+
+  /**
+   * Atualiza a cobrança com os dados mais recentes da ASAAS
+   * Sempre busca status e dados completos do pagamento e atualiza se houver diferença
+   */
+  private async atualizarCobrancaComStatusAsaas(paymentId: string): Promise<Cobranca> {
+    // 1. Buscar status do pagamento na ASAAS
+    const paymentStatusResponse = await this.asaasService.getPaymentStatus(paymentId);
+    const novoStatus = paymentStatusResponse.status;
+
+    // 2. Buscar cobrança no banco de dados
+    const cobranca = await this.cobrancaRepository.findOne({
+      where: { asaasPaymentId: paymentId },
+    });
+
+    if (!cobranca) {
+      throw new NotFoundException('Cobrança não encontrada para este pagamento');
+    }
+
+    // 3. Buscar dados completos do pagamento na ASAAS
+    let paymentData: any = null;
+    try {
+      paymentData = await this.asaasService.getPayment(paymentId);
+    } catch (error) {
+      console.error('Erro ao buscar dados completos do pagamento:', error);
+      // Continua mesmo se não conseguir buscar dados completos
+    }
+
+    // 4. Verificar se o status mudou ou se precisa atualizar outros campos
+    const statusMudou = cobranca.status !== novoStatus;
+    let precisaAtualizar = statusMudou;
+
+    if (paymentData) {
+      // Atualizar paymentDate se disponível e diferente
+      if (paymentData.paymentDate) {
+        const novoPaymentDate = this.parseDataBrasil(paymentData.paymentDate);
+        if (!cobranca.paymentDate || cobranca.paymentDate.getTime() !== novoPaymentDate?.getTime()) {
+          cobranca.paymentDate = novoPaymentDate;
+          precisaAtualizar = true;
+        }
+      }
+
+      // Atualizar dueDate se disponível e diferente
+      if (paymentData.dueDate) {
+        const novoDueDate = this.parseDataBrasil(paymentData.dueDate);
+        if (!cobranca.dueDate || cobranca.dueDate.getTime() !== novoDueDate?.getTime()) {
+          cobranca.dueDate = novoDueDate;
+          precisaAtualizar = true;
+        }
+      }
+
+      // Sempre atualizar resposta completa da ASAAS para manter histórico
+      const novaResposta = JSON.stringify(paymentData);
+      if (cobranca.asaasResponse !== novaResposta) {
+        cobranca.asaasResponse = novaResposta;
+        precisaAtualizar = true;
+      }
+    }
+
+    // 5. Atualizar status se mudou
+    if (statusMudou) {
+      console.log(`🔄 Status da cobrança ${paymentId} mudou: ${cobranca.status} → ${novoStatus}`);
+      cobranca.status = novoStatus;
+    }
+
+    // 6. Salvar apenas se houver mudanças
+    if (precisaAtualizar) {
+      await this.cobrancaRepository.save(cobranca);
+      console.log(`✅ Cobrança ${paymentId} atualizada com sucesso`);
+    }
+
+    return cobranca;
+  }
+
+  async checkPaymentStatus(paymentId: string): Promise<any> {
+    try {
+      // 1. Atualizar cobrança com status mais recente da ASAAS
+      const cobranca = await this.atualizarCobrancaComStatusAsaas(paymentId);
+      const status = cobranca.status;
+
+      // 2. Se pagamento foi confirmado e ainda não tem assinatura vinculada
+      if ((status === 'CONFIRMED' || status === 'RECEIVED') && !cobranca.assinaturaId) {
+        // 2.1. Se não tiver userId, buscar dos dados guardados
+        if (!cobranca.userId && cobranca.dadosAssinatura) {
+          try {
+            const dadosAssinatura = JSON.parse(cobranca.dadosAssinatura);
+            if (dadosAssinatura.userId) {
+              cobranca.userId = dadosAssinatura.userId;
+              await this.cobrancaRepository.save(cobranca);
+              console.log(`✅ userId vinculado à cobrança ${paymentId}: ${dadosAssinatura.userId}`);
+            }
+          } catch (error) {
+            console.error('Erro ao buscar userId dos dados da assinatura:', error);
+          }
+        }
+
+        // 2.2. Criar assinatura (só funciona se tiver userId)
+        if (cobranca.userId) {
+          await this.criarAssinaturaAPartirDaCobranca(cobranca);
+          
+          // Buscar cobrança atualizada com assinatura vinculada
+          const cobrancaAtualizada = await this.cobrancaRepository.findOne({
+            where: { id: cobranca.id },
+          });
+
+          return {
+            statusCode: 200,
+            message: 'Pagamento confirmado e assinatura criada com sucesso',
+            data: {
+              pagamento: {
+                id: paymentId,
+                status: status,
+              },
+              assinaturaCriada: true,
+              assinaturaId: cobrancaAtualizada?.assinaturaId,
+            },
+          };
+        } else {
+          // Status confirmado mas sem userId - não pode criar assinatura ainda
+          console.warn(`⚠️ Pagamento ${paymentId} confirmado mas cobrança não possui userId vinculado`);
+          return {
+            statusCode: 200,
+            message: 'Pagamento confirmado, mas não foi possível criar assinatura (falta userId)',
+            data: {
+              pagamento: {
+                id: paymentId,
+                status: status,
+              },
+              assinaturaCriada: false,
+              motivo: 'Cobrança não possui userId vinculado',
+            },
+          };
+        }
+      }
+
+      // 3. Retornar status atual
+      return {
+        statusCode: 200,
+        message: 'Status do pagamento verificado',
+        data: {
+          pagamento: {
+            id: paymentId,
+            status: status,
+          },
+          assinaturaCriada: !!cobranca.assinaturaId,
+          assinaturaId: cobranca.assinaturaId,
+        },
+      };
+    } catch (error: any) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      throw new InternalServerErrorException(
+        `Erro ao verificar status do pagamento: ${error.message || 'Erro desconhecido'}`,
+      );
+    }
+  }
+
+  /**
+   * Cria assinatura a partir dos dados guardados na cobrança
+   */
+  private async criarAssinaturaAPartirDaCobranca(cobranca: Cobranca): Promise<Assinatura> {
+    if (!cobranca.dadosAssinatura || !cobranca.planoId) {
+      throw new BadRequestException('Dados insuficientes para criar assinatura');
+    }
+
+    // Só cria assinatura se tiver userId vinculado
+    if (!cobranca.userId) {
+      throw new BadRequestException('Cobrança não possui userId vinculado. Não é possível criar assinatura.');
+    }
+
+    const dadosAssinatura = JSON.parse(cobranca.dadosAssinatura);
+
+    // Calcula a data de vencimento da assinatura (1 mês à frente)
+    const nextDueDateString = this.calcularProximoMes();
+    const nextDueDate = this.parseDataBrasil(nextDueDateString);
+
+    // Criar assinatura
+    const assinaturaData: Partial<Assinatura> = {
+      userId: cobranca.userId,
+      asaasCustomerId: cobranca.asaasCustomerId, // ID do cliente na ASAAS da cobrança
+      planoId: cobranca.planoId,
+      couponId: cobranca.couponId || undefined,
+      name: dadosAssinatura.name,
+      email: dadosAssinatura.email,
+      cpf: dadosAssinatura.cpf,
+      phone: dadosAssinatura.phone,
+      postalCode: dadosAssinatura.postalCode,
+      address: dadosAssinatura.address,
+      addressNumber: dadosAssinatura.addressNumber,
+      complement: dadosAssinatura.complement,
+      province: dadosAssinatura.province,
+      city: dadosAssinatura.city,
+      state: dadosAssinatura.state,
+      value: cobranca.value,
+      billingType: dadosAssinatura.billingType,
+      creditCardToken: dadosAssinatura.creditCardToken || '',
+      creditCardNumber: dadosAssinatura.creditCardNumber || '',
+      creditCardBrand: dadosAssinatura.creditCardBrand || '',
+      status: 'ACTIVE',
+      nextDueDate: nextDueDate,
+    };
+
+    const assinatura = this.assinaturaRepository.create(assinaturaData);
+    const savedSubscription = await this.assinaturaRepository.save(assinatura);
+
+    // Adiciona na tabela de recorrência
+    await this.gerenciarRecorrencia(savedSubscription);
+
+    // Vincula assinatura à cobrança e atualiza userId se necessário
+    cobranca.assinaturaId = savedSubscription.id;
+    if (!cobranca.userId) {
+      cobranca.userId = savedSubscription.userId;
+    }
+    await this.cobrancaRepository.save(cobranca);
+    
+    console.log(`✅ Assinatura ${savedSubscription.id} criada e vinculada à cobrança ${cobranca.id}`);
+
+    console.log('✅ Assinatura criada a partir da cobrança:', savedSubscription.id);
+    return savedSubscription;
   }
 
   async findById(id: string): Promise<SubscriptionResponseDto> {
@@ -1159,6 +1350,185 @@ export class AssinaturasService {
   }
 
   /**
+   * Calcula a data de 1 mês à frente a partir da data atual no fuso horário do Brasil
+   * Retorna no formato YYYY-MM-DD
+   */
+  private calcularProximoMes(): string {
+    const agora = new Date();
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    
+    // Adiciona 1 mês
+    const proximoMes = new Date(agora);
+    proximoMes.setMonth(proximoMes.getMonth() + 1);
+    
+    const partes = formatter.formatToParts(proximoMes);
+    const ano = partes.find(p => p.type === 'year')?.value || '0000';
+    const mes = partes.find(p => p.type === 'month')?.value.padStart(2, '0') || '00';
+    const dia = partes.find(p => p.type === 'day')?.value.padStart(2, '0') || '00';
+    
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  /**
+   * Converte string de data (YYYY-MM-DD) para Date no fuso horário do Brasil
+   */
+  private parseDataBrasil(dataString: string): Date {
+    const [year, month, day] = dataString.split('-').map(Number);
+    // Cria Date em UTC e depois ajusta para o fuso horário do Brasil
+    // Usa meio-dia UTC para evitar problemas de timezone
+    const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+    return date;
+  }
+
+  /**
+   * Adiciona assinatura na tabela de recorrência quando status é ACTIVE
+   */
+  private async adicionarRecorrencia(assinatura: Assinatura): Promise<void> {
+    try {
+      // Verifica se já existe recorrência para esta assinatura
+      const recorrenciaExistente = await this.recorrenciaRepository.findOne({
+        where: { assinaturaId: assinatura.id },
+      });
+
+      if (recorrenciaExistente) {
+        // Atualiza a recorrência existente
+        recorrenciaExistente.nextDueDate = assinatura.nextDueDate || this.parseDataBrasil(this.calcularProximoMes());
+        recorrenciaExistente.valor = assinatura.value;
+        await this.recorrenciaRepository.save(recorrenciaExistente);
+      } else {
+        // Cria nova recorrência
+        const recorrencia = this.recorrenciaRepository.create({
+          assinaturaId: assinatura.id,
+          userId: assinatura.userId,
+          nextDueDate: assinatura.nextDueDate || this.parseDataBrasil(this.calcularProximoMes()),
+          valor: assinatura.value,
+        });
+        await this.recorrenciaRepository.save(recorrencia);
+      }
+    } catch (error: any) {
+      console.error('Erro ao adicionar recorrência:', error.message);
+      // Não lança erro para não bloquear o fluxo principal
+    }
+  }
+
+  /**
+   * Remove assinatura da tabela de recorrência quando status é CANCELED ou INACTIVE
+   */
+  private async removerRecorrencia(assinaturaId: string): Promise<void> {
+    try {
+      await this.recorrenciaRepository.delete({ assinaturaId });
+    } catch (error: any) {
+      console.error('Erro ao remover recorrência:', error.message);
+      // Não lança erro para não bloquear o fluxo principal
+    }
+  }
+
+  /**
+   * Registra uma cobrança na tabela de cobranças
+   * Todas as cobranças são registradas, mesmo as não confirmadas
+   * userId pode ser null caso a cobrança ainda não tenha cliente master vinculado
+   */
+  private async registrarCobranca(data: {
+    userId?: string | null;
+    asaasPaymentId: string;
+    asaasCustomerId: string;
+    value: number;
+    billingType: string;
+    status: string;
+    dueDate: Date | null;
+    paymentDate: Date | null;
+    asaasResponse: string;
+    assinaturaId?: string | null;
+    planoId?: string | null;
+    couponId?: string | null;
+    dadosAssinatura?: string | null;
+  }): Promise<Cobranca> {
+    try {
+      // Verifica se já existe cobrança com este paymentId
+      const cobrancaExistente = await this.cobrancaRepository.findOne({
+        where: { asaasPaymentId: data.asaasPaymentId },
+      });
+
+      if (cobrancaExistente) {
+        // Atualiza a cobrança existente
+        // Sempre atualiza status (importante para mudança PENDING → CONFIRMED)
+        cobrancaExistente.status = data.status;
+        
+        // Atualiza paymentDate se fornecido
+        if (data.paymentDate) {
+          cobrancaExistente.paymentDate = data.paymentDate;
+        }
+        
+        // Atualiza userId se fornecido e ainda não tiver (permite vincular depois)
+        if (data.userId && !cobrancaExistente.userId) {
+          cobrancaExistente.userId = data.userId;
+        }
+        
+        // Atualiza assinaturaId se fornecido
+        if (data.assinaturaId) {
+          cobrancaExistente.assinaturaId = data.assinaturaId;
+        }
+        
+        // Sempre atualiza resposta da ASAAS para manter histórico atualizado
+        cobrancaExistente.asaasResponse = data.asaasResponse;
+        
+        // Atualiza outros campos se fornecidos
+        if (data.dueDate !== undefined) {
+          cobrancaExistente.dueDate = data.dueDate;
+        }
+        if (data.planoId !== undefined) {
+          cobrancaExistente.planoId = data.planoId;
+        }
+        if (data.couponId !== undefined) {
+          cobrancaExistente.couponId = data.couponId;
+        }
+        if (data.dadosAssinatura !== undefined) {
+          cobrancaExistente.dadosAssinatura = data.dadosAssinatura;
+        }
+        
+        return await this.cobrancaRepository.save(cobrancaExistente);
+      } else {
+        // Cria nova cobrança
+        const cobranca = this.cobrancaRepository.create({
+          userId: data.userId || null,
+          asaasPaymentId: data.asaasPaymentId,
+          asaasCustomerId: data.asaasCustomerId,
+          value: data.value,
+          billingType: data.billingType,
+          status: data.status,
+          dueDate: data.dueDate,
+          paymentDate: data.paymentDate,
+          asaasResponse: data.asaasResponse,
+          assinaturaId: data.assinaturaId || null,
+          planoId: data.planoId || null,
+          couponId: data.couponId || null,
+          dadosAssinatura: data.dadosAssinatura || null,
+        });
+        return await this.cobrancaRepository.save(cobranca);
+      }
+    } catch (error: any) {
+      console.error('Erro ao registrar cobrança:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Gerencia a tabela de recorrência baseado no status da assinatura
+   */
+  private async gerenciarRecorrencia(assinatura: Assinatura): Promise<void> {
+    if (assinatura.status === 'ACTIVE') {
+      await this.adicionarRecorrencia(assinatura);
+    } else if (assinatura.status === 'CANCELED' || assinatura.status === 'INACTIVE') {
+      await this.removerRecorrencia(assinatura.id);
+    }
+  }
+
+  /**
    * Converte nextDueDate de string (formato "YYYY-MM-DD") para Date
    * Garante que a conversão seja feita corretamente sem problemas de timezone
    */
@@ -1197,6 +1567,919 @@ export class AssinaturasService {
     }
 
     return null;
+  }
+
+  async createPayment(createPaymentDto: CreatePaymentDto): Promise<any> {
+    // Validação: deve ter creditCard OU creditCardToken, mas não ambos
+    if (createPaymentDto.creditCard && createPaymentDto.creditCardToken) {
+      throw new BadRequestException('Não é possível enviar creditCard e creditCardToken ao mesmo tempo. Use apenas um deles.');
+    }
+
+    if (!createPaymentDto.creditCard && !createPaymentDto.creditCardToken) {
+      throw new BadRequestException('É necessário enviar creditCard ou creditCardToken.');
+    }
+
+    // Se usar creditCard, validar campos obrigatórios
+    if (createPaymentDto.creditCard) {
+      if (
+        !createPaymentDto.creditCard.holderName ||
+        !createPaymentDto.creditCard.number ||
+        !createPaymentDto.creditCard.expiryMonth ||
+        !createPaymentDto.creditCard.expiryYear ||
+        !createPaymentDto.creditCard.ccv
+      ) {
+        throw new BadRequestException('Todos os campos do cartão são obrigatórios quando usar creditCard.');
+      }
+
+      // Se usar creditCard, creditCardHolderInfo é obrigatório
+      const holderInfo = createPaymentDto.creditCardHolderInfo;
+      if (!holderInfo) {
+        throw new BadRequestException('creditCardHolderInfo é obrigatório quando usar creditCard.');
+      }
+
+      if (
+        !holderInfo.name ||
+        !holderInfo.email ||
+        !holderInfo.postalCode ||
+        !holderInfo.addressNumber ||
+        !holderInfo.cpfCnpj ||
+        !holderInfo.phone
+      ) {
+        throw new BadRequestException('Todos os campos de creditCardHolderInfo são obrigatórios.');
+      }
+    }
+
+    // Montar payload para ASAAS
+    const paymentData: any = {
+      billingType: createPaymentDto.billingType,
+      customer: createPaymentDto.customer,
+      value: createPaymentDto.value,
+      dueDate: createPaymentDto.dueDate,
+    };
+
+    if (createPaymentDto.creditCard) {
+      paymentData.creditCard = {
+        holderName: createPaymentDto.creditCard.holderName,
+        number: createPaymentDto.creditCard.number,
+        expiryMonth: createPaymentDto.creditCard.expiryMonth,
+        expiryYear: createPaymentDto.creditCard.expiryYear,
+        ccv: createPaymentDto.creditCard.ccv,
+      };
+
+      // creditCardHolderInfo já foi validado acima
+      const holderInfo = createPaymentDto.creditCardHolderInfo!;
+      paymentData.creditCardHolderInfo = {
+        name: holderInfo.name,
+        email: holderInfo.email,
+        postalCode: holderInfo.postalCode,
+        addressNumber: holderInfo.addressNumber,
+        cpfCnpj: holderInfo.cpfCnpj,
+        phone: holderInfo.phone,
+      };
+    } else if (createPaymentDto.creditCardToken) {
+      paymentData.creditCardToken = createPaymentDto.creditCardToken;
+    }
+
+    if (createPaymentDto.remoteIp) {
+      paymentData.remoteIp = createPaymentDto.remoteIp;
+    }
+
+    // Chamar serviço ASAAS
+    return await this.asaasService.createPayment(paymentData);
+  }
+
+  /**
+   * Inicializa o CRON job quando o módulo é carregado
+   * Roda a cada 1 minuto (para testes)
+   * Para produção, altere o intervalo para 24 horas (86400000 ms)
+   */
+  onModuleInit() {
+    console.log(`\n${'#'.repeat(80)}`);
+    console.log(`🚀 CRON de Recorrências inicializado`);
+    console.log(`   Intervalo: 1 minuto (para testes)`);
+    console.log(`   Para produção, altere para 24 horas`);
+    console.log(`${'#'.repeat(80)}\n`);
+
+    // Roda imediatamente na inicialização
+    this.handleCronProcessarRecorrencias();
+
+    // Configura para rodar a cada 1 minuto (60000 ms)
+    // Para produção: use 86400000 ms (24 horas)
+    const intervalo = 60000; // 1 minuto em milissegundos
+    
+    setInterval(() => {
+      this.handleCronProcessarRecorrencias();
+    }, intervalo);
+
+    console.log(`✅ CRON configurado para rodar a cada ${intervalo / 1000} segundos\n`);
+  }
+
+  /**
+   * Handler do CRON que processa recorrências
+   */
+  private async handleCronProcessarRecorrencias() {
+    console.log(`\n${'#'.repeat(80)}`);
+    console.log(`⏰ [${new Date().toISOString()}] CRON AUTOMÁTICO DISPARADO`);
+    console.log(`${'#'.repeat(80)}`);
+    
+    try {
+      await this.processarRecorrencias();
+    } catch (error: any) {
+      console.error(`❌ Erro no CRON automático:`, error.message);
+      console.error(`   Stack:`, error.stack);
+    }
+  }
+
+  /**
+   * Processa recorrências que vencem hoje
+   * CRON job que roda diariamente para cobrar assinaturas
+   */
+  async processarRecorrencias(): Promise<{
+    processadas: number;
+    sucesso: number;
+    falhas: number;
+    detalhes: Array<{
+      assinaturaId: string;
+      status: string;
+      mensagem: string;
+    }>;
+  }> {
+    const timestamp = new Date().toISOString();
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`🔄 [${timestamp}] CRON: Iniciando processamento de recorrências`);
+    console.log(`${'='.repeat(80)}`);
+
+    const hoje = this.getDataAtualBrasil(); // Formato: YYYY-MM-DD
+    const hojeDate = this.parseDataBrasil(hoje);
+
+    console.log(`📅 Data de hoje (Brasil): ${hoje}`);
+    console.log(`📅 Data de hoje (Date object): ${hojeDate}`);
+
+    // Buscar todas as recorrências que vencem hoje
+    // Compara apenas a data (ignora hora/minuto/segundo)
+    console.log(`🔍 Buscando recorrências com next_due_date = ${hoje}...`);
+    
+    const recorrencias = await this.recorrenciaRepository
+      .createQueryBuilder('recorrencia')
+      .leftJoinAndSelect('recorrencia.assinatura', 'assinatura')
+      .where('recorrencia.next_due_date = :hoje', { hoje: hojeDate })
+      .getMany();
+
+    console.log(`📊 Total de recorrências encontradas: ${recorrencias.length}`);
+    
+    if (recorrencias.length > 0) {
+      console.log(`📋 IDs das recorrências encontradas:`);
+      recorrencias.forEach((r, index) => {
+        console.log(`   ${index + 1}. Recorrência ID: ${r.id} | Assinatura ID: ${r.assinaturaId} | Next Due Date: ${r.nextDueDate} | Valor: R$ ${r.valor}`);
+      });
+    } else {
+      console.log(`ℹ️  Nenhuma recorrência encontrada para processar hoje.`);
+    }
+
+    const resultado = {
+      processadas: recorrencias.length,
+      sucesso: 0,
+      falhas: 0,
+      detalhes: [] as Array<{
+        assinaturaId: string;
+        status: string;
+        mensagem: string;
+      }>,
+    };
+
+    for (let i = 0; i < recorrencias.length; i++) {
+      const recorrencia = recorrencias[i];
+      const assinatura = recorrencia.assinatura;
+
+      console.log(`\n${'-'.repeat(80)}`);
+      console.log(`🔄 [${i + 1}/${recorrencias.length}] Processando recorrência ID: ${recorrencia.id}`);
+      console.log(`   Assinatura ID: ${recorrencia.assinaturaId}`);
+      console.log(`   Valor: R$ ${recorrencia.valor}`);
+      console.log(`   Next Due Date: ${recorrencia.nextDueDate}`);
+
+      if (!assinatura) {
+        console.error(`❌ [${i + 1}/${recorrencias.length}] Assinatura não encontrada para recorrência ${recorrencia.id}`);
+        resultado.falhas++;
+        resultado.detalhes.push({
+          assinaturaId: recorrencia.assinaturaId,
+          status: 'ERRO',
+          mensagem: 'Assinatura não encontrada',
+        });
+        continue;
+      }
+
+      console.log(`   Assinatura encontrada: ${assinatura.id}`);
+      console.log(`   Status da assinatura: ${assinatura.status}`);
+      console.log(`   Customer ID (ASAAS): ${assinatura.asaasCustomerId || 'NÃO ENCONTRADO'}`);
+      console.log(`   Token do cartão: ${assinatura.creditCardToken ? 'PRESENTE' : 'NÃO ENCONTRADO'}`);
+
+      // Verificar se assinatura está ativa
+      if (assinatura.status !== 'ACTIVE') {
+        console.log(`⚠️ [${i + 1}/${recorrencias.length}] Assinatura ${assinatura.id} não está ativa (status: ${assinatura.status}). Removendo da recorrência.`);
+        await this.removerRecorrencia(assinatura.id);
+        resultado.falhas++;
+        resultado.detalhes.push({
+          assinaturaId: assinatura.id,
+          status: 'PULADO',
+          mensagem: `Assinatura não está ativa (status: ${assinatura.status})`,
+        });
+        continue;
+      }
+
+      // Verificar se tem token do cartão
+      if (!assinatura.creditCardToken || !assinatura.asaasCustomerId) {
+        console.error(`❌ [${i + 1}/${recorrencias.length}] Assinatura ${assinatura.id} não tem token do cartão ou customer ID`);
+        console.error(`   creditCardToken: ${assinatura.creditCardToken ? 'OK' : 'FALTANDO'}`);
+        console.error(`   asaasCustomerId: ${assinatura.asaasCustomerId ? 'OK' : 'FALTANDO'}`);
+        resultado.falhas++;
+        resultado.detalhes.push({
+          assinaturaId: assinatura.id,
+          status: 'ERRO',
+          mensagem: 'Dados insuficientes para cobrança (falta token ou customer ID)',
+        });
+        continue;
+      }
+
+      try {
+        console.log(`💳 [${i + 1}/${recorrencias.length}] Criando cobrança na ASAAS...`);
+        console.log(`   Valor: R$ ${Number(recorrencia.valor)}`);
+        console.log(`   Due Date: ${hoje}`);
+        console.log(`   Customer: ${assinatura.asaasCustomerId}`);
+        console.log(`   Billing Type: ${assinatura.billingType || 'CREDIT_CARD'}`);
+
+        // Criar cobrança na ASAAS
+        const paymentResult = await this.asaasService.createPayment({
+          billingType: assinatura.billingType || 'CREDIT_CARD',
+          customer: assinatura.asaasCustomerId,
+          value: Number(recorrencia.valor),
+          dueDate: hoje,
+          creditCardToken: assinatura.creditCardToken,
+        });
+
+        console.log(`✅ [${i + 1}/${recorrencias.length}] Cobrança criada na ASAAS`);
+        console.log(`   Payment ID: ${paymentResult.id}`);
+        console.log(`   Status: ${paymentResult.status}`);
+
+        console.log(`💾 [${i + 1}/${recorrencias.length}] Registrando cobrança na tabela...`);
+        
+        // Registrar cobrança na tabela
+        await this.registrarCobranca({
+          userId: assinatura.userId,
+          asaasPaymentId: paymentResult.id,
+          asaasCustomerId: assinatura.asaasCustomerId,
+          value: Number(recorrencia.valor),
+          billingType: assinatura.billingType || 'CREDIT_CARD',
+          status: paymentResult.status,
+          dueDate: hojeDate,
+          paymentDate: paymentResult.paymentDate ? this.parseDataBrasil(paymentResult.paymentDate) : null,
+          asaasResponse: JSON.stringify(paymentResult),
+          assinaturaId: null, // Será vinculada depois se confirmado
+          planoId: assinatura.planoId || null,
+          couponId: assinatura.couponId || null,
+        });
+
+        console.log(`✅ [${i + 1}/${recorrencias.length}] Cobrança registrada na tabela`);
+
+        // Verificar status do pagamento
+        if (paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED') {
+          console.log(`✅ [${i + 1}/${recorrencias.length}] Pagamento CONFIRMED! Atualizando assinatura e recorrência...`);
+          
+          // ✅ Pagamento confirmado - atualizar assinatura e recorrência
+          const proximoMes = this.calcularProximoMes();
+          const proximoMesDate = this.parseDataBrasil(proximoMes);
+
+          console.log(`   Próxima data de cobrança: ${proximoMes}`);
+
+          // Atualizar assinatura
+          console.log(`   Atualizando assinatura ${assinatura.id}...`);
+          assinatura.nextDueDate = proximoMesDate;
+          await this.assinaturaRepository.save(assinatura);
+          console.log(`   ✅ Assinatura atualizada`);
+
+          // Atualizar recorrência
+          console.log(`   Atualizando recorrência ${recorrencia.id}...`);
+          recorrencia.nextDueDate = proximoMesDate;
+          recorrencia.valor = assinatura.value;
+          await this.recorrenciaRepository.save(recorrencia);
+          console.log(`   ✅ Recorrência atualizada`);
+
+          // Vincular cobrança à assinatura
+          console.log(`   Vinculando cobrança à assinatura...`);
+          const cobranca = await this.cobrancaRepository.findOne({
+            where: { asaasPaymentId: paymentResult.id },
+          });
+          if (cobranca) {
+            cobranca.assinaturaId = assinatura.id;
+            await this.cobrancaRepository.save(cobranca);
+            console.log(`   ✅ Cobrança vinculada`);
+          } else {
+            console.log(`   ⚠️ Cobrança não encontrada para vincular`);
+          }
+
+          console.log(`✅ [${i + 1}/${recorrencias.length}] SUCESSO: Cobrança confirmada para assinatura ${assinatura.id}. Próxima cobrança: ${proximoMes}`);
+          resultado.sucesso++;
+          resultado.detalhes.push({
+            assinaturaId: assinatura.id,
+            status: 'SUCESSO',
+            mensagem: `Pagamento confirmado. Próxima cobrança: ${proximoMes}`,
+          });
+        } else {
+          console.log(`❌ [${i + 1}/${recorrencias.length}] Pagamento NÃO confirmado. Status: ${paymentResult.status}`);
+          console.log(`   Colocando assinatura como PENDING e removendo da recorrência...`);
+          
+          // ❌ Pagamento falhou - colocar assinatura como PENDING e remover da recorrência
+          assinatura.status = 'PENDING';
+          await this.assinaturaRepository.save(assinatura);
+          console.log(`   ✅ Assinatura marcada como PENDING`);
+
+          // Remover da recorrência
+          await this.removerRecorrencia(assinatura.id);
+          console.log(`   ✅ Assinatura removida da recorrência`);
+
+          // Atualizar status da cobrança para FAILED
+          const cobranca = await this.cobrancaRepository.findOne({
+            where: { asaasPaymentId: paymentResult.id },
+          });
+          if (cobranca) {
+            cobranca.status = 'FAILED';
+            await this.cobrancaRepository.save(cobranca);
+            console.log(`   ✅ Cobrança marcada como FAILED`);
+          }
+
+          console.error(`❌ [${i + 1}/${recorrencias.length}] FALHA: Cobrança falhou para assinatura ${assinatura.id}. Status: ${paymentResult.status}`);
+          resultado.falhas++;
+          resultado.detalhes.push({
+            assinaturaId: assinatura.id,
+            status: 'FALHA',
+            mensagem: `Pagamento não confirmado. Status: ${paymentResult.status}`,
+          });
+        }
+      } catch (error: any) {
+        // ❌ Erro ao processar cobrança
+        console.error(`\n❌ [${i + 1}/${recorrencias.length}] ERRO ao processar cobrança para assinatura ${assinatura.id}:`);
+        console.error(`   Mensagem: ${error.message}`);
+        console.error(`   Stack: ${error.stack}`);
+        console.log(`   Colocando assinatura como PENDING e removendo da recorrência...`);
+
+        // Colocar assinatura como PENDING
+        assinatura.status = 'PENDING';
+        await this.assinaturaRepository.save(assinatura);
+        console.log(`   ✅ Assinatura marcada como PENDING`);
+
+        // Remover da recorrência
+        await this.removerRecorrencia(assinatura.id);
+        console.log(`   ✅ Assinatura removida da recorrência`);
+
+        resultado.falhas++;
+        resultado.detalhes.push({
+          assinaturaId: assinatura.id,
+          status: 'ERRO',
+          mensagem: `Erro ao processar: ${error.message}`,
+        });
+      }
+    }
+
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`📊 RESUMO DO PROCESSAMENTO:`);
+    console.log(`   Total processadas: ${resultado.processadas}`);
+    console.log(`   ✅ Sucessos: ${resultado.sucesso}`);
+    console.log(`   ❌ Falhas: ${resultado.falhas}`);
+    console.log(`${'='.repeat(80)}\n`);
+    
+    return resultado;
+  }
+
+  /**
+   * Cria um customer na Asaas e também grava no banco local (UserBase e ClienteMaster)
+   * 
+   * Validações:
+   * - Se email E telefone já existem E tem assinatura ACTIVE ou PENDING → erro
+   * - Se email E telefone já existem MAS não tem assinatura → erro (não pode cadastrar)
+   * - Se cliente já existe mas não tem assinatura → retorna asaasCustomerId da base
+   */
+  async createCustomer(createCustomerDto: CreateCustomerDto): Promise<{ 
+    asaasCustomerId: string;
+    userId: string;
+  }> {
+    try {
+      const telefoneNormalizado = createCustomerDto.phone.replace(/\D/g, '');
+      const existingUserBaseByEmail = await this.userBaseService.findByEmail(createCustomerDto.email);
+      const existingUserBaseByPhone = await this.userBaseService.findByTelefone(telefoneNormalizado);
+      const mesmoUsuario = existingUserBaseByEmail && existingUserBaseByPhone && 
+                          existingUserBaseByEmail.id === existingUserBaseByPhone.id;
+      
+      if (mesmoUsuario) {
+        const userBase = existingUserBaseByEmail;
+        const clientesMaster = await this.clientesMasterService.findByUserId(userBase.id);
+        const clienteMaster = clientesMaster.length > 0 ? clientesMaster[0] : null;
+        
+        if (clienteMaster) {
+          const hasSubscription = await this.hasActiveSubscription(clienteMaster.id);
+          if (hasSubscription) {
+            throw new BadRequestException(
+              'Já existe uma assinatura ativa ou pendente para este email e telefone. Não é possível cadastrar novamente.'
+            );
+          }
+        }
+        
+        // Não tem assinatura, pode atualizar
+        return await this.handleExistingCustomerWithoutSubscription(
+          userBase,
+          createCustomerDto,
+          telefoneNormalizado,
+        );
+      }
+      
+      // 4. Se email OU telefone já existem separadamente
+      if (existingUserBaseByEmail && !mesmoUsuario) {
+        const clientesMasterEmail = await this.clientesMasterService.findByUserId(existingUserBaseByEmail.id);
+        const hasSubscription = clientesMasterEmail.length > 0 
+          ? await this.hasActiveSubscription(clientesMasterEmail[0].id)
+          : false;
+        
+        if (hasSubscription) {
+          throw new ConflictException('Já existe um usuário cadastrado com este e-mail e possui assinatura ativa');
+        }
+        
+        return await this.handleExistingCustomerWithoutSubscription(
+          existingUserBaseByEmail,
+          createCustomerDto,
+          telefoneNormalizado,
+        );
+      }
+      
+      if (existingUserBaseByPhone && !mesmoUsuario) {
+        const clientesMasterPhone = await this.clientesMasterService.findByUserId(existingUserBaseByPhone.id);
+        const hasSubscription = clientesMasterPhone.length > 0 
+          ? await this.hasActiveSubscription(clientesMasterPhone[0].id)
+          : false;
+        
+        if (hasSubscription) {
+          throw new ConflictException('Já existe um usuário cadastrado com este telefone e possui assinatura ativa');
+        }
+        
+        return await this.handleExistingCustomerWithoutSubscription(
+          existingUserBaseByPhone,
+          createCustomerDto,
+          telefoneNormalizado,
+        );
+      }
+      
+      // 5. Se chegou aqui, não existe usuário com este email E telefone
+      // Verificar se já existe ClienteMaster com este email (caso raro, mas possível)
+      const existingClienteMaster = await this.clientesMasterService.findByEmail(createCustomerDto.email);
+      
+      let clienteMaster;
+      let userBase;
+      let asaasCustomerId: string;
+      
+      if (existingClienteMaster) {
+        // ClienteMaster já existe (caso raro)
+        clienteMaster = existingClienteMaster;
+        userBase = await this.userBaseService.findById(existingClienteMaster.userId);
+        
+        if (!userBase) {
+          throw new InternalServerErrorException('UserBase não encontrado para o ClienteMaster existente');
+        }
+        
+        // Verificar se já tem asaasCustomerId gravado
+        if (userBase.asaasCustomerId) {
+          // Retornar o asaasCustomerId existente da base
+          return {
+            asaasCustomerId: userBase.asaasCustomerId,
+            userId: userBase.id, // ID do UserBase, não do ClienteMaster
+          };
+        }
+        
+        // Não tem asaasCustomerId, precisa criar na Asaas
+        asaasCustomerId = await this.asaasService.createCustomer(
+          this.prepareAsaasCustomerData(createCustomerDto)
+        );
+        await this.userBaseService.update(userBase.id, { asaasCustomerId });
+        
+        return {
+          asaasCustomerId,
+          userId: userBase.id,
+        };
+      } else {
+        // Cliente não existe, criar novo UserBase
+        const hashedPassword = await bcrypt.hash(createCustomerDto.password, 10);
+        const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+        const tokenExpiresAt = new Date();
+        tokenExpiresAt.setMinutes(tokenExpiresAt.getMinutes() + 15);
+        
+        // Criar customer na Asaas primeiro
+        asaasCustomerId = await this.asaasService.createCustomer(
+          this.prepareAsaasCustomerData(createCustomerDto)
+        );
+
+        // Criar UserBase
+        userBase = await this.userBaseService.create({
+          nome: createCustomerDto.name,
+          email: createCustomerDto.email,
+          password: hashedPassword,
+          cpf: createCustomerDto.cpf,
+          telefone: telefoneNormalizado,
+          postalCode: createCustomerDto.postalCode,
+          address: createCustomerDto.address,
+          addressNumber: createCustomerDto.addressNumber,
+          complement: createCustomerDto.complement,
+          province: createCustomerDto.province,
+          city: createCustomerDto.city,
+          state: createCustomerDto.state,
+          isVerified: false,
+          verificationToken,
+          tokenExpiresAt,
+          asaasCustomerId,
+        });
+      }
+
+      return { 
+        asaasCustomerId,
+        userId: userBase.id,
+      };
+    } catch (error: any) {
+      if (error instanceof ConflictException || error instanceof BadRequestException || error instanceof InternalServerErrorException) {
+        throw error;
+      }
+      throw new BadRequestException(
+        `Erro ao criar customer: ${error.message || 'Erro desconhecido'}`,
+      );
+    }
+  }
+
+  /**
+   * Verifica se o cliente tem assinatura ativa ou pendente
+   */
+  private async hasActiveSubscription(clienteMasterId: string): Promise<boolean> {
+    const assinatura = await this.assinaturaRepository.findOne({
+      where: [
+        { userId: clienteMasterId, status: 'ACTIVE' },
+        { userId: clienteMasterId, status: 'PENDING' },
+      ],
+    });
+    return !!assinatura;
+  }
+
+  /**
+   * Prepara dados do customer para enviar à Asaas
+   */
+  private prepareAsaasCustomerData(createCustomerDto: CreateCustomerDto) {
+    return {
+      name: createCustomerDto.name,
+      email: createCustomerDto.email,
+      cpfCnpj: createCustomerDto.cpf.replace(/\D/g, ''),
+      phone: createCustomerDto.phone.replace(/\D/g, ''),
+      postalCode: createCustomerDto.postalCode.replace(/\D/g, ''),
+      address: createCustomerDto.address,
+      addressNumber: createCustomerDto.addressNumber,
+      complement: createCustomerDto.complement,
+      province: createCustomerDto.province,
+      city: createCustomerDto.city,
+      state: createCustomerDto.state,
+    };
+  }
+
+  /**
+   * Garante que o customer existe na Asaas (cria ou atualiza)
+   */
+  private async ensureAsaasCustomer(
+    userBase: any,
+    createCustomerDto: CreateCustomerDto,
+  ): Promise<string> {
+    const customerData = this.prepareAsaasCustomerData(createCustomerDto);
+    
+    if (userBase.asaasCustomerId) {
+      try {
+        await this.asaasService.updateCustomer(userBase.asaasCustomerId, customerData);
+        return userBase.asaasCustomerId;
+      } catch (error: any) {
+        console.error('Erro ao atualizar customer na Asaas:', error);
+        // Continua mesmo se der erro na atualização
+        return userBase.asaasCustomerId;
+      }
+    } else {
+      const asaasCustomerId = await this.asaasService.createCustomer(customerData);
+      await this.userBaseService.update(userBase.id, { asaasCustomerId });
+      return asaasCustomerId;
+    }
+  }
+
+  /**
+   * Atualiza dados do UserBase existente
+   */
+  private async updateExistingUserBase(
+    userBase: any,
+    createCustomerDto: CreateCustomerDto,
+    telefoneNormalizado: string,
+    asaasCustomerId: string,
+  ): Promise<void> {
+    const updateData: any = {
+      nome: createCustomerDto.name,
+      cpf: createCustomerDto.cpf,
+      telefone: telefoneNormalizado,
+      postalCode: createCustomerDto.postalCode,
+      address: createCustomerDto.address,
+      addressNumber: createCustomerDto.addressNumber,
+      complement: createCustomerDto.complement,
+      province: createCustomerDto.province,
+      city: createCustomerDto.city,
+      state: createCustomerDto.state,
+      asaasCustomerId,
+    };
+
+    if (createCustomerDto.password) {
+      updateData.password = await bcrypt.hash(createCustomerDto.password, 10);
+    }
+
+    await this.userBaseService.update(userBase.id, updateData);
+  }
+
+  /**
+   * Processa atualização de customer existente sem assinatura
+   */
+  private async handleExistingCustomerWithoutSubscription(
+    userBase: any,
+    createCustomerDto: CreateCustomerDto,
+    telefoneNormalizado: string,
+  ): Promise<{ asaasCustomerId: string; userId: string }> {
+    const asaasCustomerId = await this.ensureAsaasCustomer(userBase, createCustomerDto);
+    await this.updateExistingUserBase(userBase, createCustomerDto, telefoneNormalizado, asaasCustomerId);
+    
+    return {
+      asaasCustomerId,
+      userId: userBase.id,
+    };
+  }
+
+  /**
+   * Faz checkout completo: tokenização + pagamento + assinatura
+   * Recebe apenas o userId e busca os dados do cliente no banco
+   * 
+   * IMPORTANTE: Este método reutiliza a lógica do método create(), mas com algumas diferenças:
+   * - Busca os dados do cliente pelo userId
+   * - Faz tokenização do cartão antes de chamar create()
+   */
+  async checkoutComplete(checkoutDto: CheckoutCompleteDto): Promise<any> {
+    // 1. Buscar UserBase pelo userId
+    const userBase = await this.userBaseService.findById(checkoutDto.userId);
+    if (!userBase) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    // 2. Buscar ClienteMaster associado ao UserBase (se existir)
+    // IMPORTANTE: ClienteMaster só será criado DEPOIS do pagamento confirmado
+    let clientesMaster = await this.clientesMasterService.findByUserId(userBase.id);
+    let clienteMaster = clientesMaster && clientesMaster.length > 0 ? clientesMaster[0] : null;
+
+    // 3. Se ClienteMaster existe, verificar se já tem assinatura ACTIVE
+    if (clienteMaster) {
+      const existingActiveSubscription = await this.assinaturaRepository.findOne({
+        where: { 
+          userId: clienteMaster.id, // Usar ClienteMaster.id, não UserBase.id
+          status: 'ACTIVE',
+        },
+      });
+
+      if (existingActiveSubscription) {
+        throw new BadRequestException('Assinatura ativa. Fale com o Suporte.');
+      }
+    }
+
+    // 4. Obter ou criar asaasCustomerId
+    let asaasCustomerId: string;
+    if (userBase.asaasCustomerId) {
+      asaasCustomerId = userBase.asaasCustomerId;
+    } else {
+      throw new BadRequestException(
+        `Usuário não possui Id de pagamentos no gateway.`,
+      );
+    }
+
+    // 5. Buscar plano e calcular valor
+    const plano = await this.planosService.findById(checkoutDto.planoId);
+    if (!plano) {
+      throw new NotFoundException('Plano não encontrado');
+    }
+
+    // Calcular valor do plano (prioriza valor promocional se existir)
+    const valorBasePlano = plano.valorPromocional ?? plano.valorOriginal ?? null;
+    if (!valorBasePlano || valorBasePlano === null || Number(valorBasePlano) <= 0) {
+      throw new BadRequestException(
+        `O plano "${plano.nome}" não possui valor configurado. Configure valorOriginal ou valorPromocional no plano antes de criar assinaturas.`,
+      );
+    }
+
+    // Calcular valor final com desconto se cupom válido
+    let valorFinal = Number(valorBasePlano);
+    let coupon: Cupom | null = null;
+    let couponId: string | null = null;
+    
+    if (checkoutDto.couponName) {
+      coupon = await this.cuponsService.findByName(checkoutDto.couponName);
+      if (coupon && coupon.active) {
+        const desconto = (valorFinal * Number(coupon.discountValue)) / 100;
+        valorFinal = valorFinal - desconto;
+        if (valorFinal < 0) valorFinal = 0;
+        couponId = coupon.id;
+      }
+    }
+
+    if (!valorFinal || valorFinal <= 0) {
+      throw new BadRequestException(
+        'O valor da assinatura deve ser maior que zero. Verifique o valor do plano.',
+      );
+    }
+
+    // 6. Tokenizar cartão se necessário
+    let creditCardToken: string | null = null;
+    let creditCardNumber: string | null = null;
+    let creditCardBrand: string | null = null;
+
+    if (checkoutDto.billingType === 'CREDIT_CARD') {
+      // Se o frontend já passou o token tokenizado, usar ele diretamente
+      if (checkoutDto.creditCardToken) {
+        creditCardToken = checkoutDto.creditCardToken;
+        // Se não tiver número e bandeira, tentar obter do token ou deixar null
+        creditCardNumber = checkoutDto.creditCardNumber || null;
+        creditCardBrand = null; // Pode ser obtido depois se necessário
+      } else {
+        // Se não passou token, fazer tokenização no backend
+        if (
+          !checkoutDto.creditCardHolderName ||
+          !checkoutDto.creditCardNumber ||
+          !checkoutDto.creditCardExpiryMonth ||
+          !checkoutDto.creditCardExpiryYear ||
+          !checkoutDto.creditCardCcv
+        ) {
+          throw new BadRequestException('Dados do cartão de crédito são obrigatórios ou forneça creditCardToken');
+        }
+
+
+      }
+    }
+
+    // 7. Processar pagamento ANTES de criar ClienteMaster
+    let paymentResult: any = null;
+    
+    if (checkoutDto.billingType === 'CREDIT_CARD') {
+      if (!creditCardToken) {
+        throw new BadRequestException('Token do cartão é obrigatório');
+      }
+
+      try {
+        const dueDateString = this.getDataAtualBrasil();
+
+        paymentResult = await this.asaasService.createPayment({
+          billingType: 'CREDIT_CARD',
+          customer: asaasCustomerId,
+          value: valorFinal,
+          dueDate: dueDateString,
+          creditCardToken: creditCardToken,
+        });
+
+        const statusConfirmado = paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED';
+
+        // Registrar cobrança (sem userId ainda, pois ClienteMaster ainda não existe)
+        await this.registrarCobranca({
+          userId: null, // null porque ClienteMaster ainda não foi criado
+          asaasPaymentId: paymentResult.id,
+          asaasCustomerId: asaasCustomerId,
+          value: valorFinal,
+          billingType: 'CREDIT_CARD',
+          status: paymentResult.status,
+          dueDate: paymentResult.dueDate ? this.parseDataBrasil(paymentResult.dueDate) : null,
+          paymentDate: paymentResult.paymentDate ? this.parseDataBrasil(paymentResult.paymentDate) : null,
+          asaasResponse: JSON.stringify(paymentResult),
+          assinaturaId: null,
+          planoId: checkoutDto.planoId,
+          couponId: couponId || null,
+          dadosAssinatura: JSON.stringify({
+            name: userBase.nome,
+            email: userBase.email,
+            cpf: userBase.cpf || '',
+            phone: userBase.telefone || '',
+            postalCode: userBase.postalCode || '',
+            address: userBase.address || '',
+            addressNumber: userBase.addressNumber || '',
+            complement: userBase.complement || '',
+            province: userBase.province || '',
+            city: userBase.city || '',
+            state: userBase.state || '',
+            billingType: checkoutDto.billingType,
+            creditCardToken: creditCardToken,
+            creditCardNumber: creditCardNumber || '',
+            creditCardBrand: creditCardBrand || '',
+            userBaseId: userBase.id, // Guardar userBaseId para criar ClienteMaster depois
+          }),
+        });
+
+        if (!statusConfirmado) {
+          console.log('⚠️ Pagamento criado mas não aprovado ainda. Status:', paymentResult.status);
+          return {
+            statusCode: 202,
+            message: 'Pagamento criado. Aguardando confirmação.',
+            data: {
+              pagamento: {
+                id: paymentResult.id,
+                status: paymentResult.status,
+                value: paymentResult.value,
+                dueDate: paymentResult.dueDate,
+                customer: paymentResult.customer,
+              },
+              assinatura: null,
+            },
+            asaasCustomerId: asaasCustomerId,
+          };
+        }
+
+        console.log('✅ Pagamento aprovado:', paymentResult);
+      } catch (error: any) {
+        console.error('❌ Erro ao processar pagamento:', error);
+        throw new BadRequestException(
+          `Erro ao processar pagamento: ${error.response?.data?.errors?.[0]?.description || error.message || 'Erro desconhecido'}`,
+        );
+      }
+    }
+
+    // 8. APENAS DEPOIS DO PAGAMENTO CONFIRMADO: Criar ClienteMaster se não existir
+    if (!clienteMaster) {
+      clienteMaster = await this.clientesMasterService.create({
+        userId: userBase.id,
+      });
+      console.log('✅ ClienteMaster criado após pagamento confirmado:', clienteMaster.id);
+    }
+
+    // 9. Criar assinatura no banco de dados
+    const nextDueDateString = this.calcularProximoMes();
+    const nextDueDate = this.parseDataBrasil(nextDueDateString);
+
+    const assinaturaData: Partial<Assinatura> = {
+      userId: clienteMaster.id,
+      asaasCustomerId: asaasCustomerId,
+      planoId: checkoutDto.planoId,
+      couponId: couponId || undefined,
+      name: userBase.nome,
+      email: userBase.email,
+      cpf: userBase.cpf || '',
+      phone: userBase.telefone || '',
+      postalCode: userBase.postalCode || '',
+      address: userBase.address || '',
+      addressNumber: userBase.addressNumber || '',
+      complement: userBase.complement || '',
+      province: userBase.province || '',
+      city: userBase.city || '',
+      state: userBase.state || '',
+      value: valorFinal,
+      billingType: checkoutDto.billingType,
+      creditCardToken: creditCardToken || '',
+      creditCardNumber: creditCardNumber || '',
+      creditCardBrand: creditCardBrand || '',
+      status: 'ACTIVE',
+      nextDueDate: nextDueDate,
+    };
+    const assinatura = this.assinaturaRepository.create(assinaturaData);
+
+    try {
+      const savedSubscription = await this.assinaturaRepository.save(assinatura);
+      await this.gerenciarRecorrencia(savedSubscription);
+
+      // 10. Atualizar cobrança com userId e assinaturaId
+      if (paymentResult && (paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED')) {
+        const cobranca = await this.cobrancaRepository.findOne({
+          where: { asaasPaymentId: paymentResult.id },
+        });
+        if (cobranca) {
+          cobranca.userId = clienteMaster.id;
+          cobranca.assinaturaId = savedSubscription.id;
+          await this.cobrancaRepository.save(cobranca);
+          console.log(`✅ Cobrança ${cobranca.id} atualizada com userId e assinaturaId após pagamento confirmado`);
+        }
+      }
+
+      console.log('✅ Assinatura criada com sucesso:', savedSubscription.id);
+
+      return {
+        statusCode: 200,
+        message: 'Pagamento aprovado e assinatura criada com sucesso',
+        data: {
+          pagamento: paymentResult ? {
+            id: paymentResult.id,
+            status: paymentResult.status,
+            value: paymentResult.value,
+            dueDate: paymentResult.dueDate,
+            paymentDate: paymentResult.paymentDate,
+            customer: paymentResult.customer,
+          } : null,
+          assinatura: this.toResponseDto(savedSubscription),
+        },
+        asaasCustomerId: asaasCustomerId,
+      };
+    } catch (error: any) {
+      throw new InternalServerErrorException(
+        `Erro ao salvar assinatura no banco de dados: ${error.message || 'Erro desconhecido'}`,
+      );
+    }
   }
 
   private toResponseDto(subscription: Assinatura): SubscriptionResponseDto {

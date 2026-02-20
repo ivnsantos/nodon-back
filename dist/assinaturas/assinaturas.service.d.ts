@@ -1,8 +1,14 @@
+import { OnModuleInit } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Assinatura } from './entities/assinatura.entity';
+import { Recorrencia } from './entities/recorrencia.entity';
+import { Cobranca } from './entities/cobranca.entity';
 import { Cupom } from '../cupons/entities/cupom.entity';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { CreateSimpleSubscriptionDto } from './dto/create-simple-subscription.dto';
+import { CreatePaymentDto } from './dto/create-payment.dto';
+import { CreateCustomerDto } from './dto/create-customer.dto';
+import { CheckoutCompleteDto } from './dto/checkout-complete.dto';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import { AsaasService } from './services/asaas.service';
 import { PlanosService } from '../planos/planos.service';
@@ -15,8 +21,10 @@ import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
 import { ChatService } from '../chat/chat.service';
-export declare class AssinaturasService {
+export declare class AssinaturasService implements OnModuleInit {
     private readonly assinaturaRepository;
+    private readonly recorrenciaRepository;
+    private readonly cobrancaRepository;
     private readonly cupomRepository;
     private readonly historicoRepository;
     private readonly asaasService;
@@ -28,8 +36,8 @@ export declare class AssinaturasService {
     private readonly userComumService;
     private readonly emailService;
     private readonly chatService;
-    constructor(assinaturaRepository: Repository<Assinatura>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, emailService: EmailService, chatService: ChatService);
-    create(createSubscriptionDto: CreateSubscriptionDto): Promise<SubscriptionResponseDto>;
+    constructor(assinaturaRepository: Repository<Assinatura>, recorrenciaRepository: Repository<Recorrencia>, cobrancaRepository: Repository<Cobranca>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, emailService: EmailService, chatService: ChatService);
+    create(createSubscriptionDto: CreateSubscriptionDto): Promise<any>;
     createSimple(createSimpleSubscriptionDto: CreateSimpleSubscriptionDto, user: {
         id: string;
         email: string;
@@ -40,6 +48,9 @@ export declare class AssinaturasService {
     checkFirstPaymentStatus(userId: string): Promise<{
         status: string;
     }>;
+    private atualizarCobrancaComStatusAsaas;
+    checkPaymentStatus(paymentId: string): Promise<any>;
+    private criarAssinaturaAPartirDaCobranca;
     findById(id: string): Promise<SubscriptionResponseDto>;
     getDashboardInfo(clienteMasterId: string, userTipo: string): Promise<{
         clienteMasterId: string;
@@ -143,6 +154,36 @@ export declare class AssinaturasService {
             dataFim: string | null;
         };
     }>;
+    private getDataAtualBrasil;
+    private calcularProximoMes;
+    private parseDataBrasil;
+    private adicionarRecorrencia;
+    private removerRecorrencia;
+    private registrarCobranca;
+    private gerenciarRecorrencia;
     private parseNextDueDate;
+    createPayment(createPaymentDto: CreatePaymentDto): Promise<any>;
+    onModuleInit(): void;
+    private handleCronProcessarRecorrencias;
+    processarRecorrencias(): Promise<{
+        processadas: number;
+        sucesso: number;
+        falhas: number;
+        detalhes: Array<{
+            assinaturaId: string;
+            status: string;
+            mensagem: string;
+        }>;
+    }>;
+    createCustomer(createCustomerDto: CreateCustomerDto): Promise<{
+        asaasCustomerId: string;
+        userId: string;
+    }>;
+    private hasActiveSubscription;
+    private prepareAsaasCustomerData;
+    private ensureAsaasCustomer;
+    private updateExistingUserBase;
+    private handleExistingCustomerWithoutSubscription;
+    checkoutComplete(checkoutDto: CheckoutCompleteDto): Promise<any>;
     private toResponseDto;
 }

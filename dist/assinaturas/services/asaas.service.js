@@ -53,11 +53,15 @@ let AsaasService = class AsaasService {
             headers: {
                 'Content-Type': 'application/json',
                 access_token: this.apiKey,
+                'User-Agent': 'NodonDentista-assinatura',
             },
         });
     }
     async createCustomer(data) {
         try {
+            console.log('✅ Criando cliente no Asaas:', data);
+            console.log('✅ ASAAS_API_URL:', this.apiUrl);
+            console.log('✅ ASAAS_API_KEY:', this.apiKey);
             const response = await this.axiosInstance.post('/customers', {
                 name: data.name,
                 email: data.email,
@@ -74,8 +78,32 @@ let AsaasService = class AsaasService {
             return response.data.id;
         }
         catch (error) {
+            console.log('✅ Erro ao criar cliente no Asaas:', error);
             console.error('Erro ao criar cliente no Asaas:', error.response?.data || error.message);
             throw new common_1.BadRequestException(`Erro ao criar cliente no Asaas: ${error.response?.data?.errors?.[0]?.description || error.message}`);
+        }
+    }
+    async updateCustomer(customerId, data) {
+        try {
+            console.log('✅ Atualizando cliente no Asaas:', { customerId, data });
+            await this.axiosInstance.put(`/customers/${customerId}`, {
+                name: data.name,
+                email: data.email,
+                cpfCnpj: data.cpfCnpj,
+                phone: data.phone,
+                postalCode: data.postalCode,
+                address: data.address,
+                addressNumber: data.addressNumber,
+                complement: data.complement || '',
+                province: data.province,
+                city: data.city,
+                state: data.state,
+            });
+            console.log('✅ Cliente atualizado com sucesso no Asaas');
+        }
+        catch (error) {
+            console.error('Erro ao atualizar cliente no Asaas:', error.response?.data || error.message);
+            throw new common_1.BadRequestException(`Erro ao atualizar cliente no Asaas: ${error.response?.data?.errors?.[0]?.description || error.message}`);
         }
     }
     async tokenizeCreditCard(data) {
@@ -113,6 +141,7 @@ let AsaasService = class AsaasService {
     }
     async createSubscription(data) {
         try {
+            console.log('✅ NextDueDate:', data.nextDueDate);
             const subscriptionPayload = {
                 customer: data.customer,
                 billingType: data.billingType,
@@ -146,6 +175,75 @@ let AsaasService = class AsaasService {
         catch (error) {
             console.error('Erro ao buscar pagamentos da assinatura:', error.response?.data || error.message);
             throw new common_1.BadRequestException(`Erro ao buscar pagamentos: ${error.response?.data?.errors?.[0]?.description || error.message}`);
+        }
+    }
+    async createPayment(data) {
+        try {
+            if (data.creditCard && data.creditCardToken) {
+                throw new common_1.BadRequestException('Não é possível enviar creditCard e creditCardToken ao mesmo tempo. Use apenas um deles.');
+            }
+            if (!data.creditCard && !data.creditCardToken) {
+                throw new common_1.BadRequestException('É necessário enviar creditCard ou creditCardToken.');
+            }
+            const paymentPayload = {
+                billingType: data.billingType,
+                customer: data.customer,
+                value: data.value,
+                dueDate: data.dueDate,
+            };
+            if (data.creditCard) {
+                paymentPayload.creditCard = {
+                    holderName: data.creditCard.holderName,
+                    number: data.creditCard.number.replace(/\D/g, ''),
+                    expiryMonth: data.creditCard.expiryMonth,
+                    expiryYear: data.creditCard.expiryYear,
+                    ccv: data.creditCard.ccv,
+                };
+                if (data.creditCardHolderInfo) {
+                    paymentPayload.creditCardHolderInfo = {
+                        name: data.creditCardHolderInfo.name,
+                        email: data.creditCardHolderInfo.email,
+                        postalCode: data.creditCardHolderInfo.postalCode.replace(/\D/g, ''),
+                        addressNumber: data.creditCardHolderInfo.addressNumber,
+                        cpfCnpj: data.creditCardHolderInfo.cpfCnpj.replace(/\D/g, ''),
+                        phone: data.creditCardHolderInfo.phone.replace(/\D/g, ''),
+                    };
+                }
+            }
+            else if (data.creditCardToken) {
+                paymentPayload.creditCardToken = data.creditCardToken;
+            }
+            if (data.remoteIp) {
+                paymentPayload.remoteIp = data.remoteIp;
+            }
+            console.log('✅ Criando pagamento no Asaas:', paymentPayload);
+            console.log('✅ ASAAS_API_URL:', this.apiUrl);
+            const response = await this.axiosInstance.post('/payments', paymentPayload);
+            return response.data;
+        }
+        catch (error) {
+            console.error('Erro ao criar pagamento no Asaas:', error.response?.data || error.message);
+            throw new common_1.BadRequestException(`Erro ao criar pagamento no Asaas: ${error.response?.data?.errors?.[0]?.description || error.message}`);
+        }
+    }
+    async getPaymentStatus(paymentId) {
+        try {
+            const response = await this.axiosInstance.get(`/payments/${paymentId}/status`);
+            return response.data;
+        }
+        catch (error) {
+            console.error('Erro ao buscar status do pagamento:', error.response?.data || error.message);
+            throw new common_1.BadRequestException(`Erro ao buscar status do pagamento: ${error.response?.data?.errors?.[0]?.description || error.message}`);
+        }
+    }
+    async getPayment(paymentId) {
+        try {
+            const response = await this.axiosInstance.get(`/payments/${paymentId}`);
+            return response.data;
+        }
+        catch (error) {
+            console.error('Erro ao buscar pagamento:', error.response?.data || error.message);
+            throw new common_1.BadRequestException(`Erro ao buscar pagamento: ${error.response?.data?.errors?.[0]?.description || error.message}`);
         }
     }
     detectCardBrand(cardNumber) {

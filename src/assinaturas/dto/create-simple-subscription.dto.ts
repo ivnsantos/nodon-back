@@ -20,30 +20,22 @@ export class CreateSimpleSubscriptionDto {
   @IsOptional()
   couponName?: string;
 
-  // Dados do cartão (obrigatório se billingType === CREDIT_CARD)
-  @ApiProperty({ description: 'Nome do titular do cartão', required: false })
+  // Token do cartão já tokenizado no frontend (obrigatório se billingType === CREDIT_CARD)
+  @ApiProperty({ description: 'Token do cartão já tokenizado no frontend', required: false })
   @IsString()
   @IsOptional()
-  creditCardHolderName?: string;
+  creditCardToken?: string;
 
-  @ApiProperty({ description: 'Número do cartão', required: false })
+  // Últimos 4 dígitos do cartão (retornado pela tokenização no frontend)
+  @ApiProperty({ description: 'Últimos 4 dígitos do cartão', required: false })
   @IsString()
   @IsOptional()
   creditCardNumber?: string;
 
-  @ApiProperty({ description: 'Mês de expiração (MM)', required: false })
+  // Bandeira do cartão (retornado pela tokenização no frontend)
+  @ApiProperty({ description: 'Bandeira do cartão (VISA, MASTERCARD, etc)', required: false })
   @IsString()
   @IsOptional()
-  creditCardExpiryMonth?: string;
-
-  @ApiProperty({ description: 'Ano de expiração (YYYY)', required: false })
-  @IsString()
-  @IsOptional()
-  creditCardExpiryYear?: string;
-
-  @ApiProperty({ description: 'CVV do cartão', required: false })
-  @IsString()
-  @IsOptional()
-  creditCardCcv?: string;
+  creditCardBrand?: string;
 }
 

@@ -3,6 +3,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AssinaturasService } from './assinaturas.service';
 import { AssinaturasController } from './assinaturas.controller';
 import { Assinatura } from './entities/assinatura.entity';
+import { Recorrencia } from './entities/recorrencia.entity';
+import { Cobranca } from './entities/cobranca.entity';
 import { Cupom } from '../cupons/entities/cupom.entity';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { PlanosModule } from '../planos/planos.module';
@@ -16,7 +18,7 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Assinatura, Cupom, HistoricoMensal]),
+    TypeOrmModule.forFeature([Assinatura, Recorrencia, Cobranca, Cupom, HistoricoMensal]),
     PlanosModule,
     CuponsModule,
     forwardRef(() => UsersModule),

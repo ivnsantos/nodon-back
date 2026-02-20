@@ -54,25 +54,19 @@ export class CreateSubscriptionDto {
   @IsOptional()
   couponName?: string;
 
-  // Dados do cartão (se billingType === CREDIT_CARD)
+  // Token do cartão já tokenizado no frontend (se billingType === CREDIT_CARD)
   @IsString()
   @IsOptional()
-  creditCardHolderName?: string;
+  creditCardToken?: string;
 
+  // Últimos 4 dígitos do cartão (retornado pela tokenização no frontend)
   @IsString()
   @IsOptional()
   creditCardNumber?: string;
 
+  // Bandeira do cartão (retornado pela tokenização no frontend)
   @IsString()
   @IsOptional()
-  creditCardExpiryMonth?: string;
-
-  @IsString()
-  @IsOptional()
-  creditCardExpiryYear?: string;
-
-  @IsString()
-  @IsOptional()
-  creditCardCcv?: string;
+  creditCardBrand?: string;
 }
 
