@@ -2248,8 +2248,19 @@ export class AssinaturasService implements OnModuleInit {
 
     // 4. Obter ou criar asaasCustomerId
     let asaasCustomerId: string;
+    
+    // IDs dos planos de teste que devem gerar dados fake
+    const PLANOS_TESTE = [
+      '677c76e6-0ab0-4626-87bd-23f13ad2cd76', // Plano Teste Analises
+      'ca772fbf-d9c7-4ef7-9f6c-84e535c393f0', // Plano Teste
+    ];
+    const isPlanoTeste = PLANOS_TESTE.includes(checkoutDto.planoId);
+    
     if (userBase.asaasCustomerId) {
       asaasCustomerId = userBase.asaasCustomerId;
+    } else if (isPlanoTeste) {
+      // Para planos de teste, permitir sem asaasCustomerId
+      asaasCustomerId = `cus_fake_test_${userBase.id}`;
     } else {
       throw new BadRequestException(
         `Usuário não possui Id de pagamentos no gateway.`,
@@ -2323,20 +2334,72 @@ export class AssinaturasService implements OnModuleInit {
     let paymentResult: any = null;
     
     if (checkoutDto.billingType === 'CREDIT_CARD') {
-      if (!creditCardToken) {
+      if (!creditCardToken && !isPlanoTeste) {
         throw new BadRequestException('Token do cartão é obrigatório');
       }
 
       try {
-        const dueDateString = this.getDataAtualBrasil();
+        // Se for plano de teste, criar dados fake sem chamar API do Asaas
+        if (isPlanoTeste) {
+          console.log('🧪 Modo TESTE: Criando pagamento e assinatura fake para plano de teste');
+          const dueDateString = this.getDataAtualBrasil();
+          const paymentDateString = this.getDataAtualBrasil();
+          
+          // Criar paymentResult fake
+          paymentResult = {
+            id: `pay_fake_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            customer: asaasCustomerId || 'cus_fake_test',
+            value: valorFinal,
+            netValue: valorFinal,
+            originalValue: valorFinal,
+            interestValue: 0,
+            description: `Pagamento TESTE - ${plano.nome}`,
+            billingType: 'CREDIT_CARD',
+            status: 'CONFIRMED',
+            dueDate: dueDateString,
+            paymentDate: paymentDateString,
+            originalDueDate: dueDateString,
+            invoiceUrl: null,
+            invoiceNumber: null,
+            externalReference: null,
+            deleted: false,
+            anticipated: false,
+            anticipable: false,
+            refunds: null,
+            dateCreated: paymentDateString,
+            clientPaymentDate: paymentDateString,
+            installmentNumber: null,
+            transactionReceiptUrl: null,
+            nossoNumero: null,
+            bankSlipUrl: null,
+            lastInvoiceViewedDate: null,
+            lastBankSlipViewedDate: null,
+            discount: null,
+            fine: null,
+            interest: null,
+            postalService: false,
+            creditCard: {
+              creditCardNumber: creditCardNumber || '****',
+              creditCardBrand: creditCardBrand || 'VISA',
+              creditCardToken: creditCardToken || 'fake_token',
+            },
+          };
+        } else {
+          // Processamento normal - chamar API do Asaas
+          if (!creditCardToken) {
+            throw new BadRequestException('Token do cartão é obrigatório');
+          }
+          
+          const dueDateString = this.getDataAtualBrasil();
 
-        paymentResult = await this.asaasService.createPayment({
-          billingType: 'CREDIT_CARD',
-          customer: asaasCustomerId,
-          value: valorFinal,
-          dueDate: dueDateString,
-          creditCardToken: creditCardToken,
-        });
+          paymentResult = await this.asaasService.createPayment({
+            billingType: 'CREDIT_CARD',
+            customer: asaasCustomerId,
+            value: valorFinal,
+            dueDate: dueDateString,
+            creditCardToken: creditCardToken, // Agora garantimos que não é null
+          });
+        }
 
         const statusConfirmado = paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED';
 
