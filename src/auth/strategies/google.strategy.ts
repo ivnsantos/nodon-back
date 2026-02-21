@@ -10,8 +10,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     const clientSecret = configService.get<string>('GOOGLE_CLIENT_SECRET');
     const isProd = configService.get<string>('NODE_ENV') === 'production';
     const callbackURL = isProd 
-      ? configService.get<string>('GOOGLE_CALLBACK_URL_PROD', 'https://nodon.com.br/api/auth/google/callback')
-      : configService.get<string>('GOOGLE_CALLBACK_URL', 'http://localhost:5000/api/auth/google/callback');
+      ? configService.get<string>('GOOGLE_REDIRECT_URL_PROD')
+      : configService.get<string>('GOOGLE_REDIRECT_URL');
 
     console.log('Google OAuth Config:');
     console.log('  - Environment:', isProd ? 'PRODUCTION' : 'DEVELOPMENT');

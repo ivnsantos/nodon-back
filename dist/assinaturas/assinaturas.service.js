@@ -47,6 +47,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AssinaturasService = void 0;
 const common_1 = require("@nestjs/common");
+const schedule_1 = require("@nestjs/schedule");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const bcrypt = __importStar(require("bcryptjs"));
@@ -1242,23 +1243,11 @@ let AssinaturasService = class AssinaturasService {
         }
         return await this.asaasService.createPayment(paymentData);
     }
-    onModuleInit() {
-        console.log(`\n${'#'.repeat(80)}`);
-        console.log(`🚀 CRON de Recorrências inicializado`);
-        console.log(`   Intervalo: 1 minuto (para testes)`);
-        console.log(`   Para produção, altere para 24 horas`);
-        console.log(`${'#'.repeat(80)}\n`);
-        this.handleCronProcessarRecorrencias();
-        const intervalo = 60000;
-        setInterval(() => {
-            this.handleCronProcessarRecorrencias();
-        }, intervalo);
-        console.log(`✅ CRON configurado para rodar a cada ${intervalo / 1000} segundos\n`);
-    }
     async handleCronProcessarRecorrencias() {
+        const dataExecucao = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
         console.log(`\n${'#'.repeat(80)}`);
-        console.log(`⏰ [${new Date().toISOString()}] CRON AUTOMÁTICO DISPARADO`);
-        console.log(`${'#'.repeat(80)}`);
+        console.log(`⏰ [${dataExecucao}] Executando CRON agendado às 9h da manhã`);
+        console.log(`${'#'.repeat(80)}\n`);
         try {
             await this.processarRecorrencias();
         }
@@ -1922,6 +1911,15 @@ let AssinaturasService = class AssinaturasService {
     }
 };
 exports.AssinaturasService = AssinaturasService;
+__decorate([
+    (0, schedule_1.Cron)('0 9 * * *', {
+        name: 'processar-recorrencias',
+        timeZone: 'America/Sao_Paulo',
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], AssinaturasService.prototype, "handleCronProcessarRecorrencias", null);
 exports.AssinaturasService = AssinaturasService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(assinatura_entity_1.Assinatura)),

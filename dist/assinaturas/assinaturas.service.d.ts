@@ -1,4 +1,3 @@
-import { OnModuleInit } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Assinatura } from './entities/assinatura.entity';
 import { Recorrencia } from './entities/recorrencia.entity';
@@ -21,7 +20,7 @@ import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
 import { ChatService } from '../chat/chat.service';
-export declare class AssinaturasService implements OnModuleInit {
+export declare class AssinaturasService {
     private readonly assinaturaRepository;
     private readonly recorrenciaRepository;
     private readonly cobrancaRepository;
@@ -163,8 +162,7 @@ export declare class AssinaturasService implements OnModuleInit {
     private gerenciarRecorrencia;
     private parseNextDueDate;
     createPayment(createPaymentDto: CreatePaymentDto): Promise<any>;
-    onModuleInit(): void;
-    private handleCronProcessarRecorrencias;
+    handleCronProcessarRecorrencias(): Promise<void>;
     processarRecorrencias(): Promise<{
         processadas: number;
         sucesso: number;

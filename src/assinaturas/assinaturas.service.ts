@@ -328,8 +328,8 @@ export class AssinaturasService {
       }
     }
 
-    // 7. Calcula a data de vencimento da assinatura (1 mês à frente) - usando fuso horário do Brasil
-    const nextDueDateString = this.calcularProximoMes();
+    // 7. Calcula a data de vencimento da assinatura (7 dias grátis na primeira vez) - usando fuso horário do Brasil
+    const nextDueDateString = this.calcularProximos7Dias();
     const nextDueDate = this.parseDataBrasil(nextDueDateString);
 
     // 8. Criar assinatura no banco de dados
@@ -477,8 +477,8 @@ export class AssinaturasService {
       creditCardBrand = createSimpleSubscriptionDto.creditCardBrand || null;
     }
 
-    // 5. Calcula a data de vencimento (1 mês à frente) - usando fuso horário do Brasil
-    const nextDueDateString = this.calcularProximoMes();
+    // 5. Calcula a data de vencimento (7 dias grátis na primeira vez) - usando fuso horário do Brasil
+    const nextDueDateString = this.calcularProximos7Dias();
     const nextDueDate = this.parseDataBrasil(nextDueDateString);
 
     // 6. Salva assinatura no banco de dados (sem criar assinatura na ASAAS)
@@ -758,8 +758,8 @@ export class AssinaturasService {
 
     const dadosAssinatura = JSON.parse(cobranca.dadosAssinatura);
 
-    // Calcula a data de vencimento da assinatura (1 mês à frente)
-    const nextDueDateString = this.calcularProximoMes();
+    // Calcula a data de vencimento da assinatura (7 dias grátis na primeira vez)
+    const nextDueDateString = this.calcularProximos7Dias();
     const nextDueDate = this.parseDataBrasil(nextDueDateString);
 
     // Criar assinatura
@@ -1352,6 +1352,35 @@ export class AssinaturasService {
   /**
    * Calcula a data de 1 mês à frente a partir da data atual no fuso horário do Brasil
    * Retorna no formato YYYY-MM-DD
+   */
+  /**
+   * Calcula a data de 7 dias à frente (período de teste grátis)
+   * Usado na primeira criação da assinatura
+   */
+  private calcularProximos7Dias(): string {
+    const agora = new Date();
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    
+    // Adiciona 7 dias
+    const proximos7Dias = new Date(agora);
+    proximos7Dias.setDate(proximos7Dias.getDate() + 7);
+    
+    const partes = formatter.formatToParts(proximos7Dias);
+    const ano = partes.find(p => p.type === 'year')?.value || '0000';
+    const mes = partes.find(p => p.type === 'month')?.value.padStart(2, '0') || '00';
+    const dia = partes.find(p => p.type === 'day')?.value.padStart(2, '0') || '00';
+    
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  /**
+   * Calcula a data de 1 mês à frente
+   * Usado após o período de teste grátis (após primeira cobrança)
    */
   private calcularProximoMes(): string {
     const agora = new Date();
@@ -2316,151 +2345,117 @@ export class AssinaturasService {
       }
     }
 
-    // 7. Processar pagamento ANTES de criar ClienteMaster
+    // 7. Processar pagamento (apenas para planos de teste - cobrança fake imediata)
+    // Planos normais: período grátis de 7 dias (sem cobrança no checkout)
     let paymentResult: any = null;
     
-    if (checkoutDto.billingType === 'CREDIT_CARD') {
-      if (!creditCardToken && !isPlanoTeste) {
-        throw new BadRequestException('Token do cartão é obrigatório');
+    if (isPlanoTeste && checkoutDto.billingType === 'CREDIT_CARD') {
+      // Planos de teste: processar cobrança fake imediata (comportamento original)
+      console.log('🧪 Modo TESTE: Criando pagamento e assinatura fake para plano de teste');
+      const dueDateString = this.getDataAtualBrasil();
+      const paymentDateString = this.getDataAtualBrasil();
+      
+      // Criar paymentResult fake
+      paymentResult = {
+        id: `pay_fake_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        customer: asaasCustomerId || 'cus_fake_test',
+        value: valorFinal,
+        netValue: valorFinal,
+        originalValue: valorFinal,
+        interestValue: 0,
+        description: `Pagamento TESTE - ${plano.nome}`,
+        billingType: 'CREDIT_CARD',
+        status: 'CONFIRMED',
+        dueDate: dueDateString,
+        paymentDate: paymentDateString,
+        originalDueDate: dueDateString,
+        invoiceUrl: null,
+        invoiceNumber: null,
+        externalReference: null,
+        deleted: false,
+        anticipated: false,
+        anticipable: false,
+        refunds: null,
+        dateCreated: paymentDateString,
+        clientPaymentDate: paymentDateString,
+        installmentNumber: null,
+        transactionReceiptUrl: null,
+        nossoNumero: null,
+        bankSlipUrl: null,
+        lastInvoiceViewedDate: null,
+        lastBankSlipViewedDate: null,
+        discount: null,
+        fine: null,
+        interest: null,
+        postalService: false,
+        creditCard: {
+          creditCardNumber: creditCardNumber || '****',
+          creditCardBrand: creditCardBrand || 'VISA',
+          creditCardToken: creditCardToken || 'fake_token',
+        },
+      };
+
+      // Registrar cobrança fake
+      await this.registrarCobranca({
+        userId: null, // null porque ClienteMaster ainda não foi criado
+        asaasPaymentId: paymentResult.id,
+        asaasCustomerId: asaasCustomerId,
+        value: valorFinal,
+        billingType: 'CREDIT_CARD',
+        status: paymentResult.status,
+        dueDate: paymentResult.dueDate ? this.parseDataBrasil(paymentResult.dueDate) : null,
+        paymentDate: paymentResult.paymentDate ? this.parseDataBrasil(paymentResult.paymentDate) : null,
+        asaasResponse: JSON.stringify(paymentResult),
+        assinaturaId: null,
+        planoId: checkoutDto.planoId,
+        couponId: couponId || null,
+        dadosAssinatura: JSON.stringify({
+          name: userBase.nome,
+          email: userBase.email,
+          cpf: userBase.cpf || '',
+          phone: userBase.telefone || '',
+          postalCode: userBase.postalCode || '',
+          address: userBase.address || '',
+          addressNumber: userBase.addressNumber || '',
+          complement: userBase.complement || '',
+          province: userBase.province || '',
+          city: userBase.city || '',
+          state: userBase.state || '',
+          billingType: checkoutDto.billingType,
+          creditCardToken: creditCardToken,
+          creditCardNumber: creditCardNumber || '',
+          creditCardBrand: creditCardBrand || '',
+          userBaseId: userBase.id,
+        }),
+      });
+
+      console.log('✅ Pagamento fake criado para plano de teste:', paymentResult.id);
+    } else if (checkoutDto.billingType === 'CREDIT_CARD') {
+      // Planos normais: apenas validar token (não processar pagamento - período grátis)
+      if (!creditCardToken) {
+        throw new BadRequestException('Token do cartão é obrigatório para processar a primeira cobrança após o período grátis');
       }
-
-      try {
-        // Se for plano de teste, criar dados fake sem chamar API do Asaas
-        if (isPlanoTeste) {
-          console.log('🧪 Modo TESTE: Criando pagamento e assinatura fake para plano de teste');
-          const dueDateString = this.getDataAtualBrasil();
-          const paymentDateString = this.getDataAtualBrasil();
-          
-          // Criar paymentResult fake
-          paymentResult = {
-            id: `pay_fake_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            customer: asaasCustomerId || 'cus_fake_test',
-            value: valorFinal,
-            netValue: valorFinal,
-            originalValue: valorFinal,
-            interestValue: 0,
-            description: `Pagamento TESTE - ${plano.nome}`,
-            billingType: 'CREDIT_CARD',
-            status: 'CONFIRMED',
-            dueDate: dueDateString,
-            paymentDate: paymentDateString,
-            originalDueDate: dueDateString,
-            invoiceUrl: null,
-            invoiceNumber: null,
-            externalReference: null,
-            deleted: false,
-            anticipated: false,
-            anticipable: false,
-            refunds: null,
-            dateCreated: paymentDateString,
-            clientPaymentDate: paymentDateString,
-            installmentNumber: null,
-            transactionReceiptUrl: null,
-            nossoNumero: null,
-            bankSlipUrl: null,
-            lastInvoiceViewedDate: null,
-            lastBankSlipViewedDate: null,
-            discount: null,
-            fine: null,
-            interest: null,
-            postalService: false,
-            creditCard: {
-              creditCardNumber: creditCardNumber || '****',
-              creditCardBrand: creditCardBrand || 'VISA',
-              creditCardToken: creditCardToken || 'fake_token',
-            },
-          };
-        } else {
-          // Processamento normal - chamar API do Asaas
-          if (!creditCardToken) {
-            throw new BadRequestException('Token do cartão é obrigatório');
-          }
-          
-          const dueDateString = this.getDataAtualBrasil();
-
-          paymentResult = await this.asaasService.createPayment({
-            billingType: 'CREDIT_CARD',
-            customer: asaasCustomerId,
-            value: valorFinal,
-            dueDate: dueDateString,
-            creditCardToken: creditCardToken, // Agora garantimos que não é null
-          });
-        }
-
-        const statusConfirmado = paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED';
-
-        // Registrar cobrança (sem userId ainda, pois ClienteMaster ainda não existe)
-        await this.registrarCobranca({
-          userId: null, // null porque ClienteMaster ainda não foi criado
-          asaasPaymentId: paymentResult.id,
-          asaasCustomerId: asaasCustomerId,
-          value: valorFinal,
-          billingType: 'CREDIT_CARD',
-          status: paymentResult.status,
-          dueDate: paymentResult.dueDate ? this.parseDataBrasil(paymentResult.dueDate) : null,
-          paymentDate: paymentResult.paymentDate ? this.parseDataBrasil(paymentResult.paymentDate) : null,
-          asaasResponse: JSON.stringify(paymentResult),
-          assinaturaId: null,
-          planoId: checkoutDto.planoId,
-          couponId: couponId || null,
-          dadosAssinatura: JSON.stringify({
-            name: userBase.nome,
-            email: userBase.email,
-            cpf: userBase.cpf || '',
-            phone: userBase.telefone || '',
-            postalCode: userBase.postalCode || '',
-            address: userBase.address || '',
-            addressNumber: userBase.addressNumber || '',
-            complement: userBase.complement || '',
-            province: userBase.province || '',
-            city: userBase.city || '',
-            state: userBase.state || '',
-            billingType: checkoutDto.billingType,
-            creditCardToken: creditCardToken,
-            creditCardNumber: creditCardNumber || '',
-            creditCardBrand: creditCardBrand || '',
-            userBaseId: userBase.id, // Guardar userBaseId para criar ClienteMaster depois
-          }),
-        });
-
-        if (!statusConfirmado) {
-          console.log('⚠️ Pagamento criado mas não aprovado ainda. Status:', paymentResult.status);
-          return {
-            statusCode: 202,
-            message: 'Pagamento criado. Aguardando confirmação.',
-            data: {
-              pagamento: {
-                id: paymentResult.id,
-                status: paymentResult.status,
-                value: paymentResult.value,
-                dueDate: paymentResult.dueDate,
-                customer: paymentResult.customer,
-              },
-              assinatura: null,
-            },
-            asaasCustomerId: asaasCustomerId,
-          };
-        }
-
-        console.log('✅ Pagamento aprovado:', paymentResult);
-      } catch (error: any) {
-        console.error('❌ Erro ao processar pagamento:', error);
-        throw new BadRequestException(
-          `Erro ao processar pagamento: ${error.response?.data?.errors?.[0]?.description || error.message || 'Erro desconhecido'}`,
-        );
-      }
+      console.log('✅ Token do cartão validado. Período grátis de 7 dias ativado. Primeira cobrança será processada automaticamente após 7 dias.');
     }
 
-    // 8. APENAS DEPOIS DO PAGAMENTO CONFIRMADO: Criar ClienteMaster se não existir
+    // 8. Criar ClienteMaster
     if (!clienteMaster) {
       clienteMaster = await this.clientesMasterService.create({
         userId: userBase.id,
       });
-      console.log('✅ ClienteMaster criado após pagamento confirmado:', clienteMaster.id);
+      if (isPlanoTeste) {
+        console.log('✅ ClienteMaster criado para plano de teste:', clienteMaster.id);
+      } else {
+        console.log('✅ ClienteMaster criado. Período grátis de 7 dias ativado:', clienteMaster.id);
+      }
     }
 
     // 9. Criar assinatura no banco de dados
-    const nextDueDateString = this.calcularProximoMes();
+    // Planos de teste: próximo mês (comportamento original)
+    // Planos normais: 7 dias grátis
+    const nextDueDateString = isPlanoTeste 
+      ? this.calcularProximoMes() 
+      : this.calcularProximos7Dias();
     const nextDueDate = this.parseDataBrasil(nextDueDateString);
 
     const assinaturaData: Partial<Assinatura> = {
@@ -2493,8 +2488,8 @@ export class AssinaturasService {
       const savedSubscription = await this.assinaturaRepository.save(assinatura);
       await this.gerenciarRecorrencia(savedSubscription);
 
-      // 10. Atualizar cobrança com userId e assinaturaId
-      if (paymentResult && (paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED')) {
+      // 10. Atualizar cobrança com userId e assinaturaId (apenas para planos de teste)
+      if (isPlanoTeste && paymentResult && (paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED')) {
         const cobranca = await this.cobrancaRepository.findOne({
           where: { asaasPaymentId: paymentResult.id },
         });
@@ -2502,28 +2497,47 @@ export class AssinaturasService {
           cobranca.userId = clienteMaster.id;
           cobranca.assinaturaId = savedSubscription.id;
           await this.cobrancaRepository.save(cobranca);
-          console.log(`✅ Cobrança ${cobranca.id} atualizada com userId e assinaturaId após pagamento confirmado`);
+          console.log(`✅ Cobrança ${cobranca.id} atualizada com userId e assinaturaId para plano de teste`);
         }
       }
 
-      console.log('✅ Assinatura criada com sucesso:', savedSubscription.id);
+      if (isPlanoTeste) {
+        console.log('✅ Assinatura de teste criada com sucesso:', savedSubscription.id);
+        return {
+          statusCode: 200,
+          message: 'Pagamento aprovado e assinatura criada com sucesso (plano de teste)',
+          data: {
+            pagamento: paymentResult ? {
+              id: paymentResult.id,
+              status: paymentResult.status,
+              value: paymentResult.value,
+              dueDate: paymentResult.dueDate,
+              paymentDate: paymentResult.paymentDate,
+              customer: paymentResult.customer,
+            } : null,
+            assinatura: this.toResponseDto(savedSubscription),
+          },
+          asaasCustomerId: asaasCustomerId,
+        };
+      } else {
+        console.log('✅ Assinatura criada com sucesso. Período grátis de 7 dias ativado:', savedSubscription.id);
+        console.log(`📅 Primeira cobrança será processada automaticamente em: ${nextDueDateString}`);
 
-      return {
-        statusCode: 200,
-        message: 'Pagamento aprovado e assinatura criada com sucesso',
-        data: {
-          pagamento: paymentResult ? {
-            id: paymentResult.id,
-            status: paymentResult.status,
-            value: paymentResult.value,
-            dueDate: paymentResult.dueDate,
-            paymentDate: paymentResult.paymentDate,
-            customer: paymentResult.customer,
-          } : null,
-          assinatura: this.toResponseDto(savedSubscription),
-        },
-        asaasCustomerId: asaasCustomerId,
-      };
+        return {
+          statusCode: 200,
+          message: 'Assinatura criada com sucesso! Período grátis de 7 dias ativado.',
+          data: {
+            assinatura: this.toResponseDto(savedSubscription),
+            periodoGratis: {
+              ativo: true,
+              diasRestantes: 7,
+              primeiraCobranca: nextDueDateString,
+              mensagem: 'A primeira cobrança será processada automaticamente após 7 dias.',
+            },
+          },
+          asaasCustomerId: asaasCustomerId,
+        };
+      }
     } catch (error: any) {
       throw new InternalServerErrorException(
         `Erro ao salvar assinatura no banco de dados: ${error.message || 'Erro desconhecido'}`,
