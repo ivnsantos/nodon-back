@@ -6,8 +6,8 @@ import {
   BadRequestException,
   Inject,
   forwardRef,
-  OnModuleInit,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -34,7 +34,7 @@ import { UserComum } from '../users/entities/user-comum.entity';
 import { ChatService } from '../chat/chat.service';
 
 @Injectable()
-export class AssinaturasService implements OnModuleInit {
+export class AssinaturasService {
   constructor(
     @InjectRepository(Assinatura)
     private readonly assinaturaRepository: Repository<Assinatura>,
@@ -1649,38 +1649,24 @@ export class AssinaturasService implements OnModuleInit {
   }
 
   /**
-   * Inicializa o CRON job quando o módulo é carregado
-   * Roda a cada 1 minuto (para testes)
-   * Para produção, altere o intervalo para 24 horas (86400000 ms)
+   * CRON job que roda diariamente às 9h da manhã (horário de Brasília)
+   * Usa expressão cron: 0 9 * * * (todo dia às 9h)
+   * Timezone: America/Sao_Paulo (horário de Brasília)
    */
-  onModuleInit() {
-    console.log(`\n${'#'.repeat(80)}`);
-    console.log(`🚀 CRON de Recorrências inicializado`);
-    console.log(`   Intervalo: 1 minuto (para testes)`);
-    console.log(`   Para produção, altere para 24 horas`);
-    console.log(`${'#'.repeat(80)}\n`);
-
-    // Roda imediatamente na inicialização
-    this.handleCronProcessarRecorrencias();
-
-    // Configura para rodar a cada 1 minuto (60000 ms)
-    // Para produção: use 86400000 ms (24 horas)
-    const intervalo = 60000; // 1 minuto em milissegundos
-    
-    setInterval(() => {
-      this.handleCronProcessarRecorrencias();
-    }, intervalo);
-
-    console.log(`✅ CRON configurado para rodar a cada ${intervalo / 1000} segundos\n`);
-  }
-
   /**
-   * Handler do CRON que processa recorrências
+   * CRON job que roda diariamente às 9h da manhã (horário de Brasília)
+   * Usa expressão cron: 0 9 * * * (todo dia às 9h)
+   * Timezone: America/Sao_Paulo (horário de Brasília)
    */
-  private async handleCronProcessarRecorrencias() {
+  @Cron('0 9 * * *', {
+    name: 'processar-recorrencias',
+    timeZone: 'America/Sao_Paulo',
+  })
+  async handleCronProcessarRecorrencias() {
+    const dataExecucao = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     console.log(`\n${'#'.repeat(80)}`);
-    console.log(`⏰ [${new Date().toISOString()}] CRON AUTOMÁTICO DISPARADO`);
-    console.log(`${'#'.repeat(80)}`);
+    console.log(`⏰ [${dataExecucao}] Executando CRON agendado às 9h da manhã`);
+    console.log(`${'#'.repeat(80)}\n`);
     
     try {
       await this.processarRecorrencias();
