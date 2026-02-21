@@ -21,6 +21,10 @@ export class CheckoutCompleteDto {
   @IsOptional()
   couponName?: string;
 
+  @IsString()
+  @IsOptional()
+  creditCardBrand?: string;
+
   // Token do cartão já tokenizado no frontend (obrigatório se billingType === CREDIT_CARD)
   @IsString()
   @IsOptional()

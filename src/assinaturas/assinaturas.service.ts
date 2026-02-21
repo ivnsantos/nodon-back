@@ -2328,9 +2328,9 @@ export class AssinaturasService {
         creditCardToken = checkoutDto.creditCardToken;
         // Se não tiver número e bandeira, tentar obter do token ou deixar null
         creditCardNumber = checkoutDto.creditCardNumber || null;
-        creditCardBrand = null; // Pode ser obtido depois se necessário
+        creditCardBrand = checkoutDto.creditCardBrand || null;
       } else {
-        // Se não passou token, fazer tokenização no backend
+       
         if (
           !checkoutDto.creditCardHolderName ||
           !checkoutDto.creditCardNumber ||
