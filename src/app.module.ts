@@ -22,8 +22,10 @@ import { QuestionariosModule } from './questionarios/questionarios.module';
 import { TreatmentsModule } from './treatments/treatments.module';
 import { AnotacoesModule } from './anotacoes/anotacoes.module';
 import { OrcamentosModule } from './orcamentos/orcamentos.module';
+import { CalendarioModule } from './calendario/calendario.module';
 import { TypeOrmConfigService } from './config/typeorm.config';
 import { PlanosService } from './planos/planos.service';
+import { SmsModule } from './sms/sms.module';
 
 @Module({
   imports: [
@@ -65,6 +67,7 @@ import { PlanosService } from './planos/planos.service';
     TreatmentsModule,
     AnotacoesModule,
     OrcamentosModule,
+    CalendarioModule,
   ],
 })
 export class AppModule implements OnModuleInit {

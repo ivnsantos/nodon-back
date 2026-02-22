@@ -26,6 +26,10 @@ import { UpdateConsultaDto } from './dto/update-consulta.dto';
 import { ListConsultasQueryDto } from './dto/list-consultas-query.dto';
 import { ListConsultasPeriodoQueryDto } from './dto/list-consultas-periodo-query.dto';
 import { CadastrarPacienteVincularAgendamentoDto } from './dto/cadastrar-paciente-vincular-agendamento.dto';
+import { EnviarSmsConfirmacaoDto } from './dto/enviar-sms-confirmacao.dto';
+import { ConfirmarAgendamentoDto } from './dto/confirmar-agendamento.dto';
+import { EnviarSmsAgendamentoDto } from './dto/enviar-sms-agendamento.dto';
+import { ConfirmarAgendamentoPorDadosDto } from './dto/confirmar-agendamento-por-dados.dto';
 
 @Controller('calendario')
 export class CalendarioController {
@@ -33,6 +37,32 @@ export class CalendarioController {
     private calendarioService: CalendarioService,
     private userComumService: UserComumService,
   ) {}
+
+  /**
+   * Formata uma data para o formato YYYY-MM-DD, evitando problemas de timezone
+   */
+  private formatarData(data: Date | string | null | undefined): string | null {
+    if (!data) {
+      return null;
+    }
+
+    // Se já for string (formato YYYY-MM-DD do PostgreSQL), usar diretamente
+    if (typeof data === 'string') {
+      // Remover qualquer parte de hora se existir
+      return data.split('T')[0].split(' ')[0];
+    }
+
+    // Se for Date, usar métodos UTC para evitar problemas de timezone
+    if (data instanceof Date) {
+      const year = data.getUTCFullYear();
+      const month = String(data.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(data.getUTCDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    // Fallback: converter para string e pegar apenas a parte da data
+    return String(data).split('T')[0].split(' ')[0];
+  }
 
   // ========== TIPOS DE CONSULTA ==========
 
@@ -176,7 +206,7 @@ export class CalendarioController {
               }
             : null,
           titulo: consulta.titulo,
-          data_consulta: consulta.dataConsulta.toISOString().split('T')[0],
+          data_consulta: this.formatarData(consulta.dataConsulta),
           hora_consulta: consulta.horaConsulta,
           observacoes: consulta.observacoes,
           status: consulta.status,
@@ -215,7 +245,7 @@ export class CalendarioController {
               }
             : null,
           titulo: consulta.titulo,
-          dataConsulta: consulta.dataConsulta,
+          dataConsulta: this.formatarData(consulta.dataConsulta),
           horaConsulta: consulta.horaConsulta,
           observacoes: consulta.observacoes,
           status: consulta.status,
@@ -287,7 +317,7 @@ export class CalendarioController {
               }
             : null,
           titulo: consulta.titulo,
-          dataConsulta: consulta.dataConsulta,
+          dataConsulta: this.formatarData(consulta.dataConsulta),
           horaConsulta: consulta.horaConsulta,
           observacoes: consulta.observacoes,
           status: consulta.status,
@@ -316,11 +346,13 @@ export class CalendarioController {
       data: {
         consulta: {
           id: consulta.id,
-          tipo_consulta: {
-            id: consulta.tipoConsulta.id,
-            nome: consulta.tipoConsulta.nome,
-            cor: consulta.tipoConsulta.cor,
-          },
+          tipo_consulta: consulta.tipoConsulta
+            ? {
+                id: consulta.tipoConsulta.id,
+                nome: consulta.tipoConsulta.nome,
+                cor: consulta.tipoConsulta.cor,
+              }
+            : null,
           paciente: consulta.paciente
             ? {
                 id: consulta.paciente.id,
@@ -338,10 +370,10 @@ export class CalendarioController {
               }
             : null,
           titulo: consulta.titulo,
-          data_consulta: consulta.dataConsulta.toISOString().split('T')[0],
+          data_consulta: this.formatarData(consulta.dataConsulta),
           hora_consulta: consulta.horaConsulta,
           observacoes: consulta.observacoes,
-          status: consulta.status,
+          status: consulta.status || 'agendada',
           created_at: consulta.createdAt,
           updated_at: consulta.updatedAt,
         },
@@ -393,17 +425,7 @@ export class CalendarioController {
               paciente_id: consulta.pacienteId,
               profissional_id: consulta.profissionalId,
               titulo: consulta.titulo,
-              data_consulta: (() => {
-                if (!consulta.dataConsulta) return null;
-                const data = consulta.dataConsulta as any;
-                if (typeof data === 'string') {
-                  return data.split('T')[0];
-                }
-                if (data instanceof Date) {
-                  return data.toISOString().split('T')[0];
-                }
-                return String(data).split('T')[0];
-              })(),
+              data_consulta: this.formatarData(consulta.dataConsulta),
               hora_consulta: consulta.horaConsulta,
               observacoes: consulta.observacoes,
               status: consulta.status,
@@ -441,11 +463,7 @@ export class CalendarioController {
                 }
               : null,
             titulo: consultaCompleta.titulo,
-            data_consulta: consultaCompleta.dataConsulta
-              ? (typeof consultaCompleta.dataConsulta === 'string'
-                  ? consultaCompleta.dataConsulta.split('T')[0]
-                  : consultaCompleta.dataConsulta.toISOString().split('T')[0])
-              : null,
+            data_consulta: this.formatarData(consultaCompleta.dataConsulta),
             hora_consulta: consultaCompleta.horaConsulta,
             observacoes: consultaCompleta.observacoes,
             status: consultaCompleta.status,
@@ -497,11 +515,13 @@ export class CalendarioController {
       data: {
         consulta: {
           id: consultaCompleta.id,
-          tipo_consulta: {
-            id: consultaCompleta.tipoConsulta.id,
-            nome: consultaCompleta.tipoConsulta.nome,
-            cor: consultaCompleta.tipoConsulta.cor,
-          },
+          tipo_consulta: consultaCompleta.tipoConsulta
+            ? {
+                id: consultaCompleta.tipoConsulta.id,
+                nome: consultaCompleta.tipoConsulta.nome,
+                cor: consultaCompleta.tipoConsulta.cor,
+              }
+            : null,
           paciente: consultaCompleta.paciente
             ? {
                 id: consultaCompleta.paciente.id,
@@ -516,10 +536,10 @@ export class CalendarioController {
               }
             : null,
           titulo: consultaCompleta.titulo,
-          data_consulta: consultaCompleta.dataConsulta.toISOString().split('T')[0],
+          data_consulta: this.formatarData(consultaCompleta.dataConsulta),
           hora_consulta: consultaCompleta.horaConsulta,
           observacoes: consultaCompleta.observacoes,
-          status: consultaCompleta.status,
+          status: consultaCompleta.status || 'agendada',
           created_at: consultaCompleta.createdAt,
           updated_at: consultaCompleta.updatedAt,
         },
@@ -646,19 +666,10 @@ export class CalendarioController {
               tipo_consulta_id: consulta.tipoConsulta?.id || consulta.tipoConsultaId || null,
               tipo_consulta_cor: consulta.tipoConsulta?.cor || null,
               paciente_nome: consulta.paciente?.nome || 'Paciente não encontrado',
-              data_consulta: (() => {
-                if (!consulta.dataConsulta) return null;
-                const data = consulta.dataConsulta as any;
-                if (typeof data === 'string') {
-                  return data.split('T')[0];
-                }
-                if (data instanceof Date) {
-                  return data.toISOString().split('T')[0];
-                }
-                return String(data).split('T')[0];
-              })(),
+              data_consulta: this.formatarData(consulta.dataConsulta),
               hora_consulta: consulta.horaConsulta || null,
               titulo: consulta.titulo || null,
+              status: consulta.status || 'agendada',
             };
           }),
         },
@@ -685,6 +696,146 @@ export class CalendarioController {
         },
       };
     }
+  }
+
+  // ========== SMS DE AGENDAMENTO E CONFIRMAÇÃO ==========
+
+  @Post('consultas/enviar-sms-agendamento')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
+  @HttpCode(HttpStatus.OK)
+  async enviarSmsAgendamento(
+    @Headers('x-cliente-master-id') clienteMasterId: string,
+    @Body() enviarSmsDto: EnviarSmsAgendamentoDto,
+  ) {
+    const resultado = await this.calendarioService.enviarSmsAgendamento(
+      enviarSmsDto.telefone,
+      enviarSmsDto.nome,
+      enviarSmsDto.tipoConsultaId,
+      enviarSmsDto.dataConsulta,
+      enviarSmsDto.horaConsulta,
+      clienteMasterId,
+      enviarSmsDto.link,
+      enviarSmsDto.consultaId,
+    );
+
+    return {
+      statusCode: 200,
+      message: 'SMS de agendamento enviado com sucesso',
+      data: {
+        consultaId: resultado.consultaId,
+        linkConfirmacao: resultado.linkConfirmacao,
+      },
+    };
+  }
+
+  @Post('consultas/solicitar-confirmacao')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
+  @HttpCode(HttpStatus.OK)
+  async solicitarConfirmacaoAgendamento(
+    @Headers('x-cliente-master-id') clienteMasterId: string,
+    @Body() enviarSmsDto: EnviarSmsConfirmacaoDto,
+  ) {
+    const resultado = await this.calendarioService.solicitarConfirmacaoAgendamento(
+      enviarSmsDto.consultaId,
+      clienteMasterId,
+    );
+
+    return {
+      statusCode: 200,
+      message: 'SMS de confirmação enviado com sucesso',
+      data: {
+        consultaId: enviarSmsDto.consultaId,
+        linkConfirmacao: resultado.linkConfirmacao,
+        telefoneEnviado: resultado.telefoneEnviado,
+      },
+    };
+  }
+
+  @Get('consultas/publica/:id/dados-basicos')
+  @HttpCode(HttpStatus.OK)
+  async buscarDadosBasicosConsultaPublica(@Param('id') id: string) {
+    const dados = await this.calendarioService.buscarDadosBasicosConsultaPublica(id);
+
+    const message = dados.jaConfirmada
+      ? 'Consulta já foi confirmada anteriormente'
+      : 'Dados da consulta recuperados com sucesso';
+
+    return {
+      statusCode: 200,
+      message,
+      data: {
+        consulta: {
+          id: dados.consulta.id,
+          data_consulta: this.formatarData(dados.consulta.dataConsulta),
+          hora_consulta: dados.consulta.horaConsulta,
+          status: dados.consulta.status,
+          titulo: dados.consulta.titulo,
+          tipo_consulta: dados.consulta.tipoConsulta,
+        },
+        cliente_master: dados.clienteMaster,
+        ja_confirmada: dados.jaConfirmada,
+      },
+    };
+  }
+
+  @Post('consultas/confirmar-agendamento')
+  @HttpCode(HttpStatus.OK)
+  async confirmarAgendamento(
+    @Body() confirmarDto: ConfirmarAgendamentoDto,
+  ) {
+    const consulta = await this.calendarioService.confirmarAgendamento(
+      confirmarDto.consultaId,
+    );
+
+    return {
+      statusCode: 200,
+      message: 'Agendamento confirmado com sucesso',
+      data: {
+        consulta: {
+          id: consulta.id,
+          status: consulta.status,
+          data_consulta: this.formatarData(consulta.dataConsulta),
+          hora_consulta: consulta.horaConsulta,
+          paciente: consulta.paciente
+            ? {
+                id: consulta.paciente.id,
+                nome: consulta.paciente.nome,
+              }
+            : null,
+        },
+      },
+    };
+  }
+
+  @Post('consultas/publica/confirmar-por-dados')
+  @HttpCode(HttpStatus.OK)
+  async confirmarAgendamentoPorDados(
+    @Body() confirmarDto: ConfirmarAgendamentoPorDadosDto,
+  ) {
+    const consulta = await this.calendarioService.confirmarAgendamentoPorDados(
+      confirmarDto.consultaId,
+      confirmarDto.dataAniversario,
+      confirmarDto.cpfInicio,
+    );
+
+    return {
+      statusCode: 200,
+      message: 'Agendamento confirmado com sucesso',
+      data: {
+        consulta: {
+          id: consulta.id,
+          status: consulta.status,
+          data_consulta: this.formatarData(consulta.dataConsulta),
+          hora_consulta: consulta.horaConsulta,
+          paciente: consulta.paciente
+            ? {
+                id: consulta.paciente.id,
+                nome: consulta.paciente.nome,
+              }
+            : null,
+        },
+      },
+    };
   }
 }
 

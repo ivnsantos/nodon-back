@@ -47,5 +47,9 @@ export class CreateConsultaDto {
   @IsString()
   @IsOptional()
   observacoes?: string;
+
+  @IsString()
+  @IsOptional()
+  status?: 'link' | 'agendada' | 'confirmada' | 'cancelada' | 'concluida';
 }
 

@@ -24,6 +24,7 @@ let ClienteMaster = class ClienteMaster {
     cor;
     telefoneEmpresa;
     site;
+    endereco;
     descricao;
     outrasInformacoes;
     valorHora;
@@ -72,6 +73,10 @@ __decorate([
     (0, typeorm_1.Column)({ name: 'site', nullable: true }),
     __metadata("design:type", String)
 ], ClienteMaster.prototype, "site", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'endereco', type: 'varchar', nullable: true }),
+    __metadata("design:type", Object)
+], ClienteMaster.prototype, "endereco", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'descricao', type: 'text', nullable: true }),
     __metadata("design:type", String)

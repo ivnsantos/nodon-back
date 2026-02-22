@@ -34,6 +34,7 @@ const questionarios_module_1 = require("./questionarios/questionarios.module");
 const treatments_module_1 = require("./treatments/treatments.module");
 const anotacoes_module_1 = require("./anotacoes/anotacoes.module");
 const orcamentos_module_1 = require("./orcamentos/orcamentos.module");
+const calendario_module_1 = require("./calendario/calendario.module");
 const typeorm_config_1 = require("./config/typeorm.config");
 const planos_service_1 = require("./planos/planos.service");
 let AppModule = class AppModule {
@@ -93,6 +94,7 @@ exports.AppModule = AppModule = __decorate([
             treatments_module_1.TreatmentsModule,
             anotacoes_module_1.AnotacoesModule,
             orcamentos_module_1.OrcamentosModule,
+            calendario_module_1.CalendarioModule,
         ],
     }),
     __metadata("design:paramtypes", [planos_service_1.PlanosService])

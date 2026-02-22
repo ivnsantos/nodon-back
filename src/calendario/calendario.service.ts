@@ -15,6 +15,8 @@ import { CreateTipoConsultaDto } from './dto/create-tipo-consulta.dto';
 import { UpdateTipoConsultaDto } from './dto/update-tipo-consulta.dto';
 import { CreateConsultaDto } from './dto/create-consulta.dto';
 import { UpdateConsultaDto } from './dto/update-consulta.dto';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
+import { ConfigService } from '@nestjs/config';
 @Injectable()
 export class CalendarioService {
   constructor(
@@ -30,6 +32,8 @@ export class CalendarioService {
     private userComumRepository: Repository<UserComum>,
     @InjectRepository(UserBase)
     private userBaseRepository: Repository<UserBase>,
+    private whatsappService: WhatsAppService,
+    private configService: ConfigService,
   ) {}
 
   /**
@@ -51,6 +55,74 @@ export class CalendarioService {
     }
 
     return consulta;
+  }
+
+  /**
+   * Busca dados básicos da consulta e cliente master (rota pública)
+   */
+  async buscarDadosBasicosConsultaPublica(consultaId: string): Promise<{
+    consulta: {
+      id: string;
+      dataConsulta: Date;
+      horaConsulta: string;
+      status: string;
+      titulo: string | null;
+      tipoConsulta: {
+        id: string;
+        nome: string;
+        cor: string | null;
+      } | null;
+    };
+    clienteMaster: {
+      id: string;
+      nome_empresa: string;
+      telefone_empresa: string | null;
+      site: string | null;
+      logo: string | null;
+      cor: string | null;
+      endereco: string | null;
+    } | null;
+    jaConfirmada: boolean;
+  }> {
+    const consulta = await this.consultaRepository.findOne({
+      where: { id: consultaId },
+      relations: ['tipoConsulta', 'clienteMaster'],
+    });
+
+    if (!consulta) {
+      throw new NotFoundException('Consulta não encontrada');
+    }
+
+    const jaConfirmada = consulta.status === 'confirmada';
+
+    return {
+      consulta: {
+        id: consulta.id,
+        dataConsulta: consulta.dataConsulta,
+        horaConsulta: consulta.horaConsulta,
+        status: consulta.status,
+        titulo: consulta.titulo,
+        tipoConsulta: consulta.tipoConsulta
+          ? {
+              id: consulta.tipoConsulta.id,
+              nome: consulta.tipoConsulta.nome,
+              cor: consulta.tipoConsulta.cor,
+            }
+          : null,
+      },
+      clienteMaster: consulta.clienteMaster
+        ? {
+            id: consulta.clienteMaster.id,
+            nome_empresa: consulta.clienteMaster.nomeEmpresa,
+            telefone_empresa: consulta.clienteMaster.telefoneEmpresa,
+            site: consulta.clienteMaster.site,
+            logo: consulta.clienteMaster.logo,
+            cor: consulta.clienteMaster.cor,
+            endereco: consulta.clienteMaster.endereco,
+          }
+        : null,
+      jaConfirmada,
+    };
   }
 
   /**
@@ -95,35 +167,77 @@ export class CalendarioService {
       throw new BadRequestException('Agendamento não possui cliente master vinculado');
     }
 
-    // Converter dataNascimento de string para Date
-    const dataNascimento = dadosPessoais.dataNascimento
-      ? new Date(dadosPessoais.dataNascimento)
-      : null;
+    let pacienteSalvo: Paciente;
 
-    // Criar paciente
-    const paciente = new Paciente();
-    paciente.clienteMasterId = consulta.clienteMasterId;
-    paciente.nome = dadosPessoais.nome || null;
-    paciente.cpf = dadosPessoais.cpf || null;
-    paciente.dataNascimento = dataNascimento;
-    paciente.email = dadosPessoais.email || null;
-    paciente.telefone = dadosPessoais.telefone || null;
-    paciente.status = null; // Status inicial
-    paciente.cep = endereco?.cep || null;
-    paciente.rua = endereco?.rua || null;
-    paciente.numero = endereco?.numero || null;
-    paciente.complemento = endereco?.complemento || null;
-    paciente.bairro = endereco?.bairro || null;
-    paciente.cidade = endereco?.cidade || null;
-    paciente.estado = endereco?.estado || null;
-    paciente.necessidades = null;
-    paciente.observacoes = null;
+    // Verificar se já existe paciente com o mesmo CPF
+    if (dadosPessoais.cpf) {
+      const pacienteExistente = await this.pacienteRepository.findOne({
+        where: {
+          cpf: dadosPessoais.cpf,
+          clienteMasterId: consulta.clienteMasterId,
+        },
+      });
 
-    const pacienteSalvo = await this.pacienteRepository.save(paciente);
+      if (pacienteExistente) {
+        // Usar paciente existente (não cadastrar novamente)
+        pacienteSalvo = pacienteExistente;
+      } else {
+        // Criar novo paciente
+        const dataNascimento = dadosPessoais.dataNascimento
+          ? new Date(dadosPessoais.dataNascimento)
+          : null;
 
-    // Vincular paciente ao agendamento
+        const paciente = new Paciente();
+        paciente.clienteMasterId = consulta.clienteMasterId;
+        paciente.nome = dadosPessoais.nome || null;
+        paciente.cpf = dadosPessoais.cpf || null;
+        paciente.dataNascimento = dataNascimento;
+        paciente.email = dadosPessoais.email || null;
+        paciente.telefone = dadosPessoais.telefone || null;
+        paciente.status = null; // Status inicial
+        paciente.cep = endereco?.cep || null;
+        paciente.rua = endereco?.rua || null;
+        paciente.numero = endereco?.numero || null;
+        paciente.complemento = endereco?.complemento || null;
+        paciente.bairro = endereco?.bairro || null;
+        paciente.cidade = endereco?.cidade || null;
+        paciente.estado = endereco?.estado || null;
+        paciente.necessidades = null;
+        paciente.observacoes = null;
+
+        pacienteSalvo = await this.pacienteRepository.save(paciente);
+      }
+    } else {
+      // Se não tem CPF, criar novo paciente
+      const dataNascimento = dadosPessoais.dataNascimento
+        ? new Date(dadosPessoais.dataNascimento)
+        : null;
+
+      const paciente = new Paciente();
+      paciente.clienteMasterId = consulta.clienteMasterId;
+      paciente.nome = dadosPessoais.nome || null;
+      paciente.cpf = dadosPessoais.cpf || null;
+      paciente.dataNascimento = dataNascimento;
+      paciente.email = dadosPessoais.email || null;
+      paciente.telefone = dadosPessoais.telefone || null;
+      paciente.status = null; // Status inicial
+      paciente.cep = endereco?.cep || null;
+      paciente.rua = endereco?.rua || null;
+      paciente.numero = endereco?.numero || null;
+      paciente.complemento = endereco?.complemento || null;
+      paciente.bairro = endereco?.bairro || null;
+      paciente.cidade = endereco?.cidade || null;
+      paciente.estado = endereco?.estado || null;
+      paciente.necessidades = null;
+      paciente.observacoes = null;
+
+      pacienteSalvo = await this.pacienteRepository.save(paciente);
+    }
+
+    // Vincular paciente ao agendamento e atualizar status para 'agendada'
     consulta.pacienteId = pacienteSalvo.id;
-    const consultaAtualizada = await this.consultaRepository.save(consulta);
+    consulta.status = 'agendada';
+    await this.consultaRepository.save(consulta);
 
     // Buscar consulta com relacionamentos
     const consultaCompleta = await this.consultaRepository.findOne({
@@ -414,27 +528,32 @@ export class CalendarioService {
         profissionalId,
         titulo,
         dataConsulta: createDto.dataConsulta,
+        tipoDataConsulta: typeof createDto.dataConsulta,
         horaConsulta: createDto.horaConsulta,
       });
 
-      const consulta = this.consultaRepository.create({
+      const novaConsulta = this.consultaRepository.create({
         clienteMasterId,
         tipoConsultaId: createDto.tipoConsultaId,
         pacienteId: createDto.pacienteId || null,
         profissionalId,
         titulo,
-        dataConsulta: new Date(createDto.dataConsulta),
+        dataConsulta: createDto.dataConsulta, // String YYYY-MM-DD - transformer vai tratar
         horaConsulta: createDto.horaConsulta,
         observacoes: createDto.observacoes,
-        status: 'agendada',
+        status: createDto.status || 'link', // Status inicial é 'link' - aguardando confirmação
         createdBy,
       });
 
-      console.log('💾 Salvando consulta no banco...');
-      const consultaSalva = await this.consultaRepository.save(consulta);
-      console.log('✅ Consulta salva com sucesso:', consultaSalva.id);
+      const consultaSalva = await this.consultaRepository.save(novaConsulta);
       
-      return consultaSalva;
+      // Buscar com relacionamentos
+      const consultaCompleta = await this.consultaRepository.findOne({
+        where: { id: consultaSalva.id },
+        relations: ['tipoConsulta', 'paciente', 'profissional'],
+      });
+      
+      return consultaCompleta || consultaSalva;
     } catch (error: any) {
       console.error('❌ Erro no service createConsulta:');
       console.error('  - Error name:', error?.name);
@@ -527,8 +646,8 @@ export class CalendarioService {
     }
 
     // Validar sobreposição de horários se data/hora mudou
-    const dataConsulta = updateDto.dataConsulta
-      ? new Date(updateDto.dataConsulta)
+    const dataConsulta: Date | string = updateDto.dataConsulta
+      ? updateDto.dataConsulta // Transformer na entidade vai tratar
       : consulta.dataConsulta;
     const horaConsulta = updateDto.horaConsulta || consulta.horaConsulta;
     const profissionalId = updateDto.profissionalId !== undefined
@@ -548,7 +667,7 @@ export class CalendarioService {
 
     // Atualizar campos
     if (updateDto.dataConsulta) {
-      consulta.dataConsulta = new Date(updateDto.dataConsulta);
+      consulta.dataConsulta = updateDto.dataConsulta as any; // Transformer vai tratar
     }
 
     if (updateDto.horaConsulta) {
@@ -563,7 +682,13 @@ export class CalendarioService {
       consulta.status = updateDto.status;
     }
 
-    return this.consultaRepository.save(consulta);
+    await this.consultaRepository.save(consulta);
+
+    // Buscar com relacionamentos
+    return this.consultaRepository.findOne({
+      where: { id, clienteMasterId },
+      relations: ['tipoConsulta', 'paciente', 'profissional', 'profissional.user', 'createdByUser'],
+    }) as Promise<Consulta>;
   }
 
   async deleteConsulta(id: string, clienteMasterId: string): Promise<void> {
@@ -619,10 +744,12 @@ export class CalendarioService {
       console.log(`📊 Consultas no período ${dataInicioStr} a ${dataFimStr}:`, consultasNoPeriodo);
 
       // Usar query builder para mais controle
+      // Buscar data como string para evitar problemas de timezone
       const queryBuilder = this.consultaRepository
         .createQueryBuilder('consulta')
         .leftJoinAndSelect('consulta.tipoConsulta', 'tipoConsulta')
         .leftJoinAndSelect('consulta.paciente', 'paciente')
+        .addSelect(`TO_CHAR(consulta.data_consulta, 'YYYY-MM-DD')`, 'data_consulta_str') // Buscar como string usando TO_CHAR (sem timezone)
         .where('consulta.cliente_master_id = :clienteMasterId', {
           clienteMasterId,
         })
@@ -652,37 +779,7 @@ export class CalendarioService {
         .orderBy('consulta.data_consulta', 'ASC')
         .addOrderBy('consulta.hora_consulta', 'ASC');
 
-      // Log da query SQL gerada
-      const sql = queryBuilder.getSql();
-      console.log('📝 SQL Query:', sql);
-      console.log('📝 SQL Parameters:', queryBuilder.getParameters());
-
-      const consultas = await queryBuilder.getMany();
-
-      console.log('✅ Consultas encontradas:', consultas.length);
-
-      // Verificar se as relações foram carregadas corretamente
-      consultas.forEach((consulta, index) => {
-        console.log(`🔍 Consulta ${index + 1}:`, {
-          id: consulta.id,
-          tipoConsultaId: consulta.tipoConsultaId,
-          temTipoConsulta: !!consulta.tipoConsulta,
-          pacienteId: consulta.pacienteId,
-          temPaciente: !!consulta.paciente,
-          dataConsulta: consulta.dataConsulta,
-          horaConsulta: consulta.horaConsulta,
-          titulo: consulta.titulo,
-        });
-
-        if (!consulta.tipoConsulta) {
-          console.warn(`⚠️ Consulta ${index + 1} (${consulta.id}) não tem tipoConsulta carregado`);
-        }
-        if (!consulta.paciente) {
-          console.warn(`⚠️ Consulta ${index + 1} (${consulta.id}) não tem paciente carregado`);
-        }
-      });
-
-      return consultas;
+      return queryBuilder.getMany();
     } catch (error: any) {
       console.error('❌ Erro ao buscar consultas por período:');
       console.error('  - Cliente Master ID:', clienteMasterId);
@@ -721,6 +818,232 @@ export class CalendarioService {
       console.warn('⚠️ Erro inesperado ao buscar consultas. Retornando lista vazia.');
       return [];
     }
+  }
+
+  // ========== SMS E CONFIRMAÇÃO ==========
+
+  async solicitarConfirmacaoAgendamento(
+    consultaId: string,
+    clienteMasterId: string,
+  ): Promise<{ linkConfirmacao: string; telefoneEnviado: string }> {
+    const consulta = await this.findConsultaById(consultaId, clienteMasterId);
+
+    // Verificar se a consulta pode ser confirmada (status 'link' ou 'agendada')
+    if (consulta.status !== 'link' && consulta.status !== 'agendada') {
+      throw new BadRequestException(`Não é possível solicitar confirmação para consultas com status "${consulta.status}". Apenas consultas com status "link" ou "agendada" podem ser confirmadas.`);
+    }
+
+    // Usar o telefone do paciente vinculado
+    let telefoneParaEnvio: string | null = null;
+    let nomePaciente = 'Paciente';
+
+    if (consulta.pacienteId && consulta.paciente) {
+      nomePaciente = consulta.paciente.nome || 'Paciente';
+      telefoneParaEnvio = consulta.paciente.telefone || null;
+    }
+
+    if (!telefoneParaEnvio) {
+      throw new BadRequestException('Paciente não possui telefone cadastrado. É necessário vincular um paciente com telefone para enviar a confirmação.');
+    }
+
+    // Gerar link de confirmação
+    const baseUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+    const linkConfirmacao = `${baseUrl}/confirmar-agendamento/${consultaId}`;
+
+    // Formatar data para exibição
+    const dataFormatada = this.formatarDataConsulta(consulta.dataConsulta);
+    const horaFormatada = consulta.horaConsulta;
+
+    // Enviar mensagem de confirmação via WhatsApp
+    const mensagemSms = `Olá ${nomePaciente}! Por favor, confirme sua consulta ${dataFormatada} às ${horaFormatada}. Clique no link para confirmar: ${linkConfirmacao}`;
+    await this.whatsappService.sendMessage(telefoneParaEnvio, mensagemSms);
+
+    return {
+      linkConfirmacao,
+      telefoneEnviado: telefoneParaEnvio,
+    };
+  }
+
+  async enviarSmsAgendamento(
+    telefone: string,
+    nome: string | undefined,
+    tipoConsultaId: string,
+    dataConsulta: string,
+    horaConsulta: string,
+    clienteMasterId: string,
+    link?: string,
+    consultaId?: string,
+  ): Promise<{ consultaId: string; linkConfirmacao: string }> {
+    let consultaSalva: Consulta;
+    let linkConfirmacao: string;
+
+    // Se consultaId foi fornecido, usar consulta existente
+    if (consultaId) {
+      const consultaExistente = await this.consultaRepository.findOne({
+        where: { id: consultaId, clienteMasterId },
+        relations: ['tipoConsulta'],
+      });
+
+      if (!consultaExistente) {
+        throw new NotFoundException('Consulta não encontrada');
+      }
+
+      if (consultaExistente.status !== 'link') {
+        throw new BadRequestException(`Consulta já está com status "${consultaExistente.status}". Só é possível enviar SMS para consultas com status "link".`);
+      }
+
+      consultaSalva = consultaExistente;
+
+      // Usar link fornecido ou gerar novo
+      linkConfirmacao = link || `${this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000'}/confirmar-agendamento/${consultaSalva.id}`;
+    } else {
+      // Validar tipo de consulta
+      const tipoConsulta = await this.tipoConsultaRepository.findOne({
+        where: { id: tipoConsultaId, clienteMasterId },
+      });
+
+      if (!tipoConsulta) {
+        throw new NotFoundException('Tipo de consulta não encontrado');
+      }
+
+      // Criar nova consulta com status 'link' (aguardando confirmação)
+      const consulta = this.consultaRepository.create({
+        clienteMasterId,
+        tipoConsultaId,
+        pacienteId: undefined, // Ainda não tem paciente
+        profissionalId: undefined,
+        titulo: nome ? `${tipoConsulta.nome} - ${nome}` : tipoConsulta.nome,
+        dataConsulta: dataConsulta,
+        horaConsulta: horaConsulta,
+        observacoes: undefined,
+        status: 'link',
+        createdBy: undefined,
+      });
+
+      consultaSalva = await this.consultaRepository.save(consulta);
+
+      // Usar link fornecido ou gerar novo
+      const baseUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:3000';
+      linkConfirmacao = link || `${baseUrl}/confirmar-agendamento/${consultaSalva.id}`;
+    }
+
+    // Formatar data para exibição
+    const dataFormatada = this.formatarDataConsulta(consultaSalva.dataConsulta);
+
+    // Enviar mensagem de agendamento via WhatsApp
+    const mensagemSms = `Olá ${nome || 'Paciente'}! Você tem um pré agendamento para uma consulta dia ${dataFormatada} às ${consultaSalva.horaConsulta}. Confirme através do link: ${linkConfirmacao}`;
+    await this.whatsappService.sendMessage(telefone, mensagemSms);
+
+    return {
+      consultaId: consultaSalva.id,
+      linkConfirmacao,
+    };
+  }
+
+  async confirmarAgendamento(consultaId: string): Promise<Consulta> {
+    const consulta = await this.consultaRepository.findOne({
+      where: { id: consultaId },
+      relations: ['tipoConsulta', 'paciente', 'profissional'],
+    });
+
+    if (!consulta) {
+      throw new NotFoundException('Consulta não encontrada');
+    }
+
+    if (consulta.status !== 'link') {
+      throw new BadRequestException(`Consulta já está com status "${consulta.status}". Só é possível confirmar consultas com status "link".`);
+    }
+
+    // Atualizar status para 'agendada'
+    consulta.status = 'agendada';
+    await this.consultaRepository.save(consulta);
+
+    return consulta;
+  }
+
+  async confirmarAgendamentoPorDados(
+    consultaId: string,
+    dataAniversario: string,
+    cpfInicio: string,
+  ): Promise<Consulta> {
+    // Buscar consulta com paciente
+    const consulta = await this.consultaRepository.findOne({
+      where: { id: consultaId },
+      relations: ['tipoConsulta', 'paciente', 'profissional'],
+    });
+
+    if (!consulta) {
+      throw new BadRequestException('Dados inválidos');
+    }
+
+    if (!consulta.pacienteId || !consulta.paciente) {
+      throw new BadRequestException('Dados inválidos');
+    }
+
+    const paciente = consulta.paciente;
+
+    // Validar se paciente tem os dados necessários
+    if (!paciente.dataNascimento || !paciente.cpf) {
+      throw new BadRequestException('Dados inválidos');
+    }
+
+    // Validar data de aniversário
+    const [dia, mes, ano] = dataAniversario.split('/').map(Number);
+    const dataAniversarioRecebida = new Date(Date.UTC(ano, mes - 1, dia));
+
+    // Comparar apenas dia, mês e ano (ignorar hora)
+    const dataNascimentoPaciente = new Date(paciente.dataNascimento);
+    const dataNascimentoUTC = new Date(
+      Date.UTC(
+        dataNascimentoPaciente.getUTCFullYear(),
+        dataNascimentoPaciente.getUTCMonth(),
+        dataNascimentoPaciente.getUTCDate(),
+      ),
+    );
+
+    const dataAniversarioUTC = new Date(
+      Date.UTC(
+        dataAniversarioRecebida.getUTCFullYear(),
+        dataAniversarioRecebida.getUTCMonth(),
+        dataAniversarioRecebida.getUTCDate(),
+      ),
+    );
+
+    // Remover caracteres não numéricos do CPF
+    const cpfLimpo = paciente.cpf.replace(/\D/g, '');
+    const cpfInicioPaciente = cpfLimpo.substring(0, 3);
+
+    // Validar ambos os dados - se qualquer um não conferir, retorna erro genérico
+    const dataConfere = dataNascimentoUTC.getTime() === dataAniversarioUTC.getTime();
+    const cpfConfere = cpfInicioPaciente === cpfInicio;
+
+    if (!dataConfere || !cpfConfere) {
+      throw new BadRequestException('Dados inválidos');
+    }
+
+    // Atualizar status para 'confirmada'
+    consulta.status = 'confirmada';
+    await this.consultaRepository.save(consulta);
+
+    return consulta;
+  }
+
+  private formatarDataConsulta(data: Date | string | null): string {
+    if (!data) return '';
+    
+    if (typeof data === 'string') {
+      const [year, month, day] = data.split('T')[0].split('-');
+      return `${day}/${month}/${year}`;
+    }
+    
+    if (data instanceof Date) {
+      const day = String(data.getUTCDate()).padStart(2, '0');
+      const month = String(data.getUTCMonth() + 1).padStart(2, '0');
+      const year = data.getUTCFullYear();
+      return `${day}/${month}/${year}`;
+    }
+    
+    return '';
   }
 
   // ========== VALIDAÇÕES ==========

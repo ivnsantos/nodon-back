@@ -47,6 +47,9 @@ export class ClienteMaster {
   @Column({ name: 'site', nullable: true })
   site: string; // Site da empresa
 
+  @Column({ name: 'endereco', type: 'varchar', nullable: true })
+  endereco: string | null; // Endereço da empresa
+
   @Column({ name: 'descricao', type: 'text', nullable: true })
   descricao: string; // Descrição da empresa
 

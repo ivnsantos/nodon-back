@@ -58,7 +58,47 @@ export class Consulta {
   @Column({ length: 255, nullable: true })
   titulo: string;
 
-  @Column({ name: 'data_consulta', type: 'date' })
+  @Column({
+    name: 'data_consulta',
+    type: 'date',
+    transformer: {
+      // Ao ler do banco: converte string (YYYY-MM-DD) ou Date para Date em UTC
+      from: (value: string | Date | null): Date | null => {
+        if (!value) return null;
+        
+        if (typeof value === 'string') {
+          const [year, month, day] = value.split('T')[0].split('-').map(Number);
+          return new Date(Date.UTC(year, month - 1, day));
+        }
+        
+        if (value instanceof Date) {
+          const year = value.getUTCFullYear();
+          const month = value.getUTCMonth();
+          const day = value.getUTCDate();
+          return new Date(Date.UTC(year, month, day));
+        }
+        
+        return null;
+      },
+      // Ao salvar no banco: preserva string YYYY-MM-DD ou converte Date para string
+      to: (value: string | Date | null): string | null => {
+        if (!value) return null;
+        
+        if (typeof value === 'string') {
+          return value.split('T')[0].split(' ')[0];
+        }
+        
+        if (value instanceof Date) {
+          const year = value.getUTCFullYear();
+          const month = String(value.getUTCMonth() + 1).padStart(2, '0');
+          const day = String(value.getUTCDate()).padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+        
+        return null;
+      },
+    },
+  })
   dataConsulta: Date;
 
   @Column({ name: 'hora_consulta', type: 'time' })
@@ -72,7 +112,7 @@ export class Consulta {
     length: 20,
     default: 'agendada',
   })
-  status: 'agendada' | 'confirmada' | 'cancelada' | 'concluida';
+  status: 'link' | 'agendada' | 'confirmada' | 'cancelada' | 'concluida';
 
   @Column({ name: 'created_by', nullable: true })
   createdBy: string | null;

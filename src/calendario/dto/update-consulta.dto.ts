@@ -44,7 +44,7 @@ export class UpdateConsultaDto {
 
   @IsString()
   @IsOptional()
-  @IsIn(['agendada', 'confirmada', 'cancelada', 'concluida'])
-  status?: 'agendada' | 'confirmada' | 'cancelada' | 'concluida';
+  @IsIn(['link', 'agendada', 'confirmada', 'cancelada', 'concluida'])
+  status?: 'link' | 'agendada' | 'confirmada' | 'cancelada' | 'concluida';
 }
 

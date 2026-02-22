@@ -11,6 +11,7 @@ export declare class ClienteMaster {
     cor: string;
     telefoneEmpresa: string;
     site: string;
+    endereco: string | null;
     descricao: string;
     outrasInformacoes: string;
     valorHora: number | null;
