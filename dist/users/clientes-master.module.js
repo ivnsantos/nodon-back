@@ -25,6 +25,7 @@ const chat_module_1 = require("../chat/chat.module");
 const pacientes_module_1 = require("../pacientes/pacientes.module");
 const radiografia_entity_1 = require("../radiografias/entities/radiografia.entity");
 const paciente_entity_1 = require("../pacientes/entities/paciente.entity");
+const treatments_module_1 = require("../treatments/treatments.module");
 let ClientesMasterModule = class ClientesMasterModule {
 };
 exports.ClientesMasterModule = ClientesMasterModule;
@@ -41,6 +42,7 @@ exports.ClientesMasterModule = ClientesMasterModule = __decorate([
             (0, common_1.forwardRef)(() => radiografias_module_1.RadiografiasModule),
             (0, common_1.forwardRef)(() => chat_module_1.ChatModule),
             (0, common_1.forwardRef)(() => pacientes_module_1.PacientesModule),
+            (0, common_1.forwardRef)(() => treatments_module_1.TreatmentsModule),
         ],
         controllers: [clientes_master_controller_1.ClientesMasterController],
         providers: [clientes_master_service_1.ClientesMasterService],

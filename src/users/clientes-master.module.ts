@@ -16,6 +16,7 @@ import { ChatModule } from '../chat/chat.module';
 import { PacientesModule } from '../pacientes/pacientes.module';
 import { Radiografia } from '../radiografias/entities/radiografia.entity';
 import { Paciente } from '../pacientes/entities/paciente.entity';
+import { TreatmentsModule } from '../treatments/treatments.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { Paciente } from '../pacientes/entities/paciente.entity';
     forwardRef(() => RadiografiasModule),
     forwardRef(() => ChatModule),
     forwardRef(() => PacientesModule),
+    forwardRef(() => TreatmentsModule),
   ],
   controllers: [ClientesMasterController],
   providers: [ClientesMasterService],

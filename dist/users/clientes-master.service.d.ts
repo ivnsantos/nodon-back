@@ -11,6 +11,7 @@ import { ChatService } from '../chat/chat.service';
 import { PacientesService } from '../pacientes/pacientes.service';
 import { Radiografia } from '../radiografias/entities/radiografia.entity';
 import { Paciente } from '../pacientes/entities/paciente.entity';
+import { TreatmentsService } from '../treatments/services/treatments.service';
 export declare class ClientesMasterService {
     private clienteMasterRepository;
     private userBaseRepository;
@@ -24,7 +25,8 @@ export declare class ClientesMasterService {
     private pacientesService;
     private radiografiaRepository;
     private pacienteRepository;
-    constructor(clienteMasterRepository: Repository<ClienteMaster>, userBaseRepository: Repository<UserBase>, assinaturasService: AssinaturasService, planosService: PlanosService, userComumService: UserComumService, userBaseService: UserBaseService, calendarioService: CalendarioService, radiografiasService: RadiografiasService, chatService: ChatService, pacientesService: PacientesService, radiografiaRepository: Repository<Radiografia>, pacienteRepository: Repository<Paciente>);
+    private treatmentsService;
+    constructor(clienteMasterRepository: Repository<ClienteMaster>, userBaseRepository: Repository<UserBase>, assinaturasService: AssinaturasService, planosService: PlanosService, userComumService: UserComumService, userBaseService: UserBaseService, calendarioService: CalendarioService, radiografiasService: RadiografiasService, chatService: ChatService, pacientesService: PacientesService, radiografiaRepository: Repository<Radiografia>, pacienteRepository: Repository<Paciente>, treatmentsService: TreatmentsService);
     create(data: {
         userId: string;
         nomeEmpresa?: string;
@@ -58,6 +60,7 @@ export declare class ClientesMasterService {
             ativo: boolean;
             createdAt: Date;
             updatedAt: Date;
+            valorhora?: undefined;
         };
         user: {
             id: string;
@@ -141,6 +144,7 @@ export declare class ClientesMasterService {
             site: string;
             descricao: string;
             outrasInformacoes: string;
+            valorhora: number | null;
             ativo: boolean;
             createdAt: Date;
             updatedAt: Date;

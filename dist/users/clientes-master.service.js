@@ -29,6 +29,7 @@ const chat_service_1 = require("../chat/chat.service");
 const pacientes_service_1 = require("../pacientes/pacientes.service");
 const radiografia_entity_1 = require("../radiografias/entities/radiografia.entity");
 const paciente_entity_1 = require("../pacientes/entities/paciente.entity");
+const treatments_service_1 = require("../treatments/services/treatments.service");
 let ClientesMasterService = class ClientesMasterService {
     clienteMasterRepository;
     userBaseRepository;
@@ -42,7 +43,8 @@ let ClientesMasterService = class ClientesMasterService {
     pacientesService;
     radiografiaRepository;
     pacienteRepository;
-    constructor(clienteMasterRepository, userBaseRepository, assinaturasService, planosService, userComumService, userBaseService, calendarioService, radiografiasService, chatService, pacientesService, radiografiaRepository, pacienteRepository) {
+    treatmentsService;
+    constructor(clienteMasterRepository, userBaseRepository, assinaturasService, planosService, userComumService, userBaseService, calendarioService, radiografiasService, chatService, pacientesService, radiografiaRepository, pacienteRepository, treatmentsService) {
         this.clienteMasterRepository = clienteMasterRepository;
         this.userBaseRepository = userBaseRepository;
         this.assinaturasService = assinaturasService;
@@ -55,6 +57,7 @@ let ClientesMasterService = class ClientesMasterService {
         this.pacientesService = pacientesService;
         this.radiografiaRepository = radiografiaRepository;
         this.pacienteRepository = pacienteRepository;
+        this.treatmentsService = treatmentsService;
     }
     async create(data) {
         let hash;
@@ -117,10 +120,24 @@ let ClientesMasterService = class ClientesMasterService {
         });
     }
     async update(id, data) {
+        const clienteMasterAntigo = await this.findById(id);
+        const valorHoraMudou = clienteMasterAntigo &&
+            data.valorHora !== undefined &&
+            data.valorHora !== clienteMasterAntigo.valorHora;
         await this.clienteMasterRepository.update(id, data);
         const clienteMaster = await this.findById(id);
         if (!clienteMaster) {
             throw new Error('Cliente Master não encontrado');
+        }
+        if (valorHoraMudou) {
+            try {
+                console.log(`🔄 Valor hora alterado para R$ ${data.valorHora}. Atualizando custos de todos os tratamentos...`);
+                const resultado = await this.treatmentsService.atualizarCustosPorValorHora(id);
+                console.log(`✅ ${resultado.atualizados} tratamentos atualizados com sucesso`);
+            }
+            catch (error) {
+                console.error('❌ Erro ao atualizar custos dos tratamentos:', error.message);
+            }
         }
         return clienteMaster;
     }
@@ -229,6 +246,7 @@ let ClientesMasterService = class ClientesMasterService {
                 site: clienteMaster.site,
                 descricao: clienteMaster.descricao,
                 outrasInformacoes: clienteMaster.outrasInformacoes,
+                valorhora: clienteMaster.valorHora,
                 ativo: clienteMaster.ativo,
                 createdAt: clienteMaster.createdAt,
                 updatedAt: clienteMaster.updatedAt,
@@ -310,6 +328,7 @@ exports.ClientesMasterService = ClientesMasterService = __decorate([
     __param(9, (0, common_1.Inject)((0, common_1.forwardRef)(() => pacientes_service_1.PacientesService))),
     __param(10, (0, typeorm_1.InjectRepository)(radiografia_entity_1.Radiografia)),
     __param(11, (0, typeorm_1.InjectRepository)(paciente_entity_1.Paciente)),
+    __param(12, (0, common_1.Inject)((0, common_1.forwardRef)(() => treatments_service_1.TreatmentsService))),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         assinaturas_service_1.AssinaturasService,
@@ -321,6 +340,7 @@ exports.ClientesMasterService = ClientesMasterService = __decorate([
         chat_service_1.ChatService,
         pacientes_service_1.PacientesService,
         typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        treatments_service_1.TreatmentsService])
 ], ClientesMasterService);
 //# sourceMappingURL=clientes-master.service.js.map

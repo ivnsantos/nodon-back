@@ -13,6 +13,7 @@ export declare class ClienteMaster {
     site: string;
     descricao: string;
     outrasInformacoes: string;
+    valorHora: number | null;
     hash: string | null;
     ativo: boolean;
     createdAt: Date;

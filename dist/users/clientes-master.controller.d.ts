@@ -28,6 +28,7 @@ export declare class ClientesMasterController {
             site: string;
             descricao: string;
             outrasInformacoes: string;
+            valorhora: number | null;
             ativo: boolean;
             createdAt: Date;
             updatedAt: Date;
@@ -43,6 +44,14 @@ export declare class ClientesMasterController {
         } | null;
     }>;
     findOne(id: string): Promise<import("./entities/cliente-master.entity").ClienteMaster | null>;
+    getValorHora(id: string): Promise<{
+        statusCode: number;
+        message: string;
+        data: {
+            clienteMasterId: string;
+            valorhora: number | null;
+        };
+    }>;
     getCompleteInfo(clienteMasterIdHeader: string, req: any): Promise<{
         userComum: {
             id: any;
@@ -82,6 +91,7 @@ export declare class ClientesMasterController {
             ativo: boolean;
             createdAt: Date;
             updatedAt: Date;
+            valorhora?: undefined;
         };
         user: {
             id: string;
@@ -172,6 +182,7 @@ export declare class ClientesMasterController {
             site: string;
             descricao: string;
             outrasInformacoes: string;
+            valorhora: number | null;
             ativo: boolean;
             createdAt: Date;
             updatedAt: Date;
@@ -273,6 +284,7 @@ export declare class ClientesMasterController {
             site: string;
             descricao: string;
             outrasInformacoes: string;
+            valorhora: number | null;
             ativo: boolean;
         };
     }>;

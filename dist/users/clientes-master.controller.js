@@ -98,6 +98,7 @@ let ClientesMasterController = class ClientesMasterController {
                 site: clienteMaster.site,
                 descricao: clienteMaster.descricao,
                 outrasInformacoes: clienteMaster.outrasInformacoes,
+                valorhora: clienteMaster.valorHora,
                 ativo: clienteMaster.ativo,
                 createdAt: clienteMaster.createdAt,
                 updatedAt: clienteMaster.updatedAt,
@@ -119,6 +120,20 @@ let ClientesMasterController = class ClientesMasterController {
     }
     async findOne(id) {
         return this.clientesMasterService.findById(id);
+    }
+    async getValorHora(id) {
+        const clienteMaster = await this.clientesMasterService.findById(id);
+        if (!clienteMaster) {
+            throw new common_1.NotFoundException('Cliente Master não encontrado');
+        }
+        return {
+            statusCode: 200,
+            message: 'Success',
+            data: {
+                clienteMasterId: id,
+                valorhora: clienteMaster.valorHora,
+            },
+        };
     }
     async getCompleteInfo(clienteMasterIdHeader, req) {
         const userBaseId = req.user.id;
@@ -233,6 +248,9 @@ let ClientesMasterController = class ClientesMasterController {
         else if (updateDto.documento && updateDto.cnpj) {
             delete updateData.documento;
         }
+        if (updateData.valorhora !== undefined) {
+            delete updateData.valorhora;
+        }
         const updated = await this.clientesMasterService.update(clienteMasterId, updateData);
         return {
             message: 'Dados da empresa atualizados com sucesso',
@@ -246,6 +264,7 @@ let ClientesMasterController = class ClientesMasterController {
                 site: updated.site,
                 descricao: updated.descricao,
                 outrasInformacoes: updated.outrasInformacoes,
+                valorhora: updated.valorHora,
                 ativo: updated.ativo,
             },
         };
@@ -596,6 +615,14 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], ClientesMasterController.prototype, "findOne", null);
+__decorate([
+    (0, common_1.Get)(':id/valorhora'),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, validate_resource_access_guard_1.ValidateResourceAccessGuard),
+    __param(0, (0, common_1.Param)('id')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], ClientesMasterController.prototype, "getValorHora", null);
 __decorate([
     (0, common_1.Post)('complete'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, validate_resource_access_guard_1.ValidateResourceAccessGuard),

@@ -73,11 +73,20 @@ export class TreatmentsService {
     treatment.averageDurationMinutes = createTreatmentDto.averageDurationMinutes;
     treatment.price = createTreatmentDto.price;
     
-    // Gravar apenas o que vier do body, sem fazer cálculos
+    // Calcular custo automaticamente (produtos + mão de obra)
+    // Se custo for fornecido no body, usar ele; senão calcular
     if (createTreatmentDto.custo !== undefined && createTreatmentDto.custo !== null) {
       treatment.custo = Number(createTreatmentDto.custo);
     } else {
+      // Calcular custo inicial (será recalculado após adicionar produtos)
       treatment.custo = 0;
+      
+      // Adicionar custo de mão de obra se valorhora estiver configurado
+      if (clienteMaster.valorHora) {
+        const tempoEmHoras = Number(createTreatmentDto.averageDurationMinutes) / 60;
+        const custoMaoDeObra = Number(clienteMaster.valorHora) * tempoEmHoras;
+        treatment.custo = Number(custoMaoDeObra.toFixed(2));
+      }
     }
     
     // Calcular lucro apenas se ambos price e custo estiverem definidos
@@ -89,9 +98,12 @@ export class TreatmentsService {
    
     const treatmentSalvo = await this.treatmentRepository.save(treatment);
 
-    // Adicionar produtos se fornecidos (sem recalcular custo/lucro)
+    // Adicionar produtos se fornecidos (recalcula custo incluindo produtos + mão de obra)
     if (createTreatmentDto.products && createTreatmentDto.products.length > 0) {
       await this.adicionarProdutosAoTratamento(treatmentSalvo.id, createTreatmentDto.products, userId, userTipo);
+    } else {
+      // Se não tiver produtos, recalcular para garantir que mão de obra está incluída
+      await this.recalcularCustoELucro(treatmentSalvo.id);
     }
 
     return this.findOne(treatmentSalvo.id, userId, userTipo);
@@ -110,7 +122,7 @@ export class TreatmentsService {
 
     return this.treatmentRepository.find({
       where: { clienteMasterId },
-      relations: ['treatmentProducts', 'treatmentProducts.product', 'treatmentProducts.product.category'],
+      relations: ['treatmentProducts', 'treatmentProducts.product', 'treatmentProducts.product.category', 'clienteMaster'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -147,7 +159,7 @@ export class TreatmentsService {
   async findOne(id: string, userId: string, userTipo: string): Promise<Treatment> {
     const treatment = await this.treatmentRepository.findOne({
       where: { id },
-      relations: ['treatmentProducts', 'treatmentProducts.product', 'treatmentProducts.product.category'],
+      relations: ['treatmentProducts', 'treatmentProducts.product', 'treatmentProducts.product.category', 'clienteMaster'],
     });
 
     if (!treatment) {
@@ -172,14 +184,31 @@ export class TreatmentsService {
     if (updateTreatmentDto.description !== undefined) {
       treatment.description = updateTreatmentDto.description;
     }
+    const tempoMudou = updateTreatmentDto.averageDurationMinutes !== undefined && 
+      updateTreatmentDto.averageDurationMinutes !== treatment.averageDurationMinutes;
+    
     if (updateTreatmentDto.averageDurationMinutes !== undefined) {
       treatment.averageDurationMinutes = updateTreatmentDto.averageDurationMinutes;
     }
     if (updateTreatmentDto.price !== undefined) {
       treatment.price = updateTreatmentDto.price;
     }
+    
+    // Se custo foi fornecido manualmente, usar ele; senão recalcular
     if (updateTreatmentDto.custo !== undefined && updateTreatmentDto.custo !== null) {
       treatment.custo = Number(updateTreatmentDto.custo);
+    } else if (tempoMudou || updateTreatmentDto.products) {
+      // Se tempo mudou ou produtos foram atualizados, recalcular custo (inclui valorhora)
+      await this.recalcularCustoELucro(treatment.id);
+      // Buscar tratamento atualizado após recálculo
+      const treatmentAtualizado = await this.treatmentRepository.findOne({
+        where: { id: treatment.id },
+        relations: ['clienteMaster'],
+      });
+      if (treatmentAtualizado) {
+        treatment.custo = treatmentAtualizado.custo;
+        treatment.lucro = treatmentAtualizado.lucro;
+      }
     }
 
     // Calcular lucro apenas se ambos price e custo estiverem definidos
@@ -191,7 +220,7 @@ export class TreatmentsService {
 
     await this.treatmentRepository.save(treatment);
 
-    // Atualizar produtos se fornecidos (sem recalcular custo/lucro)
+    // Atualizar produtos se fornecidos (recalcula custo incluindo produtos + mão de obra)
     if (updateTreatmentDto.products !== undefined) {
       // Remover produtos antigos
       await this.treatmentProductRepository.delete({ treatmentId: id });
@@ -199,6 +228,9 @@ export class TreatmentsService {
       // Adicionar novos produtos
       if (updateTreatmentDto.products.length > 0) {
         await this.adicionarProdutosAoTratamento(id, updateTreatmentDto.products, userId, userTipo);
+      } else {
+        // Se removeu todos os produtos, recalcular custo (apenas mão de obra se tiver valorhora)
+        await this.recalcularCustoELucro(id);
       }
     }
 
@@ -245,15 +277,19 @@ export class TreatmentsService {
 
       await this.treatmentProductRepository.save(treatmentProduct);
     }
+
+    // Recalcular custo após adicionar produtos (inclui produtos + mão de obra)
+    await this.recalcularCustoELucro(treatmentId);
   }
 
   /**
    * Recalcula e atualiza o custo e lucro de um tratamento
+   * Inclui custo dos produtos + (valorhora * tempo em horas)
    */
   private async recalcularCustoELucro(treatmentId: string): Promise<void> {
     const treatment = await this.treatmentRepository.findOne({
       where: { id: treatmentId },
-      relations: ['treatmentProducts', 'treatmentProducts.product'],
+      relations: ['treatmentProducts', 'treatmentProducts.product', 'clienteMaster'],
     });
 
     if (!treatment) {
@@ -262,7 +298,7 @@ export class TreatmentsService {
 
     let custoTotal = 0;
 
-    // Calcular custo total de todos os produtos (proporcional)
+    // 1. Calcular custo total de todos os produtos (proporcional)
     for (const treatmentProduct of treatment.treatmentProducts) {
       const product = treatmentProduct.product;
       const quantidadeUsada = Number(treatmentProduct.quantityUsed);
@@ -283,6 +319,13 @@ export class TreatmentsService {
       custoTotal += custoProduto;
     }
 
+    // 2. Adicionar custo de mão de obra (valorhora * tempo em horas)
+    if (treatment.clienteMaster && treatment.clienteMaster.valorHora) {
+      const tempoEmHoras = Number(treatment.averageDurationMinutes) / 60; // Converter minutos para horas
+      const custoMaoDeObra = Number(treatment.clienteMaster.valorHora) * tempoEmHoras;
+      custoTotal += custoMaoDeObra;
+    }
+
     // Calcular lucro (preço - custo)
     const lucro = Number(treatment.price) - custoTotal;
 
@@ -295,6 +338,7 @@ export class TreatmentsService {
 
   /**
    * Calcula o custo direto total de um tratamento
+   * Inclui custo dos produtos + mão de obra (valorhora * tempo)
    */
   async calculateTreatmentCost(treatmentId: string, userId: string, userTipo: string): Promise<{
     treatment: Treatment;
@@ -306,17 +350,19 @@ export class TreatmentsService {
       quantityUsed: number;
       cost: number;
     }>;
+    laborCost?: number;
   }> {
     const treatment = await this.findOne(treatmentId, userId, userTipo);
 
     let directCost = 0;
+    let laborCost = 0;
     const productsBreakdown: Array<{
       product: Product;
       quantityUsed: number;
       cost: number;
     }> = [];
 
-    // Calcular custo de cada produto usado (proporcional)
+    // 1. Calcular custo de cada produto usado (proporcional)
     for (const treatmentProduct of treatment.treatmentProducts) {
       const product = treatmentProduct.product;
       const quantidadeUsada = Number(treatmentProduct.quantityUsed);
@@ -343,6 +389,13 @@ export class TreatmentsService {
       });
     }
 
+    // 2. Adicionar custo de mão de obra (valorhora * tempo em horas)
+    if (treatment.clienteMaster && treatment.clienteMaster.valorHora) {
+      const tempoEmHoras = Number(treatment.averageDurationMinutes) / 60;
+      laborCost = Number(treatment.clienteMaster.valorHora) * tempoEmHoras;
+      directCost += laborCost;
+    }
+
     // Calcular margem
     const margin = Number(treatment.price) - directCost;
     const marginPercentage = Number(treatment.price) > 0 
@@ -355,7 +408,62 @@ export class TreatmentsService {
       margin: Number(margin.toFixed(2)),
       marginPercentage: Number(marginPercentage.toFixed(2)),
       productsBreakdown,
+      laborCost: laborCost > 0 ? Number(laborCost.toFixed(2)) : undefined,
     };
+  }
+
+  /**
+   * Atualiza todos os custos de todos os tratamentos de um ClienteMaster
+   * Chamado quando valorhora é alterado
+   */
+  async atualizarCustosPorValorHora(clienteMasterId: string): Promise<{
+    atualizados: number;
+    detalhes: Array<{
+      treatmentId: string;
+      nome: string;
+      custoAnterior: number;
+      custoNovo: number;
+    }>;
+  }> {
+    const tratamentos = await this.treatmentRepository.find({
+      where: { clienteMasterId },
+      relations: ['treatmentProducts', 'treatmentProducts.product', 'clienteMaster'],
+    });
+
+    const resultado = {
+      atualizados: 0,
+      detalhes: [] as Array<{
+        treatmentId: string;
+        nome: string;
+        custoAnterior: number;
+        custoNovo: number;
+      }>,
+    };
+
+    for (const treatment of tratamentos) {
+      const custoAnterior = Number(treatment.custo);
+      
+      // Recalcular custo (inclui produtos + mão de obra atualizada)
+      await this.recalcularCustoELucro(treatment.id);
+      
+      // Buscar tratamento atualizado
+      const treatmentAtualizado = await this.treatmentRepository.findOne({
+        where: { id: treatment.id },
+      });
+
+      if (treatmentAtualizado) {
+        const custoNovo = Number(treatmentAtualizado.custo);
+        resultado.atualizados++;
+        resultado.detalhes.push({
+          treatmentId: treatment.id,
+          nome: treatment.name,
+          custoAnterior,
+          custoNovo,
+        });
+      }
+    }
+
+    return resultado;
   }
 }
 

@@ -76,6 +76,7 @@ export class ClientesMasterController {
         site: clienteMaster.site,
         descricao: clienteMaster.descricao,
         outrasInformacoes: clienteMaster.outrasInformacoes,
+        valorhora: clienteMaster.valorHora,
         ativo: clienteMaster.ativo,
         createdAt: clienteMaster.createdAt,
         updatedAt: clienteMaster.updatedAt,
@@ -101,6 +102,23 @@ export class ClientesMasterController {
   @UseGuards(JwtAuthGuard, IsMasterGuard)
   async findOne(@Param('id') id: string) {
     return this.clientesMasterService.findById(id);
+  }
+
+  @Get(':id/valorhora')
+  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
+  async getValorHora(@Param('id') id: string) {
+    const clienteMaster = await this.clientesMasterService.findById(id);
+    if (!clienteMaster) {
+      throw new NotFoundException('Cliente Master não encontrado');
+    }
+    return {
+      statusCode: 200,
+      message: 'Success',
+      data: {
+        clienteMasterId: id,
+        valorhora: clienteMaster.valorHora,
+      },
+    };
   }
 
   @Post('complete')
@@ -281,6 +299,11 @@ export class ClientesMasterController {
       delete updateData.documento;
     }
 
+    // Remover campo "valorhora" se existir (já foi mapeado para valorHora pelo Transform)
+    if (updateData.valorhora !== undefined) {
+      delete updateData.valorhora;
+    }
+
     // Atualizar os dados no banco
     const updated = await this.clientesMasterService.update(clienteMasterId, updateData);
 
@@ -296,6 +319,7 @@ export class ClientesMasterController {
         site: updated.site,
         descricao: updated.descricao,
         outrasInformacoes: updated.outrasInformacoes,
+        valorhora: updated.valorHora,
         ativo: updated.ativo,
       },
     };

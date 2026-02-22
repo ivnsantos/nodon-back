@@ -53,6 +53,9 @@ export class ClienteMaster {
   @Column({ name: 'outras_informacoes', type: 'text', nullable: true })
   outrasInformacoes: string; // Outras informações da empresa (JSON ou texto)
 
+  @Column({ name: 'valor_hora', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  valorHora: number | null; // Valor da hora de trabalho (usado no cálculo de custo dos tratamentos)
+
   @Column({ type: 'varchar', length: 36, unique: true, nullable: true })
   hash: string | null; // Hash UUID único para vinculação de usuários comuns
 

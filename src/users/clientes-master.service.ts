@@ -14,6 +14,7 @@ import { ChatService } from '../chat/chat.service';
 import { PacientesService } from '../pacientes/pacientes.service';
 import { Radiografia } from '../radiografias/entities/radiografia.entity';
 import { Paciente } from '../pacientes/entities/paciente.entity';
+import { TreatmentsService } from '../treatments/services/treatments.service';
 
 @Injectable()
 export class ClientesMasterService {
@@ -41,6 +42,8 @@ export class ClientesMasterService {
     private radiografiaRepository: Repository<Radiografia>,
     @InjectRepository(Paciente)
     private pacienteRepository: Repository<Paciente>,
+    @Inject(forwardRef(() => TreatmentsService))
+    private treatmentsService: TreatmentsService,
   ) {}
 
   async create(data: {
@@ -125,11 +128,30 @@ export class ClientesMasterService {
   }
 
   async update(id: string, data: Partial<ClienteMaster>): Promise<ClienteMaster> {
+    // Verificar se valorhora está sendo alterado
+    const clienteMasterAntigo = await this.findById(id);
+    const valorHoraMudou = clienteMasterAntigo && 
+      data.valorHora !== undefined && 
+      data.valorHora !== clienteMasterAntigo.valorHora;
+
     await this.clienteMasterRepository.update(id, data);
     const clienteMaster = await this.findById(id);
     if (!clienteMaster) {
       throw new Error('Cliente Master não encontrado');
     }
+
+    // Se valorhora foi alterado, atualizar todos os custos dos tratamentos
+    if (valorHoraMudou) {
+      try {
+        console.log(`🔄 Valor hora alterado para R$ ${data.valorHora}. Atualizando custos de todos os tratamentos...`);
+        const resultado = await this.treatmentsService.atualizarCustosPorValorHora(id);
+        console.log(`✅ ${resultado.atualizados} tratamentos atualizados com sucesso`);
+      } catch (error: any) {
+        console.error('❌ Erro ao atualizar custos dos tratamentos:', error.message);
+        // Não lança erro para não bloquear a atualização do ClienteMaster
+      }
+    }
+
     return clienteMaster;
   }
 
@@ -254,6 +276,7 @@ export class ClientesMasterService {
         site: clienteMaster.site,
         descricao: clienteMaster.descricao,
         outrasInformacoes: clienteMaster.outrasInformacoes,
+        valorhora: clienteMaster.valorHora,
         ativo: clienteMaster.ativo,
         createdAt: clienteMaster.createdAt,
         updatedAt: clienteMaster.updatedAt,
