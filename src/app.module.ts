@@ -26,6 +26,7 @@ import { CalendarioModule } from './calendario/calendario.module';
 import { TypeOrmConfigService } from './config/typeorm.config';
 import { PlanosService } from './planos/planos.service';
 import { SmsModule } from './sms/sms.module';
+import { QueueModule } from './queue/queue.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { SmsModule } from './sms/sms.module';
     AnotacoesModule,
     OrcamentosModule,
     CalendarioModule,
+    QueueModule,
   ],
 })
 export class AppModule implements OnModuleInit {

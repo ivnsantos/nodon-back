@@ -15,6 +15,7 @@ import { ClientesMasterModule } from '../users/clientes-master.module';
 import { EmailModule } from '../email/email.module';
 import { ChatModule } from '../chat/chat.module';
 import { AuthModule } from '../auth/auth.module';
+import { QueueModule } from '../queue/queue.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AuthModule } from '../auth/auth.module';
     EmailModule,
     forwardRef(() => ChatModule),
     forwardRef(() => AuthModule),
+    QueueModule,
   ],
   controllers: [AssinaturasController],
   providers: [AssinaturasService, AsaasService],

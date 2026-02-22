@@ -24,6 +24,7 @@ const clientes_master_module_1 = require("../users/clientes-master.module");
 const email_module_1 = require("../email/email.module");
 const chat_module_1 = require("../chat/chat.module");
 const auth_module_1 = require("../auth/auth.module");
+const queue_module_1 = require("../queue/queue.module");
 let AssinaturasModule = class AssinaturasModule {
 };
 exports.AssinaturasModule = AssinaturasModule;
@@ -38,6 +39,7 @@ exports.AssinaturasModule = AssinaturasModule = __decorate([
             email_module_1.EmailModule,
             (0, common_1.forwardRef)(() => chat_module_1.ChatModule),
             (0, common_1.forwardRef)(() => auth_module_1.AuthModule),
+            queue_module_1.QueueModule,
         ],
         controllers: [assinaturas_controller_1.AssinaturasController],
         providers: [assinaturas_service_1.AssinaturasService, asaas_service_1.AsaasService],

@@ -20,6 +20,7 @@ import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
 import { ChatService } from '../chat/chat.service';
+import { QueueService } from '../queue/queue.service';
 export declare class AssinaturasService {
     private readonly assinaturaRepository;
     private readonly recorrenciaRepository;
@@ -35,7 +36,8 @@ export declare class AssinaturasService {
     private readonly userComumService;
     private readonly emailService;
     private readonly chatService;
-    constructor(assinaturaRepository: Repository<Assinatura>, recorrenciaRepository: Repository<Recorrencia>, cobrancaRepository: Repository<Cobranca>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, emailService: EmailService, chatService: ChatService);
+    private readonly queueService;
+    constructor(assinaturaRepository: Repository<Assinatura>, recorrenciaRepository: Repository<Recorrencia>, cobrancaRepository: Repository<Cobranca>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, emailService: EmailService, chatService: ChatService, queueService: QueueService);
     create(createSubscriptionDto: CreateSubscriptionDto): Promise<any>;
     createSimple(createSimpleSubscriptionDto: CreateSimpleSubscriptionDto, user: {
         id: string;
@@ -174,6 +176,7 @@ export declare class AssinaturasService {
             mensagem: string;
         }>;
     }>;
+    processarRecorrenciaIndividual(recorrenciaId: string, assinaturaId: string): Promise<void>;
     createCustomer(createCustomerDto: CreateCustomerDto): Promise<{
         asaasCustomerId: string;
         userId: string;

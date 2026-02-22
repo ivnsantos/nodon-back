@@ -33,6 +33,7 @@ import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
 import { ChatService } from '../chat/chat.service';
 import { newRelicLog } from '../common/utils/newrelic-logger';
+import { QueueService } from '../queue/queue.service';
 
 @Injectable()
 export class AssinaturasService {
@@ -58,6 +59,7 @@ export class AssinaturasService {
     private readonly emailService: EmailService,
     @Inject(forwardRef(() => ChatService))
     private readonly chatService: ChatService,
+    private readonly queueService: QueueService,
   ) {}
 
   async create(
@@ -1814,6 +1816,7 @@ export class AssinaturasService {
 
   /**
    * Processa recorrências que vencem hoje
+   * Agora usa BullMQ para processar jobs de forma assíncrona
    * CRON job que roda diariamente para cobrar assinaturas
    */
   async processarRecorrencias(): Promise<{
@@ -1856,37 +1859,31 @@ export class AssinaturasService {
       });
     } else {
       console.log(`ℹ️  Nenhuma recorrência encontrada para processar hoje.`);
+      return {
+        processadas: 0,
+        sucesso: 0,
+        falhas: 0,
+        detalhes: [],
+      };
     }
 
-    const resultado = {
-      processadas: recorrencias.length,
-      sucesso: 0,
-      falhas: 0,
-      detalhes: [] as Array<{
-        assinaturaId: string;
-        status: string;
-        mensagem: string;
-      }>,
-    };
+    let jobsAdicionados = 0;
+    let jobsPulados = 0;
 
+    // Adicionar cada recorrência como um job na fila
     for (let i = 0; i < recorrencias.length; i++) {
       const recorrencia = recorrencias[i];
       const assinatura = recorrencia.assinatura;
 
       console.log(`\n${'-'.repeat(80)}`);
-      console.log(`🔄 [${i + 1}/${recorrencias.length}] Processando recorrência ID: ${recorrencia.id}`);
+      console.log(`🔄 [${i + 1}/${recorrencias.length}] Preparando recorrência ID: ${recorrencia.id}`);
       console.log(`   Assinatura ID: ${recorrencia.assinaturaId}`);
       console.log(`   Valor: R$ ${recorrencia.valor}`);
       console.log(`   Next Due Date: ${recorrencia.nextDueDate}`);
 
       if (!assinatura) {
         console.error(`❌ [${i + 1}/${recorrencias.length}] Assinatura não encontrada para recorrência ${recorrencia.id}`);
-        resultado.falhas++;
-        resultado.detalhes.push({
-          assinaturaId: recorrencia.assinaturaId,
-          status: 'ERRO',
-          mensagem: 'Assinatura não encontrada',
-        });
+        jobsPulados++;
         continue;
       }
 
@@ -1899,12 +1896,7 @@ export class AssinaturasService {
       if (assinatura.status !== 'ACTIVE') {
         console.log(`⚠️ [${i + 1}/${recorrencias.length}] Assinatura ${assinatura.id} não está ativa (status: ${assinatura.status}). Removendo da recorrência.`);
         await this.removerRecorrencia(assinatura.id);
-        resultado.falhas++;
-        resultado.detalhes.push({
-          assinaturaId: assinatura.id,
-          status: 'PULADO',
-          mensagem: `Assinatura não está ativa (status: ${assinatura.status})`,
-        });
+        jobsPulados++;
         continue;
       }
 
@@ -1913,157 +1905,248 @@ export class AssinaturasService {
         console.error(`❌ [${i + 1}/${recorrencias.length}] Assinatura ${assinatura.id} não tem token do cartão ou customer ID`);
         console.error(`   creditCardToken: ${assinatura.creditCardToken ? 'OK' : 'FALTANDO'}`);
         console.error(`   asaasCustomerId: ${assinatura.asaasCustomerId ? 'OK' : 'FALTANDO'}`);
-        resultado.falhas++;
-        resultado.detalhes.push({
-          assinaturaId: assinatura.id,
-          status: 'ERRO',
-          mensagem: 'Dados insuficientes para cobrança (falta token ou customer ID)',
-        });
+        jobsPulados++;
         continue;
       }
 
-      try {
-        console.log(`💳 [${i + 1}/${recorrencias.length}] Criando cobrança na ASAAS...`);
-        console.log(`   Valor: R$ ${Number(recorrencia.valor)}`);
-        console.log(`   Due Date: ${hoje}`);
-        console.log(`   Customer: ${assinatura.asaasCustomerId}`);
-        console.log(`   Billing Type: ${assinatura.billingType || 'CREDIT_CARD'}`);
+      // ⚠️ VALIDAÇÃO ANTI-DUPLICAÇÃO: Verificar se já existe cobrança para esta assinatura na data de hoje
+      console.log(`🔍 [${i + 1}/${recorrencias.length}] Verificando se já existe cobrança para esta assinatura na data de hoje...`);
+      const cobrancaExistente = await this.cobrancaRepository
+        .createQueryBuilder('cobranca')
+        .where('cobranca.assinatura_id = :assinaturaId', { assinaturaId: assinatura.id })
+        .andWhere('cobranca.due_date = :hoje', { hoje: hojeDate })
+        .getOne();
 
-        // Criar cobrança na ASAAS
-        const paymentResult = await this.asaasService.createPayment({
-          billingType: assinatura.billingType || 'CREDIT_CARD',
-          customer: assinatura.asaasCustomerId,
-          value: Number(recorrencia.valor),
-          dueDate: hoje,
-          creditCardToken: assinatura.creditCardToken,
-        });
-
-        console.log(`✅ [${i + 1}/${recorrencias.length}] Cobrança criada na ASAAS`);
-        console.log(`   Payment ID: ${paymentResult.id}`);
-        console.log(`   Status: ${paymentResult.status}`);
-
-        console.log(`💾 [${i + 1}/${recorrencias.length}] Registrando cobrança na tabela...`);
+      if (cobrancaExistente) {
+        console.log(`⚠️ [${i + 1}/${recorrencias.length}] JÁ EXISTE cobrança para assinatura ${assinatura.id} na data ${hoje}`);
+        console.log(`   Cobrança ID: ${cobrancaExistente.id}`);
+        console.log(`   Status: ${cobrancaExistente.status}`);
+        console.log(`   ASAAS Payment ID: ${cobrancaExistente.asaasPaymentId}`);
+        console.log(`   ⏭️ Pulando esta recorrência para evitar cobrança duplicada`);
         
-        // Registrar cobrança na tabela
-        await this.registrarCobranca({
-          userId: assinatura.userId,
-          asaasPaymentId: paymentResult.id,
-          asaasCustomerId: assinatura.asaasCustomerId,
-          value: Number(recorrencia.valor),
-          billingType: assinatura.billingType || 'CREDIT_CARD',
-          status: paymentResult.status,
-          dueDate: hojeDate,
-          paymentDate: paymentResult.paymentDate ? this.parseDataBrasil(paymentResult.paymentDate) : null,
-          asaasResponse: JSON.stringify(paymentResult),
-          assinaturaId: null, // Será vinculada depois se confirmado
-          planoId: assinatura.planoId || null,
-          couponId: assinatura.couponId || null,
+        // Log customizado para New Relic
+        newRelicLog('warn', 'Recorrência pulada - cobrança já existe', {
+          assinaturaId: assinatura.id,
+          recorrenciaId: recorrencia.id,
+          cobrancaExistenteId: cobrancaExistente.id,
+          cobrancaStatus: cobrancaExistente.status,
+          data: hoje,
+          motivo: 'Cobrança duplicada evitada',
         });
+        
+        jobsPulados++;
+        continue; // Pula para próxima recorrência
+      }
 
-        console.log(`✅ [${i + 1}/${recorrencias.length}] Cobrança registrada na tabela`);
+      console.log(`✅ [${i + 1}/${recorrencias.length}] Nenhuma cobrança encontrada para esta data. Adicionando job à fila...`);
 
-        // Verificar status do pagamento
-        if (paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED') {
-          console.log(`✅ [${i + 1}/${recorrencias.length}] Pagamento CONFIRMED! Atualizando assinatura e recorrência...`);
-          
-          // ✅ Pagamento confirmado - atualizar assinatura e recorrência
-          const proximoMes = this.calcularProximoMes();
-          const proximoMesDate = this.parseDataBrasil(proximoMes);
+      try {
+        // Adicionar job na fila (processamento assíncrono)
+        await this.queueService.adicionarJobProcessarRecorrencia(
+          recorrencia.id,
+          assinatura.id,
+        );
 
-          console.log(`   Próxima data de cobrança: ${proximoMes}`);
+        jobsAdicionados++;
+        console.log(`📋 Job adicionado à fila para recorrência ${recorrencia.id} - Assinatura: ${assinatura.id}`);
+      } catch (error: any) {
+        jobsPulados++;
+        console.error(`❌ Erro ao adicionar job para recorrência ${recorrencia.id}: ${error.message}`);
+        if (error.stack) {
+          console.error(`   Stack: ${error.stack}`);
+        }
+      }
+    }
 
-          // Atualizar assinatura
-          console.log(`   Atualizando assinatura ${assinatura.id}...`);
-          assinatura.nextDueDate = proximoMesDate;
-          await this.assinaturaRepository.save(assinatura);
-          console.log(`   ✅ Assinatura atualizada`);
+    console.log(`\n${'='.repeat(80)}`);
+    console.log(`📊 RESUMO DO PROCESSAMENTO:`);
+    console.log(`   Total encontradas: ${recorrencias.length}`);
+    console.log(`   Jobs adicionados: ${jobsAdicionados}`);
+    console.log(`   Jobs pulados: ${jobsPulados}`);
+    console.log(`📊 Os jobs serão processados assincronamente pelo worker`);
+    console.log(`${'='.repeat(80)}\n`);
 
-          // Atualizar recorrência
-          console.log(`   Atualizando recorrência ${recorrencia.id}...`);
-          recorrencia.nextDueDate = proximoMesDate;
-          recorrencia.valor = assinatura.value;
-          await this.recorrenciaRepository.save(recorrencia);
-          console.log(`   ✅ Recorrência atualizada`);
+    return {
+      processadas: recorrencias.length,
+      sucesso: 0, // Será atualizado pelos workers
+      falhas: 0, // Será atualizado pelos workers
+      detalhes: [], // Será atualizado pelos workers
+    };
+  }
 
-          // Vincular cobrança à assinatura
-          console.log(`   Vinculando cobrança à assinatura...`);
-          const cobranca = await this.cobrancaRepository.findOne({
-            where: { asaasPaymentId: paymentResult.id },
-          });
-          if (cobranca) {
-            cobranca.assinaturaId = assinatura.id;
-            await this.cobrancaRepository.save(cobranca);
-            console.log(`   ✅ Cobrança vinculada`);
-            
-            // Log customizado para New Relic
-            newRelicLog('info', 'Recorrência processada com sucesso', {
-              assinaturaId: assinatura.id,
-              recorrenciaId: recorrencia.id,
-              asaasPaymentId: paymentResult.id,
-              valor: Number(recorrencia.valor),
-              proximaCobranca: proximoMes,
-              status: 'CONFIRMED',
-            });
-          } else {
-            console.log(`   ⚠️ Cobrança não encontrada para vincular`);
-          }
+  /**
+   * Processa uma recorrência individual
+   * Este método é chamado pelo worker do BullMQ
+   */
+  async processarRecorrenciaIndividual(
+    recorrenciaId: string,
+    assinaturaId: string,
+  ): Promise<void> {
+    console.log(`\n${'-'.repeat(80)}`);
+    console.log(`🔄 Processando recorrência individual ID: ${recorrenciaId}`);
+    console.log(`   Assinatura ID: ${assinaturaId}`);
 
-          console.log(`✅ [${i + 1}/${recorrencias.length}] SUCESSO: Cobrança confirmada para assinatura ${assinatura.id}. Próxima cobrança: ${proximoMes}`);
-          resultado.sucesso++;
-          resultado.detalhes.push({
-            assinaturaId: assinatura.id,
-            status: 'SUCESSO',
-            mensagem: `Pagamento confirmado. Próxima cobrança: ${proximoMes}`,
-          });
-        } else {
-          console.log(`❌ [${i + 1}/${recorrencias.length}] Pagamento NÃO confirmado. Status: ${paymentResult.status}`);
-          console.log(`   Colocando assinatura como PENDING e removendo da recorrência...`);
-          
-          // ❌ Pagamento falhou - colocar assinatura como PENDING e remover da recorrência
-          assinatura.status = 'PENDING';
-          await this.assinaturaRepository.save(assinatura);
-          console.log(`   ✅ Assinatura marcada como PENDING`);
+    // Buscar recorrência e assinatura
+    const recorrencia = await this.recorrenciaRepository.findOne({
+      where: { id: recorrenciaId },
+      relations: ['assinatura'],
+    });
 
-          // Remover da recorrência
-          await this.removerRecorrencia(assinatura.id);
-          console.log(`   ✅ Assinatura removida da recorrência`);
+    if (!recorrencia) {
+      throw new Error(`Recorrência ${recorrenciaId} não encontrada`);
+    }
 
-          // Atualizar status da cobrança para FAILED
-          const cobranca = await this.cobrancaRepository.findOne({
-            where: { asaasPaymentId: paymentResult.id },
-          });
-          if (cobranca) {
-            cobranca.status = 'FAILED';
-            await this.cobrancaRepository.save(cobranca);
-            console.log(`   ✅ Cobrança marcada como FAILED`);
-          }
+    const assinatura = recorrencia.assinatura;
 
-          console.error(`❌ [${i + 1}/${recorrencias.length}] FALHA: Cobrança falhou para assinatura ${assinatura.id}. Status: ${paymentResult.status}`);
+    if (!assinatura) {
+      throw new Error(`Assinatura não encontrada para recorrência ${recorrenciaId}`);
+    }
+
+    if (assinatura.id !== assinaturaId) {
+      throw new Error(`Assinatura ID não corresponde: esperado ${assinaturaId}, encontrado ${assinatura.id}`);
+    }
+
+    console.log(`   Assinatura encontrada: ${assinatura.id}`);
+    console.log(`   Status da assinatura: ${assinatura.status}`);
+    console.log(`   Valor: R$ ${recorrencia.valor}`);
+
+    // Verificar se assinatura está ativa
+    if (assinatura.status !== 'ACTIVE') {
+      console.log(`⚠️ Assinatura ${assinatura.id} não está ativa (status: ${assinatura.status}). Removendo da recorrência.`);
+      await this.removerRecorrencia(assinatura.id);
+      throw new Error(`Assinatura não está ativa (status: ${assinatura.status})`);
+    }
+
+    // Verificar se tem token do cartão
+    if (!assinatura.creditCardToken || !assinatura.asaasCustomerId) {
+      throw new Error('Dados insuficientes para cobrança (falta token ou customer ID)');
+    }
+
+    const hoje = this.getDataAtualBrasil(); // Formato: YYYY-MM-DD
+    const hojeDate = this.parseDataBrasil(hoje);
+
+    // ⚠️ VALIDAÇÃO ANTI-DUPLICAÇÃO: Verificar se já existe cobrança para esta assinatura na data de hoje
+    console.log(`🔍 Verificando se já existe cobrança para esta assinatura na data de hoje...`);
+    const cobrancaExistente = await this.cobrancaRepository
+      .createQueryBuilder('cobranca')
+      .where('cobranca.assinatura_id = :assinaturaId', { assinaturaId: assinatura.id })
+      .andWhere('cobranca.due_date = :hoje', { hoje: hojeDate })
+      .getOne();
+
+    if (cobrancaExistente) {
+      console.log(`⚠️ JÁ EXISTE cobrança para assinatura ${assinatura.id} na data ${hoje}`);
+      console.log(`   Cobrança ID: ${cobrancaExistente.id}`);
+      console.log(`   Status: ${cobrancaExistente.status}`);
+      console.log(`   ASAAS Payment ID: ${cobrancaExistente.asaasPaymentId}`);
+      console.log(`   ⏭️ Pulando esta recorrência para evitar cobrança duplicada`);
+      
+      // Log customizado para New Relic
+      newRelicLog('warn', 'Recorrência pulada - cobrança já existe', {
+        assinaturaId: assinatura.id,
+        recorrenciaId: recorrencia.id,
+        cobrancaExistenteId: cobrancaExistente.id,
+        cobrancaStatus: cobrancaExistente.status,
+        data: hoje,
+        motivo: 'Cobrança duplicada evitada',
+      });
+      
+      throw new Error(`Cobrança já existe para esta data. Status: ${cobrancaExistente.status}`);
+    }
+
+    console.log(`✅ Nenhuma cobrança encontrada para esta data. Prosseguindo...`);
+
+    try {
+      console.log(`💳 Criando cobrança na ASAAS...`);
+      console.log(`   Valor: R$ ${Number(recorrencia.valor)}`);
+      console.log(`   Due Date: ${hoje}`);
+      console.log(`   Customer: ${assinatura.asaasCustomerId}`);
+      console.log(`   Billing Type: ${assinatura.billingType || 'CREDIT_CARD'}`);
+
+      // Criar cobrança na ASAAS
+      const paymentResult = await this.asaasService.createPayment({
+        billingType: assinatura.billingType || 'CREDIT_CARD',
+        customer: assinatura.asaasCustomerId,
+        value: Number(recorrencia.valor),
+        dueDate: hoje,
+        creditCardToken: assinatura.creditCardToken,
+      });
+
+      console.log(`✅ Cobrança criada na ASAAS`);
+      console.log(`   Payment ID: ${paymentResult.id}`);
+      console.log(`   Status: ${paymentResult.status}`);
+
+      console.log(`💾 Registrando cobrança na tabela...`);
+      
+      // Registrar cobrança na tabela
+      await this.registrarCobranca({
+        userId: assinatura.userId,
+        asaasPaymentId: paymentResult.id,
+        asaasCustomerId: assinatura.asaasCustomerId,
+        value: Number(recorrencia.valor),
+        billingType: assinatura.billingType || 'CREDIT_CARD',
+        status: paymentResult.status,
+        dueDate: hojeDate,
+        paymentDate: paymentResult.paymentDate ? this.parseDataBrasil(paymentResult.paymentDate) : null,
+        asaasResponse: JSON.stringify(paymentResult),
+        assinaturaId: null, // Será vinculada depois se confirmado
+        planoId: assinatura.planoId || null,
+        couponId: assinatura.couponId || null,
+      });
+
+      console.log(`✅ Cobrança registrada na tabela`);
+
+      // Verificar status do pagamento
+      if (paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED') {
+        console.log(`✅ Pagamento CONFIRMED! Atualizando assinatura e recorrência...`);
+        
+        // ✅ Pagamento confirmado - atualizar assinatura e recorrência
+        const proximoMes = this.calcularProximoMes();
+        const proximoMesDate = this.parseDataBrasil(proximoMes);
+
+        console.log(`   Próxima data de cobrança: ${proximoMes}`);
+
+        // Atualizar assinatura
+        console.log(`   Atualizando assinatura ${assinatura.id}...`);
+        assinatura.nextDueDate = proximoMesDate;
+        await this.assinaturaRepository.save(assinatura);
+        console.log(`   ✅ Assinatura atualizada`);
+
+        // Atualizar recorrência
+        console.log(`   Atualizando recorrência ${recorrencia.id}...`);
+        recorrencia.nextDueDate = proximoMesDate;
+        recorrencia.valor = assinatura.value;
+        await this.recorrenciaRepository.save(recorrencia);
+        console.log(`   ✅ Recorrência atualizada`);
+
+        // Vincular cobrança à assinatura
+        console.log(`   Vinculando cobrança à assinatura...`);
+        const cobranca = await this.cobrancaRepository.findOne({
+          where: { asaasPaymentId: paymentResult.id },
+        });
+        if (cobranca) {
+          cobranca.assinaturaId = assinatura.id;
+          await this.cobrancaRepository.save(cobranca);
+          console.log(`   ✅ Cobrança vinculada`);
           
           // Log customizado para New Relic
-          newRelicLog('warn', 'Recorrência falhou - pagamento não confirmado', {
+          newRelicLog('info', 'Recorrência processada com sucesso', {
             assinaturaId: assinatura.id,
             recorrenciaId: recorrencia.id,
             asaasPaymentId: paymentResult.id,
             valor: Number(recorrencia.valor),
-            status: paymentResult.status,
+            proximaCobranca: proximoMes,
+            status: 'CONFIRMED',
           });
-          
-          resultado.falhas++;
-          resultado.detalhes.push({
-            assinaturaId: assinatura.id,
-            status: 'FALHA',
-            mensagem: `Pagamento não confirmado. Status: ${paymentResult.status}`,
-          });
+        } else {
+          console.log(`   ⚠️ Cobrança não encontrada para vincular`);
         }
-      } catch (error: any) {
-        // ❌ Erro ao processar cobrança
-        console.error(`\n❌ [${i + 1}/${recorrencias.length}] ERRO ao processar cobrança para assinatura ${assinatura.id}:`);
-        console.error(`   Mensagem: ${error.message}`);
-        console.error(`   Stack: ${error.stack}`);
-        console.log(`   Colocando assinatura como PENDING e removendo da recorrência...`);
 
-        // Colocar assinatura como PENDING
+        console.log(`✅ SUCESSO: Cobrança confirmada para assinatura ${assinatura.id}. Próxima cobrança: ${proximoMes}`);
+      } else {
+        console.log(`❌ Pagamento NÃO confirmado. Status: ${paymentResult.status}`);
+        console.log(`   Colocando assinatura como PENDING e removendo da recorrência...`);
+        
+        // ❌ Pagamento falhou - colocar assinatura como PENDING e remover da recorrência
         assinatura.status = 'PENDING';
         await this.assinaturaRepository.save(assinatura);
         console.log(`   ✅ Assinatura marcada como PENDING`);
@@ -2072,23 +2155,56 @@ export class AssinaturasService {
         await this.removerRecorrencia(assinatura.id);
         console.log(`   ✅ Assinatura removida da recorrência`);
 
-        resultado.falhas++;
-        resultado.detalhes.push({
-          assinaturaId: assinatura.id,
-          status: 'ERRO',
-          mensagem: `Erro ao processar: ${error.message}`,
+        // Atualizar status da cobrança para FAILED
+        const cobranca = await this.cobrancaRepository.findOne({
+          where: { asaasPaymentId: paymentResult.id },
         });
-      }
-    }
+        if (cobranca) {
+          cobranca.status = 'FAILED';
+          await this.cobrancaRepository.save(cobranca);
+          console.log(`   ✅ Cobrança marcada como FAILED`);
+        }
 
-    console.log(`\n${'='.repeat(80)}`);
-    console.log(`📊 RESUMO DO PROCESSAMENTO:`);
-    console.log(`   Total processadas: ${resultado.processadas}`);
-    console.log(`   ✅ Sucessos: ${resultado.sucesso}`);
-    console.log(`   ❌ Falhas: ${resultado.falhas}`);
-    console.log(`${'='.repeat(80)}\n`);
-    
-    return resultado;
+        console.error(`❌ FALHA: Cobrança falhou para assinatura ${assinatura.id}. Status: ${paymentResult.status}`);
+        
+        // Log customizado para New Relic
+        newRelicLog('warn', 'Recorrência falhou - pagamento não confirmado', {
+          assinaturaId: assinatura.id,
+          recorrenciaId: recorrencia.id,
+          asaasPaymentId: paymentResult.id,
+          valor: Number(recorrencia.valor),
+          status: paymentResult.status,
+        });
+        
+        throw new Error(`Pagamento não confirmado. Status: ${paymentResult.status}`);
+      }
+    } catch (error: any) {
+      // ❌ Erro ao processar cobrança
+      console.error(`\n❌ ERRO ao processar cobrança para assinatura ${assinatura.id}:`);
+      console.error(`   Mensagem: ${error.message}`);
+      console.error(`   Stack: ${error.stack}`);
+      console.log(`   Colocando assinatura como PENDING e removendo da recorrência...`);
+
+      // Colocar assinatura como PENDING
+      assinatura.status = 'PENDING';
+      await this.assinaturaRepository.save(assinatura);
+      console.log(`   ✅ Assinatura marcada como PENDING`);
+
+      // Remover da recorrência
+      await this.removerRecorrencia(assinatura.id);
+      console.log(`   ✅ Assinatura removida da recorrência`);
+
+      // Log customizado para New Relic
+      newRelicLog('error', 'Erro ao processar recorrência', {
+        assinaturaId: assinatura.id,
+        recorrenciaId: recorrencia.id,
+        error: error.message,
+        stack: error.stack,
+      });
+
+      // Re-throw para que o BullMQ possa fazer retry
+      throw error;
+    }
   }
 
   /**
