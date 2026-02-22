@@ -32,6 +32,7 @@ import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
 import { ChatService } from '../chat/chat.service';
+import { newRelicLog } from '../common/utils/newrelic-logger';
 
 @Injectable()
 export class AssinaturasService {
@@ -302,6 +303,16 @@ export class AssinaturasService {
         if (!statusConfirmado) {
           console.log('⚠️ Pagamento criado mas não aprovado ainda. Status:', paymentResult.status);
           console.log('📝 Cobrança registrada com userId=null. Será atualizada quando status mudar para CONFIRMED.');
+          
+          // Log customizado para New Relic
+          newRelicLog('warn', 'Pagamento criado mas não aprovado', {
+            asaasPaymentId: paymentResult.id,
+            status: paymentResult.status,
+            valor: valorFinal,
+            customerId: asaasCustomerId,
+            planoId: createSubscriptionDto.planoId,
+          });
+          
           // Retorna o paymentResult para o frontend poder verificar depois
           return {
             statusCode: 202,
@@ -320,8 +331,27 @@ export class AssinaturasService {
         }
 
         console.log('✅ Pagamento aprovado:', paymentResult);
+        
+        // Log customizado para New Relic
+        newRelicLog('info', 'Pagamento avulso processado na criação de assinatura', {
+          asaasPaymentId: paymentResult.id,
+          status: paymentResult.status,
+          valor: valorFinal,
+          customerId: asaasCustomerId,
+          planoId: createSubscriptionDto.planoId,
+          aprovado: statusConfirmado,
+        });
       } catch (error: any) {
         console.error('❌ Erro ao processar pagamento:', error);
+        
+        // Log customizado para New Relic
+        newRelicLog('error', 'Erro ao processar pagamento na criação de assinatura', {
+          error: error.message,
+          customerId: asaasCustomerId,
+          valor: valorFinal,
+          planoId: createSubscriptionDto.planoId,
+        });
+        
         throw new BadRequestException(
           `Erro ao processar pagamento: ${error.message || 'Erro desconhecido'}`,
         );
@@ -383,6 +413,19 @@ export class AssinaturasService {
       }
       
       console.log('✅ Assinatura criada com sucesso:', savedSubscription.id);
+      
+      // Log customizado para New Relic
+      newRelicLog('info', 'Assinatura criada com sucesso', {
+        assinaturaId: savedSubscription.id,
+        userId: savedSubscription.userId,
+        planoId: savedSubscription.planoId,
+        valor: savedSubscription.value,
+        billingType: savedSubscription.billingType,
+        status: savedSubscription.status,
+        couponId: couponId || null,
+        pagamentoAprovado: paymentResult?.status === 'CONFIRMED' || paymentResult?.status === 'RECEIVED',
+        asaasPaymentId: paymentResult?.id || null,
+      });
       
       // Retornar pagamento aprovado e assinatura criada
       return {
@@ -513,8 +556,26 @@ export class AssinaturasService {
       // Adiciona na tabela de recorrência (status sempre é ACTIVE ao criar)
       await this.gerenciarRecorrencia(savedSubscription);
       
+      // Log customizado para New Relic
+      newRelicLog('info', 'Assinatura simples criada com sucesso', {
+        assinaturaId: savedSubscription.id,
+        userId: savedSubscription.userId,
+        planoId: savedSubscription.planoId,
+        valor: savedSubscription.value,
+        billingType: savedSubscription.billingType,
+        status: savedSubscription.status,
+        couponId: couponId || null,
+      });
+      
       return this.toResponseDto(savedSubscription);
     } catch (error: any) {
+      // Log customizado para New Relic
+      newRelicLog('error', 'Erro ao salvar assinatura simples', {
+        error: error.message,
+        userId: clienteMaster.id,
+        planoId: createSimpleSubscriptionDto.planoId,
+      });
+      
       throw new InternalServerErrorException(
         `Erro ao salvar assinatura no banco de dados: ${error.message || 'Erro desconhecido'}`,
       );
@@ -1674,7 +1735,31 @@ export class AssinaturasService {
     }
 
     // Chamar serviço ASAAS
-    return await this.asaasService.createPayment(paymentData);
+    try {
+      const result = await this.asaasService.createPayment(paymentData);
+      
+      // Log customizado para New Relic
+      newRelicLog('info', 'Pagamento avulso criado', {
+        asaasPaymentId: result.id,
+        status: result.status,
+        valor: createPaymentDto.value,
+        customerId: createPaymentDto.customer,
+        billingType: createPaymentDto.billingType,
+        aprovado: result.status === 'CONFIRMED' || result.status === 'RECEIVED',
+      });
+      
+      return result;
+    } catch (error: any) {
+      // Log customizado para New Relic
+      newRelicLog('error', 'Erro ao criar pagamento avulso', {
+        error: error.message,
+        customerId: createPaymentDto.customer,
+        valor: createPaymentDto.value,
+        billingType: createPaymentDto.billingType,
+      });
+      
+      throw error;
+    }
   }
 
   /**
@@ -1697,11 +1782,33 @@ export class AssinaturasService {
     console.log(`⏰ [${dataExecucao}] Executando CRON agendado às 9h da manhã`);
     console.log(`${'#'.repeat(80)}\n`);
     
+    // Log customizado para New Relic
+    newRelicLog('info', 'CRON: Iniciando processamento de recorrências', {
+      cronName: 'processar-recorrencias',
+      dataExecucao,
+      timeZone: 'America/Sao_Paulo',
+    });
+    
     try {
-      await this.processarRecorrencias();
+      const resultado = await this.processarRecorrencias();
+      
+      // Log customizado para New Relic
+      newRelicLog('info', 'CRON: Processamento de recorrências concluído', {
+        cronName: 'processar-recorrencias',
+        processadas: resultado.processadas,
+        sucesso: resultado.sucesso,
+        falhas: resultado.falhas,
+      });
     } catch (error: any) {
       console.error(`❌ Erro no CRON automático:`, error.message);
       console.error(`   Stack:`, error.stack);
+      
+      // Log customizado para New Relic
+      newRelicLog('error', 'CRON: Erro no processamento de recorrências', {
+        cronName: 'processar-recorrencias',
+        error: error.message,
+        stack: error.stack,
+      });
     }
   }
 
@@ -1887,6 +1994,16 @@ export class AssinaturasService {
             cobranca.assinaturaId = assinatura.id;
             await this.cobrancaRepository.save(cobranca);
             console.log(`   ✅ Cobrança vinculada`);
+            
+            // Log customizado para New Relic
+            newRelicLog('info', 'Recorrência processada com sucesso', {
+              assinaturaId: assinatura.id,
+              recorrenciaId: recorrencia.id,
+              asaasPaymentId: paymentResult.id,
+              valor: Number(recorrencia.valor),
+              proximaCobranca: proximoMes,
+              status: 'CONFIRMED',
+            });
           } else {
             console.log(`   ⚠️ Cobrança não encontrada para vincular`);
           }
@@ -1922,6 +2039,16 @@ export class AssinaturasService {
           }
 
           console.error(`❌ [${i + 1}/${recorrencias.length}] FALHA: Cobrança falhou para assinatura ${assinatura.id}. Status: ${paymentResult.status}`);
+          
+          // Log customizado para New Relic
+          newRelicLog('warn', 'Recorrência falhou - pagamento não confirmado', {
+            assinaturaId: assinatura.id,
+            recorrenciaId: recorrencia.id,
+            asaasPaymentId: paymentResult.id,
+            valor: Number(recorrencia.valor),
+            status: paymentResult.status,
+          });
+          
           resultado.falhas++;
           resultado.detalhes.push({
             assinaturaId: assinatura.id,

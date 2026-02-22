@@ -219,10 +219,38 @@ let AsaasService = class AsaasService {
             console.log('✅ Criando pagamento no Asaas:', paymentPayload);
             console.log('✅ ASAAS_API_URL:', this.apiUrl);
             const response = await this.axiosInstance.post('/payments', paymentPayload);
+            const newrelic = require('newrelic');
+            if (newrelic) {
+                try {
+                    newrelic.recordCustomEvent('AsaasPaymentCreated', {
+                        paymentId: response.data.id,
+                        status: response.data.status,
+                        value: data.value,
+                        billingType: data.billingType,
+                        customer: data.customer,
+                        aprovado: response.data.status === 'CONFIRMED' || response.data.status === 'RECEIVED',
+                    });
+                }
+                catch (err) {
+                }
+            }
             return response.data;
         }
         catch (error) {
             console.error('Erro ao criar pagamento no Asaas:', error.response?.data || error.message);
+            const newrelic = require('newrelic');
+            if (newrelic) {
+                try {
+                    newrelic.noticeError(new Error(`Erro ao criar pagamento no Asaas: ${error.message}`), {
+                        asaasError: error.response?.data?.errors?.[0]?.description || error.message,
+                        value: data.value,
+                        billingType: data.billingType,
+                        customer: data.customer,
+                    });
+                }
+                catch (err) {
+                }
+            }
             throw new common_1.BadRequestException(`Erro ao criar pagamento no Asaas: ${error.response?.data?.errors?.[0]?.description || error.message}`);
         }
     }

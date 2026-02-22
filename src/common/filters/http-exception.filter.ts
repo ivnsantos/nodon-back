@@ -6,6 +6,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
+import { newRelicLog } from '../utils/newrelic-logger';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
@@ -24,12 +25,25 @@ export class HttpExceptionFilter implements ExceptionFilter {
         ? exception.getResponse()
         : 'Internal server error';
 
+    const errorMessage = typeof message === 'string' ? message : (message as any).message || message;
+
     const errorResponse = {
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
-      message: typeof message === 'string' ? message : (message as any).message || message,
+      message: errorMessage,
     };
+
+    // Enviar erro para New Relic (apenas para erros 5xx)
+    if (status >= 500) {
+      newRelicLog('error', `HTTP ${status}: ${errorMessage}`, {
+        path: request.url,
+        method: request.method,
+        statusCode: status,
+        userAgent: request.headers['user-agent'],
+        ip: request.ip,
+      });
+    }
 
     response.status(status).json(errorResponse);
   }

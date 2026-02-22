@@ -4,6 +4,32 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.default = handler;
+const dotenv = require('dotenv');
+const path = require('path');
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+console.log('📁 Diretório atual:', process.cwd());
+console.log('📁 Tentando carregar .env de:', path.resolve(process.cwd(), '.env'));
+console.log('🔍 Verificando New Relic...');
+console.log('  - NEW_RELIC_LICENSE_KEY:', process.env.NEW_RELIC_LICENSE_KEY ? `✅ Configurado (${process.env.NEW_RELIC_LICENSE_KEY.substring(0, 10)}...)` : '❌ Não configurado');
+console.log('  - NEW_RELIC_APP_NAME:', process.env.NEW_RELIC_APP_NAME || 'Não configurado');
+if (process.env.NEW_RELIC_LICENSE_KEY) {
+    try {
+        console.log('🔄 Tentando carregar New Relic...');
+        require('newrelic');
+        console.log('✅ New Relic agent carregado com sucesso!');
+    }
+    catch (error) {
+        console.error('❌ Erro ao carregar New Relic:', error.message);
+        if (error.stack) {
+            console.error('   Stack:', error.stack);
+        }
+    }
+}
+else {
+    console.log('⚠️ New Relic não será carregado (NEW_RELIC_LICENSE_KEY não encontrado)');
+    console.log('   Verifique se a variável está no arquivo .env');
+}
 const core_1 = require("@nestjs/core");
 const platform_express_1 = require("@nestjs/platform-express");
 const common_1 = require("@nestjs/common");

@@ -1,4 +1,44 @@
 /* eslint-disable */
+/**
+ * Carregar variáveis de ambiente antes de qualquer coisa
+ * Isso garante que NEW_RELIC_LICENSE_KEY esteja disponível
+ * IMPORTANTE: Usar require() aqui porque precisa ser executado antes dos imports ES modules
+ */
+const dotenv = require('dotenv');
+const path = require('path');
+
+// Carregar .env manualmente antes de tudo
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+
+console.log('📁 Diretório atual:', process.cwd());
+console.log('📁 Tentando carregar .env de:', path.resolve(process.cwd(), '.env'));
+
+/**
+ * New Relic agent must be required before any other modules
+ * O agente será carregado via flag -r newrelic no comando node
+ * ou via require aqui se a variável estiver configurada
+ */
+console.log('🔍 Verificando New Relic...');
+console.log('  - NEW_RELIC_LICENSE_KEY:', process.env.NEW_RELIC_LICENSE_KEY ? `✅ Configurado (${process.env.NEW_RELIC_LICENSE_KEY.substring(0, 10)}...)` : '❌ Não configurado');
+console.log('  - NEW_RELIC_APP_NAME:', process.env.NEW_RELIC_APP_NAME || 'Não configurado');
+
+if (process.env.NEW_RELIC_LICENSE_KEY) {
+  try {
+    console.log('🔄 Tentando carregar New Relic...');
+    require('newrelic');
+    console.log('✅ New Relic agent carregado com sucesso!');
+  } catch (error: any) {
+    console.error('❌ Erro ao carregar New Relic:', error.message);
+    if (error.stack) {
+      console.error('   Stack:', error.stack);
+    }
+  }
+} else {
+  console.log('⚠️ New Relic não será carregado (NEW_RELIC_LICENSE_KEY não encontrado)');
+  console.log('   Verifique se a variável está no arquivo .env');
+}
+
 import { NestFactory } from '@nestjs/core';
 import { ExpressAdapter } from '@nestjs/platform-express';
 import { ValidationPipe, BadRequestException } from '@nestjs/common';

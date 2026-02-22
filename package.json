@@ -5,9 +5,10 @@
   "main": "dist/main.js",
   "scripts": {
     "build": "nest build",
-    "start": "node dist/main.js",
+    "start": "node -r newrelic dist/main.js",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/main.js"
+    "start:prod": "node -r newrelic dist/main.js",
+    "start:dev:newrelic": "NEW_RELIC_APP_NAME=NODON_PROD NEW_RELIC_LICENSE_KEY=0743f565dca6de0d82ff1a7ea6e4c24eFFFFNR node -r newrelic node_modules/@nestjs/cli/bin/nest.js start --watch"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.965.0",
@@ -28,6 +29,7 @@
     "cookie-parser": "^1.4.6",
     "dotenv": "^16.4.5",
     "jsonwebtoken": "^9.0.2",
+    "newrelic": "^13.13.0",
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",

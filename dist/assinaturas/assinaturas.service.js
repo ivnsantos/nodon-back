@@ -65,6 +65,7 @@ const user_comum_service_1 = require("../users/services/user-comum.service");
 const email_service_1 = require("../email/email.service");
 const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
 const chat_service_1 = require("../chat/chat.service");
+const newrelic_logger_1 = require("../common/utils/newrelic-logger");
 let AssinaturasService = class AssinaturasService {
     assinaturaRepository;
     recorrenciaRepository;
@@ -278,6 +279,13 @@ let AssinaturasService = class AssinaturasService {
                 if (!statusConfirmado) {
                     console.log('⚠️ Pagamento criado mas não aprovado ainda. Status:', paymentResult.status);
                     console.log('📝 Cobrança registrada com userId=null. Será atualizada quando status mudar para CONFIRMED.');
+                    (0, newrelic_logger_1.newRelicLog)('warn', 'Pagamento criado mas não aprovado', {
+                        asaasPaymentId: paymentResult.id,
+                        status: paymentResult.status,
+                        valor: valorFinal,
+                        customerId: asaasCustomerId,
+                        planoId: createSubscriptionDto.planoId,
+                    });
                     return {
                         statusCode: 202,
                         message: 'Pagamento criado. Aguardando confirmação.',
@@ -294,9 +302,23 @@ let AssinaturasService = class AssinaturasService {
                     };
                 }
                 console.log('✅ Pagamento aprovado:', paymentResult);
+                (0, newrelic_logger_1.newRelicLog)('info', 'Pagamento avulso processado na criação de assinatura', {
+                    asaasPaymentId: paymentResult.id,
+                    status: paymentResult.status,
+                    valor: valorFinal,
+                    customerId: asaasCustomerId,
+                    planoId: createSubscriptionDto.planoId,
+                    aprovado: statusConfirmado,
+                });
             }
             catch (error) {
                 console.error('❌ Erro ao processar pagamento:', error);
+                (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao processar pagamento na criação de assinatura', {
+                    error: error.message,
+                    customerId: asaasCustomerId,
+                    valor: valorFinal,
+                    planoId: createSubscriptionDto.planoId,
+                });
                 throw new common_1.BadRequestException(`Erro ao processar pagamento: ${error.message || 'Erro desconhecido'}`);
             }
         }
@@ -344,6 +366,17 @@ let AssinaturasService = class AssinaturasService {
                 }
             }
             console.log('✅ Assinatura criada com sucesso:', savedSubscription.id);
+            (0, newrelic_logger_1.newRelicLog)('info', 'Assinatura criada com sucesso', {
+                assinaturaId: savedSubscription.id,
+                userId: savedSubscription.userId,
+                planoId: savedSubscription.planoId,
+                valor: savedSubscription.value,
+                billingType: savedSubscription.billingType,
+                status: savedSubscription.status,
+                couponId: couponId || null,
+                pagamentoAprovado: paymentResult?.status === 'CONFIRMED' || paymentResult?.status === 'RECEIVED',
+                asaasPaymentId: paymentResult?.id || null,
+            });
             return {
                 statusCode: 200,
                 message: 'Pagamento aprovado e assinatura criada com sucesso',
@@ -438,9 +471,23 @@ let AssinaturasService = class AssinaturasService {
         try {
             const savedSubscription = await this.assinaturaRepository.save(assinatura);
             await this.gerenciarRecorrencia(savedSubscription);
+            (0, newrelic_logger_1.newRelicLog)('info', 'Assinatura simples criada com sucesso', {
+                assinaturaId: savedSubscription.id,
+                userId: savedSubscription.userId,
+                planoId: savedSubscription.planoId,
+                valor: savedSubscription.value,
+                billingType: savedSubscription.billingType,
+                status: savedSubscription.status,
+                couponId: couponId || null,
+            });
             return this.toResponseDto(savedSubscription);
         }
         catch (error) {
+            (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao salvar assinatura simples', {
+                error: error.message,
+                userId: clienteMaster.id,
+                planoId: createSimpleSubscriptionDto.planoId,
+            });
             throw new common_1.InternalServerErrorException(`Erro ao salvar assinatura no banco de dados: ${error.message || 'Erro desconhecido'}`);
         }
     }
@@ -1257,19 +1304,55 @@ let AssinaturasService = class AssinaturasService {
         if (createPaymentDto.remoteIp) {
             paymentData.remoteIp = createPaymentDto.remoteIp;
         }
-        return await this.asaasService.createPayment(paymentData);
+        try {
+            const result = await this.asaasService.createPayment(paymentData);
+            (0, newrelic_logger_1.newRelicLog)('info', 'Pagamento avulso criado', {
+                asaasPaymentId: result.id,
+                status: result.status,
+                valor: createPaymentDto.value,
+                customerId: createPaymentDto.customer,
+                billingType: createPaymentDto.billingType,
+                aprovado: result.status === 'CONFIRMED' || result.status === 'RECEIVED',
+            });
+            return result;
+        }
+        catch (error) {
+            (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao criar pagamento avulso', {
+                error: error.message,
+                customerId: createPaymentDto.customer,
+                valor: createPaymentDto.value,
+                billingType: createPaymentDto.billingType,
+            });
+            throw error;
+        }
     }
     async handleCronProcessarRecorrencias() {
         const dataExecucao = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
         console.log(`\n${'#'.repeat(80)}`);
         console.log(`⏰ [${dataExecucao}] Executando CRON agendado às 9h da manhã`);
         console.log(`${'#'.repeat(80)}\n`);
+        (0, newrelic_logger_1.newRelicLog)('info', 'CRON: Iniciando processamento de recorrências', {
+            cronName: 'processar-recorrencias',
+            dataExecucao,
+            timeZone: 'America/Sao_Paulo',
+        });
         try {
-            await this.processarRecorrencias();
+            const resultado = await this.processarRecorrencias();
+            (0, newrelic_logger_1.newRelicLog)('info', 'CRON: Processamento de recorrências concluído', {
+                cronName: 'processar-recorrencias',
+                processadas: resultado.processadas,
+                sucesso: resultado.sucesso,
+                falhas: resultado.falhas,
+            });
         }
         catch (error) {
             console.error(`❌ Erro no CRON automático:`, error.message);
             console.error(`   Stack:`, error.stack);
+            (0, newrelic_logger_1.newRelicLog)('error', 'CRON: Erro no processamento de recorrências', {
+                cronName: 'processar-recorrencias',
+                error: error.message,
+                stack: error.stack,
+            });
         }
     }
     async processarRecorrencias() {
@@ -1402,6 +1485,14 @@ let AssinaturasService = class AssinaturasService {
                         cobranca.assinaturaId = assinatura.id;
                         await this.cobrancaRepository.save(cobranca);
                         console.log(`   ✅ Cobrança vinculada`);
+                        (0, newrelic_logger_1.newRelicLog)('info', 'Recorrência processada com sucesso', {
+                            assinaturaId: assinatura.id,
+                            recorrenciaId: recorrencia.id,
+                            asaasPaymentId: paymentResult.id,
+                            valor: Number(recorrencia.valor),
+                            proximaCobranca: proximoMes,
+                            status: 'CONFIRMED',
+                        });
                     }
                     else {
                         console.log(`   ⚠️ Cobrança não encontrada para vincular`);
@@ -1431,6 +1522,13 @@ let AssinaturasService = class AssinaturasService {
                         console.log(`   ✅ Cobrança marcada como FAILED`);
                     }
                     console.error(`❌ [${i + 1}/${recorrencias.length}] FALHA: Cobrança falhou para assinatura ${assinatura.id}. Status: ${paymentResult.status}`);
+                    (0, newrelic_logger_1.newRelicLog)('warn', 'Recorrência falhou - pagamento não confirmado', {
+                        assinaturaId: assinatura.id,
+                        recorrenciaId: recorrencia.id,
+                        asaasPaymentId: paymentResult.id,
+                        valor: Number(recorrencia.valor),
+                        status: paymentResult.status,
+                    });
                     resultado.falhas++;
                     resultado.detalhes.push({
                         assinaturaId: assinatura.id,
