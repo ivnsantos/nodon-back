@@ -68,13 +68,24 @@ export class DashboardService {
     const fimHoje = new Date(hoje);
     fimHoje.setHours(23, 59, 59, 999);
     
+    // Data de amanhã
+    const amanha = new Date(hoje);
+    amanha.setDate(hoje.getDate() + 1);
+    const inicioAmanha = new Date(amanha);
+    inicioAmanha.setHours(0, 0, 0, 0);
+    const fimAmanha = new Date(amanha);
+    fimAmanha.setHours(23, 59, 59, 999);
+    
+    const hojeStr = hoje.toISOString().split('T')[0];
+    const amanhaStr = amanha.toISOString().split('T')[0];
+    
+    // Buscar consultas de hoje
     const consultasHoje = await this.calendarioService.findAllConsultas(clienteMasterId, {
-      dataInicio: inicioHoje.toISOString().split('T')[0],
-      dataFim: fimHoje.toISOString().split('T')[0],
+      dataInicio: hojeStr,
+      dataFim: hojeStr,
     });
     
     // Filtrar apenas consultas que realmente são de hoje (comparar apenas a data)
-    const hojeStr = hoje.toISOString().split('T')[0];
     const consultasHojeFiltradas = consultasHoje.filter(consulta => {
       let dataConsulta: Date;
       if (consulta.dataConsulta instanceof Date) {
@@ -87,17 +98,28 @@ export class DashboardService {
       return dataConsulta.toISOString().split('T')[0] === hojeStr;
     });
     
+    // Buscar consultas de amanhã
+    const consultasAmanha = await this.calendarioService.findAllConsultas(clienteMasterId, {
+      dataInicio: amanhaStr,
+      dataFim: amanhaStr,
+    });
+    
+    // Filtrar apenas consultas que realmente são de amanhã
+    const consultasAmanhaFiltradas = consultasAmanha.filter(consulta => {
+      let dataConsulta: Date;
+      if (consulta.dataConsulta instanceof Date) {
+        dataConsulta = consulta.dataConsulta;
+      } else if (typeof consulta.dataConsulta === 'string') {
+        dataConsulta = new Date(consulta.dataConsulta);
+      } else {
+        dataConsulta = new Date(consulta.dataConsulta as any);
+      }
+      return dataConsulta.toISOString().split('T')[0] === amanhaStr;
+    });
+    
     const consultasEstaSemana = await this.calendarioService.findAllConsultas(clienteMasterId, {
       dataInicio: inicioSemana.toISOString().split('T')[0],
       dataFim: fimSemana.toISOString().split('T')[0],
-    });
-
-    // Próximas consultas (hoje e próximos 7 dias)
-    const proximos7Dias = new Date(hoje);
-    proximos7Dias.setDate(hoje.getDate() + 7);
-    const proximasConsultas = await this.calendarioService.findAllConsultas(clienteMasterId, {
-      dataInicio: hoje.toISOString().split('T')[0],
-      dataFim: proximos7Dias.toISOString().split('T')[0],
     });
 
     // 4. Clientes (Pacientes)
@@ -120,6 +142,41 @@ export class DashboardService {
       porcentagem: porcentagemTokens,
     };
 
+    // Helper para formatar consulta
+    const formatarConsulta = (consulta: any) => {
+      let dataConsulta: Date;
+      if (consulta.dataConsulta instanceof Date) {
+        dataConsulta = consulta.dataConsulta;
+      } else if (typeof consulta.dataConsulta === 'string') {
+        dataConsulta = new Date(consulta.dataConsulta);
+      } else {
+        dataConsulta = new Date(consulta.dataConsulta as any);
+      }
+
+      return {
+        id: consulta.id,
+        hora: consulta.horaConsulta,
+        paciente: consulta.paciente ? {
+          id: consulta.paciente.id,
+          nome: consulta.paciente.nome,
+        } : null,
+        tipoConsulta: consulta.tipoConsulta ? {
+          id: consulta.tipoConsulta.id,
+          nome: consulta.tipoConsulta.nome,
+          cor: consulta.tipoConsulta.cor,
+        } : null,
+        titulo: consulta.titulo,
+        observacoes: consulta.observacoes,
+        status: consulta.status,
+        data: dataConsulta.toISOString().split('T')[0],
+        dataRelativa: this.getDataRelativa(dataConsulta),
+        profissional: consulta.profissional ? {
+          id: consulta.profissional.id,
+          nome: consulta.profissional.user?.nome || 'Profissional',
+        } : null,
+      };
+    };
+
     return {
       resumo: {
         diagnosticos: {
@@ -139,26 +196,8 @@ export class DashboardService {
           ativos: pacientesAtivos.length,
         },
       },
-      proximasConsultas: proximasConsultas.slice(0, 3).map(consulta => {
-        // Converter dataConsulta para Date se necessário
-        let dataConsulta: Date;
-        if (consulta.dataConsulta instanceof Date) {
-          dataConsulta = consulta.dataConsulta;
-        } else if (typeof consulta.dataConsulta === 'string') {
-          dataConsulta = new Date(consulta.dataConsulta);
-        } else {
-          dataConsulta = new Date(consulta.dataConsulta as any);
-        }
-
-        return {
-          id: consulta.id,
-          hora: consulta.horaConsulta,
-          paciente: consulta.paciente?.nome || 'Paciente',
-          tipo: consulta.tipoConsulta?.nome || 'Consulta',
-          data: dataConsulta.toISOString().split('T')[0],
-          dataRelativa: this.getDataRelativa(dataConsulta),
-        };
-      }),
+      consultasHoje: consultasHojeFiltradas.map(formatarConsulta),
+      consultasAmanha: consultasAmanhaFiltradas.map(formatarConsulta),
       usoTokens,
       diagnosticosRecentes: diagnosticosRecentes.map(diag => {
         // Converter data para Date se necessário
