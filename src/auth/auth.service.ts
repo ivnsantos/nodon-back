@@ -97,15 +97,9 @@ export class AuthService {
       };
     }
 
-    // Se não encontrou nem ClienteMaster nem User comum, retorna UserBase básico
-    return {
-      id: userBase.id,
-      userId: userBase.id,
-      nome: userBase.nome,
-      email: userBase.email,
-      tipo: 'usuario',
-      clienteMasterId: null,
-    };
+    // Se não encontrou nem ClienteMaster nem User comum, NÃO permite login
+    // Regra: o usuário precisa ter vínculo em ClienteMaster ou UserComum
+    return null;
   }
 
   async login(email: string, password: string) {
@@ -868,6 +862,11 @@ export class AuthService {
         userId = userComum.id;
         clienteMasterId = userComum.clienteMasterId;
         assinatura = await this.assinaturasService.findByUserId(userComum.clienteMasterId);
+      } else {
+        // Regra: não permitir login se não tiver vínculo em ClienteMaster ou UserComum
+        throw new UnauthorizedException(
+          'Usuário não possui vínculo com nenhum Cliente Master ou usuário do sistema.',
+        );
       }
     }
   
@@ -987,6 +986,11 @@ export class AuthService {
         userId = usuariosComuns[0].id;
         clienteMasterId = usuariosComuns[0].clienteMasterId;
         assinatura = await this.assinaturasService.findByUserId(usuariosComuns[0].clienteMasterId);
+      } else {
+        // Regra: não permitir login se não tiver vínculo em ClienteMaster ou UserComum
+        throw new UnauthorizedException(
+          'Usuário não possui vínculo com nenhum Cliente Master ou usuário do sistema.',
+        );
       }
     }
 
