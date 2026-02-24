@@ -96,7 +96,7 @@ export class AuthService {
         clienteMasterId: userComum.clienteMasterId,
       };
     }
-
+ // teste de login com google
     // Se não encontrou nem ClienteMaster nem User comum, NÃO permite login
     // Regra: o usuário precisa ter vínculo em ClienteMaster ou UserComum
     return null;
