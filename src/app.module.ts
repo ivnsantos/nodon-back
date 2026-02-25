@@ -10,7 +10,6 @@ import { CuponsModule } from './cupons/cupons.module';
 import { AssinaturasModule } from './assinaturas/assinaturas.module';
 import { AnalisesModule } from './analises/analises.module';
 import { HealthModule } from './health/health.module';
-import { EmailModule } from './email/email.module';
 import { StorageModule } from './storage/storage.module';
 import { ChatModule } from './chat/chat.module';
 import { PacientesModule } from './pacientes/pacientes.module';
@@ -57,7 +56,6 @@ import { PastasPacienteModule } from './pastas-paciente/pastas-paciente.module';
     AssinaturasModule,
     AnalisesModule,
     HealthModule,
-    EmailModule,
     StorageModule,
     ChatModule,
     PacientesModule,

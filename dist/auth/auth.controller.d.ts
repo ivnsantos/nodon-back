@@ -207,12 +207,10 @@ export declare class AuthController {
     forgotPassword(requestPasswordResetDto: RequestPasswordResetDto): Promise<{
         message: string;
         token?: undefined;
-        warning?: undefined;
         resetUrl?: undefined;
     } | {
         message: string;
         token: any;
-        warning: string;
         resetUrl: string;
     }>;
     validateResetToken(token: string): Promise<{

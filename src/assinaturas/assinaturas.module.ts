@@ -12,7 +12,6 @@ import { CuponsModule } from '../cupons/cupons.module';
 import { AsaasService } from './services/asaas.service';
 import { UsersModule } from '../users/users.module';
 import { ClientesMasterModule } from '../users/clientes-master.module';
-import { EmailModule } from '../email/email.module';
 import { ChatModule } from '../chat/chat.module';
 import { AuthModule } from '../auth/auth.module';
 import { QueueModule } from '../queue/queue.module';
@@ -24,7 +23,6 @@ import { QueueModule } from '../queue/queue.module';
     CuponsModule,
     forwardRef(() => UsersModule),
     forwardRef(() => ClientesMasterModule),
-    EmailModule,
     forwardRef(() => ChatModule),
     forwardRef(() => AuthModule),
     QueueModule,

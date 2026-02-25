@@ -16,7 +16,6 @@ import { ClientesMasterService } from '../users/clientes-master.service';
 import { UsersService } from '../users/users.service';
 import { UserBaseService } from '../users/services/user-base.service';
 import { UserComumService } from '../users/services/user-comum.service';
-import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
 import { ChatService } from '../chat/chat.service';
@@ -34,10 +33,9 @@ export declare class AssinaturasService {
     private readonly usersService;
     private readonly userBaseService;
     private readonly userComumService;
-    private readonly emailService;
     private readonly chatService;
     private readonly queueService;
-    constructor(assinaturaRepository: Repository<Assinatura>, recorrenciaRepository: Repository<Recorrencia>, cobrancaRepository: Repository<Cobranca>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, emailService: EmailService, chatService: ChatService, queueService: QueueService);
+    constructor(assinaturaRepository: Repository<Assinatura>, recorrenciaRepository: Repository<Recorrencia>, cobrancaRepository: Repository<Cobranca>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, chatService: ChatService, queueService: QueueService);
     create(createSubscriptionDto: CreateSubscriptionDto): Promise<any>;
     createSimple(createSimpleSubscriptionDto: CreateSimpleSubscriptionDto, user: {
         id: string;
