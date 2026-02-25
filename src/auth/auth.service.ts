@@ -7,7 +7,6 @@ import { UserComumService } from '../users/services/user-comum.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
-import { EmailService } from '../email/email.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { ClienteMaster } from '../users/entities/cliente-master.entity';
 
@@ -53,7 +52,6 @@ export class AuthService {
     private assinaturasService: AssinaturasService,
     private planosService: PlanosService,
     private jwtService: JwtService,
-    private emailService: EmailService,
     private whatsappService: WhatsAppService,
   ) {}
 
@@ -252,16 +250,6 @@ export class AuthService {
           );
         } catch (error) {
           console.error('Erro ao enviar WhatsApp de verificação:', error);
-          // Tentar enviar por email como fallback
-          try {
-            await this.emailService.sendVerificationCode(
-              userBase.email,
-              verificationToken,
-              userBase.nome,
-            );
-          } catch (emailError) {
-            console.error('Erro ao enviar email de verificação:', emailError);
-          }
         }
       }
     }
@@ -350,27 +338,6 @@ export class AuthService {
           );
         } catch (error) {
           console.error('Erro ao enviar WhatsApp de verificação:', error);
-          // Tentar enviar por email como fallback
-          try {
-            await this.emailService.sendVerificationCode(
-              userBase.email,
-              verificationToken,
-              userBase.nome,
-            );
-          } catch (emailError) {
-            console.error('Erro ao enviar email de verificação:', emailError);
-          }
-        }
-      } else {
-        // Se não tem telefone, enviar por email
-        try {
-          await this.emailService.sendVerificationCode(
-            userBase.email,
-            verificationToken,
-            userBase.nome,
-          );
-        } catch (error) {
-          console.error('Erro ao enviar email de verificação:', error);
         }
       }
     }
@@ -1265,38 +1232,19 @@ export class AuthService {
       passwordResetExpiresAt: resetExpires,
     });
 
-    // Tentar enviar email, mas não falhar se houver erro de configuração
-    try {
-      await this.emailService.sendPasswordResetEmail(
-        userBase.email,
-        resetToken,
-        userBase.nome,
-        frontendUrl,
-      );
+    // Email desativado - retornar token em desenvolvimento
+    const isDevelopment = process.env.NODE_ENV !== 'production';
+    if (isDevelopment) {
       return { 
-        message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.' 
-      };
-    } catch (error) {
-      console.error('Erro ao enviar email de recuperação de senha:', error);
-      // Em desenvolvimento, retornar o token para testes (remover em produção)
-      const isDevelopment = process.env.NODE_ENV !== 'production';
-      if (isDevelopment) {
-        return { 
-          message: 'Token de recuperação gerado. Verifique a configuração de email para envio automático.',
-          token: resetToken, // Apenas para desenvolvimento - remover em produção
-          warning: 'Email não foi enviado devido a erro de configuração SMTP',
-          resetUrl: `${frontendUrl}/reset-password?token=${resetToken}`,
-        };
-      }
-      // Em produção, limpar token e retornar mensagem genérica
-      await this.userBaseService.update(userBase.id, {
-        passwordResetToken: null,
-        passwordResetExpiresAt: null,
-      });
-      return { 
-        message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.' 
+        message: 'Token de recuperação gerado.',
+        token: resetToken,
+        resetUrl: `${frontendUrl}/reset-password?token=${resetToken}`,
       };
     }
+    // Em produção, retornar mensagem genérica
+    return { 
+      message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.' 
+    };
   }
 
   async validatePasswordResetToken(token: string) {

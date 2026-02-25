@@ -194,7 +194,7 @@ export declare class AuthController {
             tipo: string;
             isAdmin: boolean;
             isEmailVerified: boolean;
-            clienteMasterId: string | null;
+            clienteMasterId: string;
             assinatura: {
                 id: any;
                 status: any;
@@ -207,12 +207,10 @@ export declare class AuthController {
     forgotPassword(requestPasswordResetDto: RequestPasswordResetDto): Promise<{
         message: string;
         token?: undefined;
-        warning?: undefined;
         resetUrl?: undefined;
     } | {
         message: string;
         token: any;
-        warning: string;
         resetUrl: string;
     }>;
     validateResetToken(token: string): Promise<{

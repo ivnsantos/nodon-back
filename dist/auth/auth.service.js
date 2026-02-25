@@ -52,7 +52,6 @@ const user_comum_service_1 = require("../users/services/user-comum.service");
 const clientes_master_service_1 = require("../users/clientes-master.service");
 const assinaturas_service_1 = require("../assinaturas/assinaturas.service");
 const planos_service_1 = require("../planos/planos.service");
-const email_service_1 = require("../email/email.service");
 const whatsapp_service_1 = require("../whatsapp/whatsapp.service");
 let AuthService = class AuthService {
     usersService;
@@ -62,9 +61,8 @@ let AuthService = class AuthService {
     assinaturasService;
     planosService;
     jwtService;
-    emailService;
     whatsappService;
-    constructor(usersService, userBaseService, userComumService, clientesMasterService, assinaturasService, planosService, jwtService, emailService, whatsappService) {
+    constructor(usersService, userBaseService, userComumService, clientesMasterService, assinaturasService, planosService, jwtService, whatsappService) {
         this.usersService = usersService;
         this.userBaseService = userBaseService;
         this.userComumService = userComumService;
@@ -72,7 +70,6 @@ let AuthService = class AuthService {
         this.assinaturasService = assinaturasService;
         this.planosService = planosService;
         this.jwtService = jwtService;
-        this.emailService = emailService;
         this.whatsappService = whatsappService;
     }
     async validateUser(email, password) {
@@ -107,14 +104,7 @@ let AuthService = class AuthService {
                 clienteMasterId: userComum.clienteMasterId,
             };
         }
-        return {
-            id: userBase.id,
-            userId: userBase.id,
-            nome: userBase.nome,
-            email: userBase.email,
-            tipo: 'usuario',
-            clienteMasterId: null,
-        };
+        return null;
     }
     async login(email, password) {
         const user = await this.validateUser(email, password);
@@ -223,12 +213,6 @@ let AuthService = class AuthService {
                 }
                 catch (error) {
                     console.error('Erro ao enviar WhatsApp de verificação:', error);
-                    try {
-                        await this.emailService.sendVerificationCode(userBase.email, verificationToken, userBase.nome);
-                    }
-                    catch (emailError) {
-                        console.error('Erro ao enviar email de verificação:', emailError);
-                    }
                 }
             }
         }
@@ -292,20 +276,6 @@ let AuthService = class AuthService {
                 }
                 catch (error) {
                     console.error('Erro ao enviar WhatsApp de verificação:', error);
-                    try {
-                        await this.emailService.sendVerificationCode(userBase.email, verificationToken, userBase.nome);
-                    }
-                    catch (emailError) {
-                        console.error('Erro ao enviar email de verificação:', emailError);
-                    }
-                }
-            }
-            else {
-                try {
-                    await this.emailService.sendVerificationCode(userBase.email, verificationToken, userBase.nome);
-                }
-                catch (error) {
-                    console.error('Erro ao enviar email de verificação:', error);
                 }
             }
         }
@@ -674,6 +644,9 @@ let AuthService = class AuthService {
                 clienteMasterId = userComum.clienteMasterId;
                 assinatura = await this.assinaturasService.findByUserId(userComum.clienteMasterId);
             }
+            else {
+                throw new common_1.UnauthorizedException('Usuário não possui vínculo com nenhum Cliente Master ou usuário do sistema.');
+            }
         }
         if (assinatura && assinatura.planoId) {
             const plano = await this.planosService.findById(assinatura.planoId);
@@ -767,6 +740,9 @@ let AuthService = class AuthService {
                 userId = usuariosComuns[0].id;
                 clienteMasterId = usuariosComuns[0].clienteMasterId;
                 assinatura = await this.assinaturasService.findByUserId(usuariosComuns[0].clienteMasterId);
+            }
+            else {
+                throw new common_1.UnauthorizedException('Usuário não possui vínculo com nenhum Cliente Master ou usuário do sistema.');
             }
         }
         if (assinatura && assinatura.planoId) {
@@ -971,31 +947,17 @@ let AuthService = class AuthService {
             passwordResetToken: resetToken,
             passwordResetExpiresAt: resetExpires,
         });
-        try {
-            await this.emailService.sendPasswordResetEmail(userBase.email, resetToken, userBase.nome, frontendUrl);
+        const isDevelopment = process.env.NODE_ENV !== 'production';
+        if (isDevelopment) {
             return {
-                message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.'
+                message: 'Token de recuperação gerado.',
+                token: resetToken,
+                resetUrl: `${frontendUrl}/reset-password?token=${resetToken}`,
             };
         }
-        catch (error) {
-            console.error('Erro ao enviar email de recuperação de senha:', error);
-            const isDevelopment = process.env.NODE_ENV !== 'production';
-            if (isDevelopment) {
-                return {
-                    message: 'Token de recuperação gerado. Verifique a configuração de email para envio automático.',
-                    token: resetToken,
-                    warning: 'Email não foi enviado devido a erro de configuração SMTP',
-                    resetUrl: `${frontendUrl}/reset-password?token=${resetToken}`,
-                };
-            }
-            await this.userBaseService.update(userBase.id, {
-                passwordResetToken: null,
-                passwordResetExpiresAt: null,
-            });
-            return {
-                message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.'
-            };
-        }
+        return {
+            message: 'Se o e-mail estiver cadastrado, você receberá um link para redefinir sua senha.'
+        };
     }
     async validatePasswordResetToken(token) {
         const userBase = await this.userBaseService.findByPasswordResetToken(token);
@@ -1134,7 +1096,6 @@ exports.AuthService = AuthService = __decorate([
         assinaturas_service_1.AssinaturasService,
         planos_service_1.PlanosService,
         jwt_1.JwtService,
-        email_service_1.EmailService,
         whatsapp_service_1.WhatsAppService])
 ], AuthService);
 //# sourceMappingURL=auth.service.js.map

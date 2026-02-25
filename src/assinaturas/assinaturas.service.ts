@@ -28,7 +28,6 @@ import { ClientesMasterService } from '../users/clientes-master.service';
 import { UsersService } from '../users/users.service';
 import { UserBaseService } from '../users/services/user-base.service';
 import { UserComumService } from '../users/services/user-comum.service';
-import { EmailService } from '../email/email.service';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { UserComum } from '../users/entities/user-comum.entity';
 import { ChatService } from '../chat/chat.service';
@@ -56,7 +55,6 @@ export class AssinaturasService {
     private readonly usersService: UsersService,
     private readonly userBaseService: UserBaseService,
     private readonly userComumService: UserComumService,
-    private readonly emailService: EmailService,
     @Inject(forwardRef(() => ChatService))
     private readonly chatService: ChatService,
     private readonly queueService: QueueService,

@@ -22,7 +22,6 @@ const cupons_module_1 = require("./cupons/cupons.module");
 const assinaturas_module_1 = require("./assinaturas/assinaturas.module");
 const analises_module_1 = require("./analises/analises.module");
 const health_module_1 = require("./health/health.module");
-const email_module_1 = require("./email/email.module");
 const storage_module_1 = require("./storage/storage.module");
 const chat_module_1 = require("./chat/chat.module");
 const pacientes_module_1 = require("./pacientes/pacientes.module");
@@ -83,7 +82,6 @@ exports.AppModule = AppModule = __decorate([
             assinaturas_module_1.AssinaturasModule,
             analises_module_1.AnalisesModule,
             health_module_1.HealthModule,
-            email_module_1.EmailModule,
             storage_module_1.StorageModule,
             chat_module_1.ChatModule,
             pacientes_module_1.PacientesModule,

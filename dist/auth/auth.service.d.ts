@@ -5,7 +5,6 @@ import { UserComumService } from '../users/services/user-comum.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
-import { EmailService } from '../email/email.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 export interface ClienteMasterInfo {
     id: string;
@@ -45,9 +44,8 @@ export declare class AuthService {
     private assinaturasService;
     private planosService;
     private jwtService;
-    private emailService;
     private whatsappService;
-    constructor(usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, clientesMasterService: ClientesMasterService, assinaturasService: AssinaturasService, planosService: PlanosService, jwtService: JwtService, emailService: EmailService, whatsappService: WhatsAppService);
+    constructor(usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, clientesMasterService: ClientesMasterService, assinaturasService: AssinaturasService, planosService: PlanosService, jwtService: JwtService, whatsappService: WhatsAppService);
     validateUser(email: string, password: string): Promise<any>;
     login(email: string, password: string): Promise<{
         access_token: string;
@@ -217,7 +215,7 @@ export declare class AuthService {
             tipo: string;
             isAdmin: boolean;
             isEmailVerified: boolean;
-            clienteMasterId: string | null;
+            clienteMasterId: string;
             assinatura: {
                 id: any;
                 status: any;
@@ -252,12 +250,10 @@ export declare class AuthService {
     requestPasswordReset(email: string, frontendUrl: string): Promise<{
         message: string;
         token?: undefined;
-        warning?: undefined;
         resetUrl?: undefined;
     } | {
         message: string;
         token: any;
-        warning: string;
         resetUrl: string;
     }>;
     validatePasswordResetToken(token: string): Promise<{
