@@ -25,9 +25,6 @@ export class CreatePerguntaDto {
 }
 
 export class CreateAnamneseDto {
-  @IsString()
-  @IsOptional()
-  clienteMasterId?: string;
 
   @IsString()
   @IsNotEmpty()

@@ -36,8 +36,18 @@ export class QueueWorkerService implements OnModuleInit, OnModuleDestroy {
       password: url.password || undefined,
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
+      connectTimeout: 10000, // 10 segundos de timeout
+      lazyConnect: true, // Não conectar imediatamente
       retryStrategy: (times: number) => {
-        const delay = Math.min(times * 50, 2000);
+        const delay = Math.min(times * 100, 5000); // Máximo 5 segundos entre tentativas
+        if (times <= 10 || times % 10 === 0) {
+          console.log(`🔄 Worker: Tentando reconectar ao Redis (tentativa ${times})...`);
+        }
+        // Limitar tentativas - após 100 tentativas, parar por 30 segundos
+        if (times > 100) {
+          console.error(`❌ Worker: Muitas tentativas de reconexão (${times}). Verifique se o Redis está acessível.`);
+          return 30000; // Esperar 30 segundos antes de tentar novamente
+        }
         return delay;
       },
     };

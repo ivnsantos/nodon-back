@@ -28,54 +28,79 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
       password: url.password || undefined,
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
+      connectTimeout: 10000, // 10 segundos de timeout
+      lazyConnect: true, // Não conectar imediatamente
       retryStrategy: (times: number) => {
-        const delay = Math.min(times * 50, 2000);
-        console.log(`🔄 Tentando reconectar ao Redis (tentativa ${times})...`);
+        const delay = Math.min(times * 100, 5000); // Máximo 5 segundos entre tentativas
+        if (times <= 10 || times % 10 === 0) {
+          console.log(`🔄 Tentando reconectar ao Redis (tentativa ${times})...`);
+        }
+        // Limitar tentativas - após 100 tentativas, parar por 30 segundos
+        if (times > 100) {
+          console.error(`❌ Muitas tentativas de reconexão (${times}). Verifique se o Redis está acessível.`);
+          return 30000; // Esperar 30 segundos antes de tentar novamente
+        }
         return delay;
       },
     };
 
     // Criar fila de confirmação de agendamento
-    this.confirmacaoAgendamentoQueue = new Queue('confirmacao-agendamento', {
-      connection: this.redisConnectionOptions,
-      defaultJobOptions: {
-        attempts: 3, // Tentar 3 vezes em caso de falha
-        backoff: {
-          type: 'exponential',
-          delay: 2000, // Começar com 2 segundos, dobrar a cada tentativa
+    try {
+      this.confirmacaoAgendamentoQueue = new Queue('confirmacao-agendamento', {
+        connection: this.redisConnectionOptions,
+        defaultJobOptions: {
+          attempts: 3, // Tentar 3 vezes em caso de falha
+          backoff: {
+            type: 'exponential',
+            delay: 2000, // Começar com 2 segundos, dobrar a cada tentativa
+          },
+          removeOnComplete: {
+            age: 24 * 3600, // Manter jobs completos por 24 horas
+            count: 1000, // Manter últimos 1000 jobs
+          },
+          removeOnFail: {
+            age: 7 * 24 * 3600, // Manter jobs falhados por 7 dias
+          },
         },
-        removeOnComplete: {
-          age: 24 * 3600, // Manter jobs completos por 24 horas
-          count: 1000, // Manter últimos 1000 jobs
-        },
-        removeOnFail: {
-          age: 7 * 24 * 3600, // Manter jobs falhados por 7 dias
-        },
-      },
-    });
+      });
 
-    console.log('✅ Fila de confirmação de agendamento criada');
+      // Tentar conectar
+      await this.confirmacaoAgendamentoQueue.waitUntilReady();
+      console.log('✅ Fila de confirmação de agendamento criada e conectada');
+    } catch (error: any) {
+      console.error('❌ Erro ao criar fila de confirmação de agendamento:', error.message);
+      console.error('   Verifique se o Redis está acessível e se a REDIS_URL está correta');
+      throw error;
+    }
 
     // Criar fila de processamento de recorrências
-    this.processarRecorrenciaQueue = new Queue('processar-recorrencia', {
-      connection: this.redisConnectionOptions,
-      defaultJobOptions: {
-        attempts: 3, // Tentar 3 vezes em caso de falha
-        backoff: {
-          type: 'exponential',
-          delay: 5000, // Começar com 5 segundos, dobrar a cada tentativa
+    try {
+      this.processarRecorrenciaQueue = new Queue('processar-recorrencia', {
+        connection: this.redisConnectionOptions,
+        defaultJobOptions: {
+          attempts: 3, // Tentar 3 vezes em caso de falha
+          backoff: {
+            type: 'exponential',
+            delay: 5000, // Começar com 5 segundos, dobrar a cada tentativa
+          },
+          removeOnComplete: {
+            age: 24 * 3600, // Manter jobs completos por 24 horas
+            count: 1000, // Manter últimos 1000 jobs
+          },
+          removeOnFail: {
+            age: 7 * 24 * 3600, // Manter jobs falhados por 7 dias
+          },
         },
-        removeOnComplete: {
-          age: 24 * 3600, // Manter jobs completos por 24 horas
-          count: 1000, // Manter últimos 1000 jobs
-        },
-        removeOnFail: {
-          age: 7 * 24 * 3600, // Manter jobs falhados por 7 dias
-        },
-      },
-    });
+      });
 
-    console.log('✅ Fila de processamento de recorrências criada');
+      // Tentar conectar
+      await this.processarRecorrenciaQueue.waitUntilReady();
+      console.log('✅ Fila de processamento de recorrências criada e conectada');
+    } catch (error: any) {
+      console.error('❌ Erro ao criar fila de processamento de recorrências:', error.message);
+      console.error('   Verifique se o Redis está acessível e se a REDIS_URL está correta');
+      throw error;
+    }
   }
 
   async onModuleDestroy() {
@@ -99,19 +124,28 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     consultaId: string,
     clienteMasterId: string,
   ): Promise<void> {
-    await this.confirmacaoAgendamentoQueue.add(
-      'enviar-sms-confirmacao',
-      {
-        consultaId,
-        clienteMasterId,
-      },
-      {
-        jobId: `confirmacao-${consultaId}`, // ID único para evitar duplicatas
-        removeOnComplete: true,
-      },
-    );
+    try {
+      if (!this.confirmacaoAgendamentoQueue) {
+        throw new Error('Fila de confirmação de agendamento não está disponível');
+      }
 
-    console.log(`📋 Job adicionado à fila: confirmacao-agendamento (Consulta: ${consultaId})`);
+      await this.confirmacaoAgendamentoQueue.add(
+        'enviar-sms-confirmacao',
+        {
+          consultaId,
+          clienteMasterId,
+        },
+        {
+          jobId: `confirmacao-${consultaId}`, // ID único para evitar duplicatas
+          removeOnComplete: true,
+        },
+      );
+
+      console.log(`📋 Job adicionado à fila: confirmacao-agendamento (Consulta: ${consultaId})`);
+    } catch (error: any) {
+      console.error(`❌ Erro ao adicionar job de confirmação: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
@@ -121,19 +155,28 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
     recorrenciaId: string,
     assinaturaId: string,
   ): Promise<void> {
-    await this.processarRecorrenciaQueue.add(
-      'processar-recorrencia',
-      {
-        recorrenciaId,
-        assinaturaId,
-      },
-      {
-        jobId: `recorrencia-${recorrenciaId}`, // ID único para evitar duplicatas
-        removeOnComplete: true,
-      },
-    );
+    try {
+      if (!this.processarRecorrenciaQueue) {
+        throw new Error('Fila de processamento de recorrências não está disponível');
+      }
 
-    console.log(`📋 Job adicionado à fila: processar-recorrencia (Recorrência: ${recorrenciaId})`);
+      await this.processarRecorrenciaQueue.add(
+        'processar-recorrencia',
+        {
+          recorrenciaId,
+          assinaturaId,
+        },
+        {
+          jobId: `recorrencia-${recorrenciaId}`, // ID único para evitar duplicatas
+          removeOnComplete: true,
+        },
+      );
+
+      console.log(`📋 Job adicionado à fila: processar-recorrencia (Recorrência: ${recorrenciaId})`);
+    } catch (error: any) {
+      console.error(`❌ Erro ao adicionar job de recorrência: ${error.message}`);
+      throw error;
+    }
   }
 }
 

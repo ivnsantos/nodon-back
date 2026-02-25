@@ -22,7 +22,7 @@ export class CalendarioCronService {
    * Usa expressão cron: a cada 2 minutos
    * TODO: Alterar para '0 7 * * *' em produção (todo dia às 7h)
    */
-  @Cron('* 7 * * *', {
+  @Cron('0 7 * * *', {
     name: 'enviar-sms-confirmacao-consultas',
     timeZone: 'America/Sao_Paulo',
   })
