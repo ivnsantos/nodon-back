@@ -37,6 +37,7 @@ const calendario_module_1 = require("./calendario/calendario.module");
 const typeorm_config_1 = require("./config/typeorm.config");
 const planos_service_1 = require("./planos/planos.service");
 const queue_module_1 = require("./queue/queue.module");
+const pastas_paciente_module_1 = require("./pastas-paciente/pastas-paciente.module");
 let AppModule = class AppModule {
     planosService;
     constructor(planosService) {
@@ -95,6 +96,7 @@ exports.AppModule = AppModule = __decorate([
             orcamentos_module_1.OrcamentosModule,
             calendario_module_1.CalendarioModule,
             queue_module_1.QueueModule,
+            pastas_paciente_module_1.PastasPacienteModule,
         ],
     }),
     __metadata("design:paramtypes", [planos_service_1.PlanosService])
