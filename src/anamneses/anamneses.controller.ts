@@ -42,7 +42,7 @@ export class AnamnesesController {
     @Body() createAnamneseDto: CreateAnamneseDto,
     @Request() req,
   ) {
-    let clienteMasterId = clienteMasterIdHeader || createAnamneseDto.clienteMasterId;
+    let clienteMasterId = clienteMasterIdHeader;
 
     // Se x-user-comum-id estiver presente, buscar o cliente_master_id do UserComum (tem prioridade)
     if (userComumIdHeader) {
@@ -55,13 +55,11 @@ export class AnamnesesController {
 
     if (!clienteMasterId) {
       throw new BadRequestException(
-        'Header X-Cliente-Master-Id ou X-User-Comum-Id é obrigatório, ou forneça clienteMasterId no body',
+        'Header X-Cliente-Master-Id ou X-User-Comum-Id é obrigatório',
       );
     }
 
-    // Usar o clienteMasterId encontrado
-    createAnamneseDto.clienteMasterId = clienteMasterId;
-    return this.anamnesesService.create(createAnamneseDto, req.user.id, req.user.tipo);
+    return this.anamnesesService.create(createAnamneseDto, clienteMasterId, req.user.id, req.user.tipo);
   }
 
   @Get()

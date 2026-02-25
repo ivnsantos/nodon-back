@@ -43,16 +43,15 @@ export class AnamnesesService {
   ) {}
 
   /**
-   * Cria uma nova anamnese para um cliente master
+   * Cria uma nova anamnese para um cliente master.
+   * clienteMasterId vem do header (X-Cliente-Master-Id ou X-User-Comum-Id), nunca do body.
    */
-  async create(createAnamneseDto: CreateAnamneseDto, userId: string, userTipo: string): Promise<Anamnese> {
-    // clienteMasterId deve vir do controller (via header ou body)
-    const clienteMasterId = createAnamneseDto.clienteMasterId;
-    
-    if (!clienteMasterId) {
-      throw new BadRequestException('Cliente Master ID é obrigatório');
-    }
-
+  async create(
+    createAnamneseDto: CreateAnamneseDto,
+    clienteMasterId: string,
+    userId: string,
+    userTipo: string,
+  ): Promise<Anamnese> {
     // Verificar permissão
     await this.verificarPermissao(userId, userTipo, clienteMasterId);
 
