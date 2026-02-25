@@ -194,7 +194,7 @@ export declare class AuthController {
             tipo: string;
             isAdmin: boolean;
             isEmailVerified: boolean;
-            clienteMasterId: string | null;
+            clienteMasterId: string;
             assinatura: {
                 id: any;
                 status: any;

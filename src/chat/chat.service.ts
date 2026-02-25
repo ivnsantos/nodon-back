@@ -504,7 +504,7 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
       const response = await axios.post(
         this.openAiApiUrl,
         {
-          model: 'gpt-4o',
+          model: 'o4-mini',
           messages: messages,
           temperature: 0.7,
           max_tokens: 2000,
@@ -842,7 +842,7 @@ IMPORTANTE:
           response = await axios.post(
             this.openAiApiUrl,
             {
-              model: 'gpt-4o',
+              model: 'o4-mini',
               messages: [
                 { role: 'system', content: systemPrompt },
                 { role: 'user', content: content },
@@ -859,7 +859,7 @@ IMPORTANTE:
             },
           );
           usedOpenAI = true;
-          modelTried = 'gpt-4o';
+          modelTried = 'o4-mini';
           console.log('✅ Análise realizada com OpenAI GPT-4 Vision');
         } catch (openAiError: any) {
           console.warn('⚠️ OpenAI não disponível, tentando DeepSeek...', openAiError.response?.data?.error?.message || openAiError.message);

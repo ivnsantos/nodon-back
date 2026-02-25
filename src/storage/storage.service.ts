@@ -7,14 +7,18 @@ import { randomUUID } from 'crypto';
 export class StorageService {
   private s3Client: S3Client;
   private bucketName: string;
+  private bucketNameDocClients: string;
   private publicDomain: string;
+  private publicDomainDocClients: string;
 
   constructor(private configService: ConfigService) {
     const accountId = this.configService.get<string>('R2_ACCOUNT_ID');
     const accessKeyId = this.configService.get<string>('R2_ACCESS_KEY_ID');
     const secretAccessKey = this.configService.get<string>('R2_SECRET_ACCESS_KEY');
     this.bucketName = this.configService.get<string>('R2_BUCKET_NAME') || 'hml';
+    this.bucketNameDocClients = this.configService.get<string>('R2_BUCKET_NAME_DOC_CLIENTS') || 'doc_clients';
     this.publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN') || 'https://pub-f6373861b23346918a681332b65f9a68.r2.dev';
+    this.publicDomainDocClients = this.configService.get<string>('R2_PUBLIC_DOMAIN_DOC_CLIENTS') || this.publicDomain;
 
     if (!accountId || !accessKeyId || !secretAccessKey) {
       console.warn('⚠️ Configuração do R2 não encontrada. Upload de imagens não estará disponível.');
@@ -119,6 +123,67 @@ export class StorageService {
   }
 
   /**
+   * Upload de arquivo genérico (qualquer tipo) para R2/S3.
+   * @param file Buffer do arquivo
+   * @param path Caminho onde o arquivo será salvo
+   * @param contentType Tipo MIME (ex: "application/pdf")
+   * @param maxSizeBytes Tamanho máximo em bytes (default 50MB)
+   * @returns URL pública do arquivo
+   */
+  async uploadFile(
+    file: Buffer,
+    path: string,
+    contentType: string = 'application/octet-stream',
+    maxSizeBytes: number = 50 * 1024 * 1024,
+  ): Promise<string> {
+    if (!this.s3Client) {
+      throw new InternalServerErrorException('Serviço de armazenamento não configurado');
+    }
+    if (file.length > maxSizeBytes) {
+      throw new BadRequestException(`O arquivo deve ter no máximo ${Math.round(maxSizeBytes / 1024 / 1024)}MB`);
+    }
+    const uploadCommand = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: path,
+      Body: file,
+      ContentType: contentType,
+    });
+    await this.s3Client.send(uploadCommand);
+    return this.generatePublicUrl(path);
+  }
+
+  /**
+   * Upload de arquivo para o bucket de documentos de clientes (doc_clients).
+   * Usado pela API de pastas do paciente (POST .../pastas-paciente/:pastaId/arquivos).
+   * @param file Buffer do arquivo
+   * @param path Caminho onde o arquivo será salvo (ex: paciente-arquivos/2024/01/uuid.pdf)
+   * @param contentType Tipo MIME (ex: "application/pdf")
+   * @param maxSizeBytes Tamanho máximo em bytes (default 50MB)
+   * @returns URL pública do arquivo (usa R2_PUBLIC_DOMAIN_DOC_CLIENTS se definido)
+   */
+  async uploadFileToDocClients(
+    file: Buffer,
+    path: string,
+    contentType: string = 'application/octet-stream',
+    maxSizeBytes: number = 50 * 1024 * 1024,
+  ): Promise<string> {
+    if (!this.s3Client) {
+      throw new InternalServerErrorException('Serviço de armazenamento não configurado');
+    }
+    if (file.length > maxSizeBytes) {
+      throw new BadRequestException(`O arquivo deve ter no máximo ${Math.round(maxSizeBytes / 1024 / 1024)}MB`);
+    }
+    const uploadCommand = new PutObjectCommand({
+      Bucket: this.bucketNameDocClients,
+      Key: path,
+      Body: file,
+      ContentType: contentType,
+    });
+    await this.s3Client.send(uploadCommand);
+    return `${this.publicDomainDocClients}/${path}`;
+  }
+
+  /**
    * Gera um caminho único para o arquivo
    * @param prefix Prefixo do caminho (ex: "logos", "avatars")
    * @param filename Nome original do arquivo
@@ -129,7 +194,7 @@ export class StorageService {
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const uuid = randomUUID();
-    const extension = filename.split('.').pop() || 'png';
+    const extension = filename.split('.').pop() || 'bin';
     return `${prefix}/${year}/${month}/${uuid}.${extension}`;
   }
 }

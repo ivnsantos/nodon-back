@@ -27,6 +27,7 @@ import { TypeOrmConfigService } from './config/typeorm.config';
 import { PlanosService } from './planos/planos.service';
 import { SmsModule } from './sms/sms.module';
 import { QueueModule } from './queue/queue.module';
+import { PastasPacienteModule } from './pastas-paciente/pastas-paciente.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { QueueModule } from './queue/queue.module';
     OrcamentosModule,
     CalendarioModule,
     QueueModule,
+    PastasPacienteModule,
   ],
 })
 export class AppModule implements OnModuleInit {
