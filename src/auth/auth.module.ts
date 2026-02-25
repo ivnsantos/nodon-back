@@ -12,7 +12,6 @@ import { UsersModule } from '../users/users.module';
 import { ClientesMasterModule } from '../users/clientes-master.module';
 import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { PlanosModule } from '../planos/planos.module';
-import { EmailModule } from '../email/email.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 
 @Module({
@@ -21,7 +20,6 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
     ClientesMasterModule,
     AssinaturasModule,
     PlanosModule,
-    EmailModule,
     WhatsAppModule,
     PassportModule,
     JwtModule.registerAsync({

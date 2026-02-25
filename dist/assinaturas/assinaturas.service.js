@@ -62,7 +62,6 @@ const clientes_master_service_1 = require("../users/clientes-master.service");
 const users_service_1 = require("../users/users.service");
 const user_base_service_1 = require("../users/services/user-base.service");
 const user_comum_service_1 = require("../users/services/user-comum.service");
-const email_service_1 = require("../email/email.service");
 const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
 const chat_service_1 = require("../chat/chat.service");
 const newrelic_logger_1 = require("../common/utils/newrelic-logger");
@@ -80,10 +79,9 @@ let AssinaturasService = class AssinaturasService {
     usersService;
     userBaseService;
     userComumService;
-    emailService;
     chatService;
     queueService;
-    constructor(assinaturaRepository, recorrenciaRepository, cobrancaRepository, cupomRepository, historicoRepository, asaasService, planosService, cuponsService, clientesMasterService, usersService, userBaseService, userComumService, emailService, chatService, queueService) {
+    constructor(assinaturaRepository, recorrenciaRepository, cobrancaRepository, cupomRepository, historicoRepository, asaasService, planosService, cuponsService, clientesMasterService, usersService, userBaseService, userComumService, chatService, queueService) {
         this.assinaturaRepository = assinaturaRepository;
         this.recorrenciaRepository = recorrenciaRepository;
         this.cobrancaRepository = cobrancaRepository;
@@ -96,7 +94,6 @@ let AssinaturasService = class AssinaturasService {
         this.usersService = usersService;
         this.userBaseService = userBaseService;
         this.userComumService = userComumService;
-        this.emailService = emailService;
         this.chatService = chatService;
         this.queueService = queueService;
     }
@@ -2109,7 +2106,7 @@ exports.AssinaturasService = AssinaturasService = __decorate([
     __param(3, (0, typeorm_1.InjectRepository)(cupom_entity_1.Cupom)),
     __param(4, (0, typeorm_1.InjectRepository)(historico_mensal_entity_1.HistoricoMensal)),
     __param(8, (0, common_1.Inject)((0, common_1.forwardRef)(() => clientes_master_service_1.ClientesMasterService))),
-    __param(13, (0, common_1.Inject)((0, common_1.forwardRef)(() => chat_service_1.ChatService))),
+    __param(12, (0, common_1.Inject)((0, common_1.forwardRef)(() => chat_service_1.ChatService))),
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
@@ -2122,7 +2119,6 @@ exports.AssinaturasService = AssinaturasService = __decorate([
         users_service_1.UsersService,
         user_base_service_1.UserBaseService,
         user_comum_service_1.UserComumService,
-        email_service_1.EmailService,
         chat_service_1.ChatService,
         queue_service_1.QueueService])
 ], AssinaturasService);
