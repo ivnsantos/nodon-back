@@ -961,71 +961,77 @@ export class CalendarioService {
     return consulta;
   }
 
-  async confirmarAgendamentoPorDados(
-    consultaId: string,
-    dataAniversario: string,
-    cpfInicio: string,
-  ): Promise<Consulta> {
-    // Buscar consulta com paciente
+  /**
+   * Confirma a consulta quando o usuário responde com confirmar: true.
+   */
+  async confirmarAgendamentoPorDados(consultaId: string, confirmar: boolean): Promise<Consulta> {
+    if (!confirmar) {
+      throw new BadRequestException('Envie confirmar: true para confirmar a consulta.');
+    }
+
     const consulta = await this.consultaRepository.findOne({
       where: { id: consultaId },
       relations: ['tipoConsulta', 'paciente', 'profissional'],
     });
 
     if (!consulta) {
-      throw new BadRequestException('Dados inválidos');
+      throw new NotFoundException('Consulta não encontrada');
     }
 
-    if (!consulta.pacienteId || !consulta.paciente) {
-      throw new BadRequestException('Dados inválidos');
+    if (consulta.status === 'confirmada') {
+      return consulta;
     }
 
-    const paciente = consulta.paciente;
-
-    // Validar se paciente tem os dados necessários
-    if (!paciente.dataNascimento || !paciente.cpf) {
-      throw new BadRequestException('Dados inválidos');
+    if (consulta.status !== 'link' && consulta.status !== 'agendada') {
+      throw new BadRequestException(
+        `Não é possível confirmar consulta com status "${consulta.status}". Apenas "link" ou "agendada" podem ser confirmadas.`,
+      );
     }
 
-    // Validar data de aniversário
-    const [dia, mes, ano] = dataAniversario.split('/').map(Number);
-    const dataAniversarioRecebida = new Date(Date.UTC(ano, mes - 1, dia));
-
-    // Comparar apenas dia, mês e ano (ignorar hora)
-    const dataNascimentoPaciente = new Date(paciente.dataNascimento);
-    const dataNascimentoUTC = new Date(
-      Date.UTC(
-        dataNascimentoPaciente.getUTCFullYear(),
-        dataNascimentoPaciente.getUTCMonth(),
-        dataNascimentoPaciente.getUTCDate(),
-      ),
-    );
-
-    const dataAniversarioUTC = new Date(
-      Date.UTC(
-        dataAniversarioRecebida.getUTCFullYear(),
-        dataAniversarioRecebida.getUTCMonth(),
-        dataAniversarioRecebida.getUTCDate(),
-      ),
-    );
-
-    // Remover caracteres não numéricos do CPF
-    const cpfLimpo = paciente.cpf.replace(/\D/g, '');
-    const cpfInicioPaciente = cpfLimpo.substring(0, 3);
-
-    // Validar ambos os dados - se qualquer um não conferir, retorna erro genérico
-    const dataConfere = dataNascimentoUTC.getTime() === dataAniversarioUTC.getTime();
-    const cpfConfere = cpfInicioPaciente === cpfInicio;
-
-    if (!dataConfere || !cpfConfere) {
-      throw new BadRequestException('Dados inválidos');
-    }
-
-    // Atualizar status para 'confirmada'
     consulta.status = 'confirmada';
     await this.consultaRepository.save(consulta);
 
+    await this.notificarConsultaConfirmada(consulta);
     return consulta;
+  }
+
+  /**
+   * Envia WhatsApp de confirmação para quem está vinculado ao paciente:
+   * profissional da consulta (UserComum) ou, na falta, ClienteMaster (dono).
+   */
+  private async notificarConsultaConfirmada(consulta: Consulta): Promise<void> {
+    try {
+      const consultaComRelacoes = await this.consultaRepository.findOne({
+        where: { id: consulta.id },
+        relations: ['paciente', 'profissional', 'profissional.user', 'clienteMaster', 'clienteMaster.user'],
+      });
+      if (!consultaComRelacoes) return;
+
+      let telefone: string | null = null;
+      if (consultaComRelacoes.profissional?.user?.telefone) {
+        telefone = consultaComRelacoes.profissional.user.telefone;
+      }
+      if (!telefone && consultaComRelacoes.clienteMaster) {
+        const cm = consultaComRelacoes.clienteMaster;
+        telefone = cm.user?.telefone || cm.telefoneEmpresa || null;
+      }
+      if (!telefone) return;
+
+      const digits = telefone.replace(/\D/g, '');
+      const phoneNumber = digits.startsWith('55') ? digits : `55${digits}`;
+      const nomePaciente = consultaComRelacoes.paciente?.nome || 'Paciente';
+      const dataConsulta = this.formatarDataConsulta(consultaComRelacoes.dataConsulta);
+      const horaConsulta = consultaComRelacoes.horaConsulta || '';
+
+      await this.whatsappService.sendConsultaConfirmadaParaClienteMasterOuUserComum(
+        phoneNumber,
+        nomePaciente,
+        dataConsulta,
+        horaConsulta,
+      );
+    } catch (error) {
+      console.error('Erro ao notificar confirmação de consulta via WhatsApp:', error?.message);
+    }
   }
 
   private formatarDataConsulta(data: Date | string | null): string {

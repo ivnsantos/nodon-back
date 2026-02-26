@@ -814,9 +814,10 @@ export class CalendarioController {
   ) {
     const consulta = await this.calendarioService.confirmarAgendamentoPorDados(
       confirmarDto.consultaId,
-      confirmarDto.dataAniversario,
-      confirmarDto.cpfInicio,
+      confirmarDto.confirmar,
     );
+
+    //DISPARA DE SMS DE CONFIRMAÇÃO
 
     return {
       statusCode: 200,

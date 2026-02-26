@@ -121,5 +121,49 @@ export class WhatsAppService {
       );
     }
   }
+
+  /**
+   * Envia mensagem de confirmação de consulta via WhatsApp (template send-confirmado).
+   * contentVariables: {"1": nomePaciente, "2": dataConsulta, "3": horaConsulta}
+   */
+  async sendConsultaConfirmadaParaClienteMasterOuUserComum(
+    phoneNumber: string,
+    nomePaciente: string,
+    dataConsulta: string,
+    horaConsulta: string,
+  ): Promise<void> {
+    try {
+      const contentVariables = JSON.stringify({
+        '1': nomePaciente,
+        '2': dataConsulta,
+        '3': horaConsulta,
+      });
+
+      const response = await axios.post(
+        `${this.whatsappApiUrl}/api/whatsapp/send-confirmado`,
+        {
+          phoneNumber,
+          contentVariables,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          validateStatus: (status) => status >= 200 && status < 300,
+        },
+      );
+
+      console.log(`✅ Confirmação de consulta enviada via WhatsApp para ${phoneNumber}`, {
+        status: response.status,
+        data: response.data,
+      });
+    } catch (error) {
+      console.error('❌ Erro ao enviar confirmação de consulta via WhatsApp:', {
+        phoneNumber,
+        error: error?.response?.data || error?.message,
+      });
+      // Não lança exceção para não bloquear a confirmação da consulta
+    }
+  }
 }
 
