@@ -4,8 +4,8 @@ exports.SubscriptionResponseDto = void 0;
 class SubscriptionResponseDto {
     id;
     userId;
-    asaasCustomerId;
-    asaasSubscriptionId;
+    pagarMeCustomerId;
+    pagarMeCardId;
     name;
     email;
     cpf;

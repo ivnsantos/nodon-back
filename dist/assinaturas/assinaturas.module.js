@@ -18,7 +18,7 @@ const cupom_entity_1 = require("../cupons/entities/cupom.entity");
 const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
 const planos_module_1 = require("../planos/planos.module");
 const cupons_module_1 = require("../cupons/cupons.module");
-const asaas_service_1 = require("./services/asaas.service");
+const pagar_me_service_1 = require("./services/pagar-me.service");
 const users_module_1 = require("../users/users.module");
 const clientes_master_module_1 = require("../users/clientes-master.module");
 const chat_module_1 = require("../chat/chat.module");
@@ -40,7 +40,7 @@ exports.AssinaturasModule = AssinaturasModule = __decorate([
             queue_module_1.QueueModule,
         ],
         controllers: [assinaturas_controller_1.AssinaturasController],
-        providers: [assinaturas_service_1.AssinaturasService, asaas_service_1.AsaasService],
+        providers: [assinaturas_service_1.AssinaturasService, pagar_me_service_1.PagarMeService],
         exports: [assinaturas_service_1.AssinaturasService],
     })
 ], AssinaturasModule);

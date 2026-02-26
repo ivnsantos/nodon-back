@@ -42,7 +42,7 @@ let AssinaturasController = class AssinaturasController {
             statusCode: 201,
             message: 'Success',
             data: {
-                asaasCustomerId: result.asaasCustomerId,
+                pagarMeCustomerId: result.pagarMeCustomerId,
                 userId: result.userId,
             },
         };

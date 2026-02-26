@@ -82,8 +82,8 @@ export class UserBase {
   @Column({ name: 'password_reset_expires_at', type: 'timestamp', nullable: true })
   passwordResetExpiresAt: Date | null;
 
-  @Column({ name: 'asaas_customer_id', type: 'varchar', nullable: true })
-  asaasCustomerId: string | null;
+  @Column({ name: 'pagar_me_customer_id', type: 'varchar', nullable: true })
+  pagarMeCustomerId: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

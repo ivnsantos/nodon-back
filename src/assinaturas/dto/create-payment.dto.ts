@@ -73,7 +73,7 @@ export class CreatePaymentDto {
   @IsOptional()
   creditCard?: CreditCardDto;
 
-  @ValidateIf((o) => !o.creditCard)
+  /** Token do cartão (tokenização no front). Opcional se o cliente já tiver card_id salvo – nesse caso a cobrança avulsa usa o card_id. */
   @IsString()
   @IsOptional()
   creditCardToken?: string;

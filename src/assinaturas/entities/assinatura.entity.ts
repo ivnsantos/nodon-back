@@ -23,11 +23,11 @@ export class Assinatura {
   @JoinColumn({ name: 'user_id' })
   clienteMaster: ClienteMaster;
 
-  @Column({ name: 'asaas_customer_id', nullable: true })
-  asaasCustomerId: string;
+  @Column({ name: 'pagar_me_customer_id', type: 'varchar', nullable: true })
+  pagarMeCustomerId: string | null;
 
-  @Column({ name: 'asaas_subscription_id', nullable: true })
-  asaasSubscriptionId: string;
+  @Column({ name: 'pagar_me_card_id', type: 'varchar', nullable: true })
+  pagarMeCardId: string | null;
 
   @Column()
   name: string;
@@ -74,8 +74,8 @@ export class Assinatura {
   @Column({ nullable: true })
   status: string;
 
-  @Column({ type: 'text', name: 'asaas_response', nullable: true })
-  asaasResponse: string;
+  @Column({ type: 'text', name: 'pagar_me_response', nullable: true })
+  pagarMeResponse: string | null;
 
   @Column({ name: 'next_due_date', type: 'date', nullable: true })
   nextDueDate: Date | null;

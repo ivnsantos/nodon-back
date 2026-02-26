@@ -38,5 +38,10 @@ export class CreateCustomerDto {
 
   @IsString()
   state: string;
+
+  /** Data de nascimento (DD/MM/YYYY) - opcional, usado no Pagar.me */
+  @IsString()
+  @IsOptional()
+  birthdate?: string;
 }
 

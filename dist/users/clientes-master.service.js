@@ -273,8 +273,8 @@ let ClientesMasterService = class ClientesMasterService {
                 ? {
                     id: assinatura.id,
                     userId: assinatura.userId,
-                    asaasCustomerId: assinatura.asaasCustomerId,
-                    asaasSubscriptionId: assinatura.asaasSubscriptionId,
+                    pagarMeCustomerId: assinatura.pagarMeCustomerId,
+                    pagarMeCardId: assinatura.pagarMeCardId,
                     name: assinatura.name,
                     email: assinatura.email,
                     cpf: assinatura.cpf,

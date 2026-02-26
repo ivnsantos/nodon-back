@@ -21,11 +21,11 @@ export class Cobranca {
   @JoinColumn({ name: 'user_id' })
   clienteMaster: ClienteMaster | null;
 
-  @Column({ name: 'asaas_payment_id' })
-  asaasPaymentId: string;
+  @Column({ name: 'pagar_me_order_id', type: 'varchar', nullable: true })
+  pagarMeOrderId: string | null;
 
-  @Column({ name: 'asaas_customer_id' })
-  asaasCustomerId: string;
+  @Column({ name: 'pagar_me_customer_id', type: 'varchar', nullable: true })
+  pagarMeCustomerId: string | null;
 
   @Column({ type: 'decimal', precision: 10, scale: 2 })
   value: number;
@@ -42,8 +42,8 @@ export class Cobranca {
   @Column({ name: 'payment_date', type: 'date', nullable: true })
   paymentDate: Date | null;
 
-  @Column({ type: 'text', name: 'asaas_response', nullable: true })
-  asaasResponse: string;
+  @Column({ type: 'text', name: 'pagar_me_response', nullable: true })
+  pagarMeResponse: string | null;
 
   @Column({ name: 'assinatura_id', type: 'uuid', nullable: true })
   assinaturaId: string | null;

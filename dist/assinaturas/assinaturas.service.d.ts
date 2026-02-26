@@ -9,7 +9,7 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { CheckoutCompleteDto } from './dto/checkout-complete.dto';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
-import { AsaasService } from './services/asaas.service';
+import { PagarMeService } from './services/pagar-me.service';
 import { PlanosService } from '../planos/planos.service';
 import { CuponsService } from '../cupons/cupons.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
@@ -26,7 +26,7 @@ export declare class AssinaturasService {
     private readonly cobrancaRepository;
     private readonly cupomRepository;
     private readonly historicoRepository;
-    private readonly asaasService;
+    private readonly pagarMeService;
     private readonly planosService;
     private readonly cuponsService;
     private readonly clientesMasterService;
@@ -35,7 +35,7 @@ export declare class AssinaturasService {
     private readonly userComumService;
     private readonly chatService;
     private readonly queueService;
-    constructor(assinaturaRepository: Repository<Assinatura>, recorrenciaRepository: Repository<Recorrencia>, cobrancaRepository: Repository<Cobranca>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, asaasService: AsaasService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, chatService: ChatService, queueService: QueueService);
+    constructor(assinaturaRepository: Repository<Assinatura>, recorrenciaRepository: Repository<Recorrencia>, cobrancaRepository: Repository<Cobranca>, cupomRepository: Repository<Cupom>, historicoRepository: Repository<HistoricoMensal>, pagarMeService: PagarMeService, planosService: PlanosService, cuponsService: CuponsService, clientesMasterService: ClientesMasterService, usersService: UsersService, userBaseService: UserBaseService, userComumService: UserComumService, chatService: ChatService, queueService: QueueService);
     create(createSubscriptionDto: CreateSubscriptionDto): Promise<any>;
     createSimple(createSimpleSubscriptionDto: CreateSimpleSubscriptionDto, user: {
         id: string;
@@ -47,7 +47,7 @@ export declare class AssinaturasService {
     checkFirstPaymentStatus(userId: string): Promise<{
         status: string;
     }>;
-    private atualizarCobrancaComStatusAsaas;
+    private atualizarCobrancaComStatusPagarMe;
     checkPaymentStatus(paymentId: string): Promise<any>;
     private criarAssinaturaAPartirDaCobranca;
     findById(id: string): Promise<SubscriptionResponseDto>;
@@ -176,12 +176,14 @@ export declare class AssinaturasService {
     }>;
     processarRecorrenciaIndividual(recorrenciaId: string, assinaturaId: string): Promise<void>;
     createCustomer(createCustomerDto: CreateCustomerDto): Promise<{
-        asaasCustomerId: string;
+        pagarMeCustomerId: string;
         userId: string;
     }>;
     private hasActiveSubscription;
-    private prepareAsaasCustomerData;
-    private ensureAsaasCustomer;
+    private preparePagarMeCustomerData;
+    private buildPagarMePhones;
+    private buildBillingAddressFromAssinatura;
+    private ensurePagarMeCustomer;
     private updateExistingUserBase;
     private handleExistingCustomerWithoutSubscription;
     checkoutComplete(checkoutDto: CheckoutCompleteDto): Promise<any>;

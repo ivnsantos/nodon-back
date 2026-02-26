@@ -1,8 +1,8 @@
 export class SubscriptionResponseDto {
   id: string;
   userId: string;
-  asaasCustomerId: string;
-  asaasSubscriptionId: string;
+  pagarMeCustomerId: string | null;
+  pagarMeCardId: string | null;
   name: string;
   email: string;
   cpf: string;

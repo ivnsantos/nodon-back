@@ -43,7 +43,7 @@ import { PastasPacienteModule } from './pastas-paciente/pastas-paciente.module';
         '.env',
         '../.env',
       ],
-      expandVariables: false, // Desabilitado para evitar expansão de $ em ASAAS_API_KEY
+      expandVariables: false,
       ignoreEnvFile: false,
     }),
     TypeOrmModule.forRootAsync({

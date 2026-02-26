@@ -9,7 +9,7 @@ import { Cupom } from '../cupons/entities/cupom.entity';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { PlanosModule } from '../planos/planos.module';
 import { CuponsModule } from '../cupons/cupons.module';
-import { AsaasService } from './services/asaas.service';
+import { PagarMeService } from './services/pagar-me.service';
 import { UsersModule } from '../users/users.module';
 import { ClientesMasterModule } from '../users/clientes-master.module';
 import { ChatModule } from '../chat/chat.module';
@@ -28,7 +28,7 @@ import { QueueModule } from '../queue/queue.module';
     QueueModule,
   ],
   controllers: [AssinaturasController],
-  providers: [AssinaturasService, AsaasService],
+  providers: [AssinaturasService, PagarMeService],
   exports: [AssinaturasService],
 })
 export class AssinaturasModule {}

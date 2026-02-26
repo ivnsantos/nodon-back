@@ -115,8 +115,8 @@ export declare class ClientesMasterController {
             id: string;
             status: string;
             userId?: undefined;
-            asaasCustomerId?: undefined;
-            asaasSubscriptionId?: undefined;
+            pagarMeCustomerId?: undefined;
+            pagarMeCardId?: undefined;
             name?: undefined;
             email?: undefined;
             cpf?: undefined;
@@ -208,8 +208,8 @@ export declare class ClientesMasterController {
         assinatura: {
             id: string;
             userId: string;
-            asaasCustomerId: string;
-            asaasSubscriptionId: string;
+            pagarMeCustomerId: string | null;
+            pagarMeCardId: string | null;
             name: string;
             email: string;
             cpf: string;

@@ -30,7 +30,7 @@ export class UserBaseService {
     googleId?: string | null;
     facebookId?: string | null;
     foto?: string | null;
-    asaasCustomerId?: string | null;
+    pagarMeCustomerId?: string | null;
   }): Promise<UserBase> {
     const userBase = this.userBaseRepository.create({
       nome: data.nome,
@@ -52,7 +52,7 @@ export class UserBaseService {
       googleId: data.googleId ?? null,
       facebookId: data.facebookId ?? null,
       foto: data.foto ?? null,
-      asaasCustomerId: data.asaasCustomerId ?? null,
+      pagarMeCustomerId: data.pagarMeCustomerId ?? null,
     });
     return this.userBaseRepository.save(userBase);
   }
@@ -66,7 +66,7 @@ export class UserBaseService {
   }
 
   async findById(id: string): Promise<UserBase | null> {
-    return this.userBaseRepository.findOne({ 
+    return this.userBaseRepository.findOne({
       where: { id },
       relations: ['clientesMaster', 'usuariosComuns'],
     });

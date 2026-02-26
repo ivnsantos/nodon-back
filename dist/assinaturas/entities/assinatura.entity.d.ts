@@ -5,8 +5,8 @@ export declare class Assinatura {
     id: string;
     userId: string;
     clienteMaster: ClienteMaster;
-    asaasCustomerId: string;
-    asaasSubscriptionId: string;
+    pagarMeCustomerId: string | null;
+    pagarMeCardId: string | null;
     name: string;
     email: string;
     cpf: string;
@@ -22,7 +22,7 @@ export declare class Assinatura {
     billingType: string;
     creditCardToken: string;
     status: string;
-    asaasResponse: string;
+    pagarMeResponse: string | null;
     nextDueDate: Date | null;
     adminId: string;
     creditCardNumber: string;

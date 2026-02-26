@@ -55,7 +55,7 @@ const assinatura_entity_1 = require("./entities/assinatura.entity");
 const recorrencia_entity_1 = require("./entities/recorrencia.entity");
 const cobranca_entity_1 = require("./entities/cobranca.entity");
 const cupom_entity_1 = require("../cupons/entities/cupom.entity");
-const asaas_service_1 = require("./services/asaas.service");
+const pagar_me_service_1 = require("./services/pagar-me.service");
 const planos_service_1 = require("../planos/planos.service");
 const cupons_service_1 = require("../cupons/cupons.service");
 const clientes_master_service_1 = require("../users/clientes-master.service");
@@ -72,7 +72,7 @@ let AssinaturasService = class AssinaturasService {
     cobrancaRepository;
     cupomRepository;
     historicoRepository;
-    asaasService;
+    pagarMeService;
     planosService;
     cuponsService;
     clientesMasterService;
@@ -81,13 +81,13 @@ let AssinaturasService = class AssinaturasService {
     userComumService;
     chatService;
     queueService;
-    constructor(assinaturaRepository, recorrenciaRepository, cobrancaRepository, cupomRepository, historicoRepository, asaasService, planosService, cuponsService, clientesMasterService, usersService, userBaseService, userComumService, chatService, queueService) {
+    constructor(assinaturaRepository, recorrenciaRepository, cobrancaRepository, cupomRepository, historicoRepository, pagarMeService, planosService, cuponsService, clientesMasterService, usersService, userBaseService, userComumService, chatService, queueService) {
         this.assinaturaRepository = assinaturaRepository;
         this.recorrenciaRepository = recorrenciaRepository;
         this.cobrancaRepository = cobrancaRepository;
         this.cupomRepository = cupomRepository;
         this.historicoRepository = historicoRepository;
-        this.asaasService = asaasService;
+        this.pagarMeService = pagarMeService;
         this.planosService = planosService;
         this.cuponsService = cuponsService;
         this.clientesMasterService = clientesMasterService;
@@ -188,9 +188,6 @@ let AssinaturasService = class AssinaturasService {
                     verificationToken,
                     tokenExpiresAt,
                 });
-                clienteMaster = await this.clientesMasterService.create({
-                    userId: userBase.id,
-                });
             }
         }
         catch (error) {
@@ -199,24 +196,13 @@ let AssinaturasService = class AssinaturasService {
             }
             throw new common_1.InternalServerErrorException(`Erro ao criar/obter cliente: ${error.message || 'Erro desconhecido'}`);
         }
-        let asaasCustomerId;
+        let pagarMeCustomerId;
         try {
-            asaasCustomerId = await this.asaasService.createCustomer({
-                name: createSubscriptionDto.name,
-                email: createSubscriptionDto.email,
-                cpfCnpj: createSubscriptionDto.cpf.replace(/\D/g, ''),
-                phone: createSubscriptionDto.phone.replace(/\D/g, ''),
-                postalCode: createSubscriptionDto.postalCode.replace(/\D/g, ''),
-                address: createSubscriptionDto.address,
-                addressNumber: createSubscriptionDto.addressNumber,
-                complement: createSubscriptionDto.complement,
-                province: createSubscriptionDto.province,
-                city: createSubscriptionDto.city,
-                state: createSubscriptionDto.state,
-            });
+            const customerRes = await this.pagarMeService.createCustomer(this.preparePagarMeCustomerData(createSubscriptionDto.name, createSubscriptionDto.email, createSubscriptionDto.cpf, createSubscriptionDto.phone, createSubscriptionDto.postalCode, createSubscriptionDto.address, createSubscriptionDto.addressNumber, createSubscriptionDto.complement, createSubscriptionDto.province, createSubscriptionDto.city, createSubscriptionDto.state, undefined));
+            pagarMeCustomerId = customerRes.id;
         }
         catch (error) {
-            throw new common_1.BadRequestException(`Erro ao criar cliente na ASAAS: ${error.message || 'Erro desconhecido'}`);
+            throw new common_1.BadRequestException(`Erro ao criar cliente no Pagar.me: ${error.message || 'Erro desconhecido'}`);
         }
         let creditCardToken = null;
         let creditCardNumber = null;
@@ -229,104 +215,45 @@ let AssinaturasService = class AssinaturasService {
             creditCardNumber = createSubscriptionDto.creditCardNumber || null;
             creditCardBrand = createSubscriptionDto.creditCardBrand || null;
         }
-        let paymentResult = null;
-        if (createSubscriptionDto.billingType === 'CREDIT_CARD') {
-            if (!creditCardToken) {
-                throw new common_1.BadRequestException('Token do cartão não foi gerado');
-            }
+        let cardId = null;
+        if (createSubscriptionDto.billingType === 'CREDIT_CARD' && creditCardToken) {
             try {
-                const dueDateString = this.getDataAtualBrasil();
-                paymentResult = await this.asaasService.createPayment({
-                    billingType: 'CREDIT_CARD',
-                    customer: asaasCustomerId,
-                    value: valorFinal,
-                    dueDate: dueDateString,
-                    creditCardToken: creditCardToken,
-                });
-                const statusConfirmado = paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED';
-                await this.registrarCobranca({
-                    userId: statusConfirmado ? clienteMaster.id : null,
-                    asaasPaymentId: paymentResult.id,
-                    asaasCustomerId: asaasCustomerId,
-                    value: valorFinal,
-                    billingType: 'CREDIT_CARD',
-                    status: paymentResult.status,
-                    dueDate: paymentResult.dueDate ? this.parseDataBrasil(paymentResult.dueDate) : null,
-                    paymentDate: paymentResult.paymentDate ? this.parseDataBrasil(paymentResult.paymentDate) : null,
-                    asaasResponse: JSON.stringify(paymentResult),
-                    assinaturaId: null,
-                    planoId: createSubscriptionDto.planoId,
-                    couponId: couponId || null,
-                    dadosAssinatura: JSON.stringify({
-                        name: createSubscriptionDto.name,
-                        email: createSubscriptionDto.email,
-                        cpf: createSubscriptionDto.cpf,
-                        phone: createSubscriptionDto.phone,
-                        postalCode: createSubscriptionDto.postalCode,
-                        address: createSubscriptionDto.address,
-                        addressNumber: createSubscriptionDto.addressNumber,
-                        complement: createSubscriptionDto.complement,
-                        province: createSubscriptionDto.province,
-                        city: createSubscriptionDto.city,
-                        state: createSubscriptionDto.state,
-                        billingType: createSubscriptionDto.billingType,
-                        creditCardToken: creditCardToken,
-                        creditCardNumber: creditCardNumber,
-                        creditCardBrand: creditCardBrand,
-                        userId: clienteMaster.id,
-                    }),
-                });
-                if (!statusConfirmado) {
-                    console.log('⚠️ Pagamento criado mas não aprovado ainda. Status:', paymentResult.status);
-                    console.log('📝 Cobrança registrada com userId=null. Será atualizada quando status mudar para CONFIRMED.');
-                    (0, newrelic_logger_1.newRelicLog)('warn', 'Pagamento criado mas não aprovado', {
-                        asaasPaymentId: paymentResult.id,
-                        status: paymentResult.status,
-                        valor: valorFinal,
-                        customerId: asaasCustomerId,
-                        planoId: createSubscriptionDto.planoId,
-                    });
-                    return {
-                        statusCode: 202,
-                        message: 'Pagamento criado. Aguardando confirmação.',
-                        data: {
-                            pagamento: {
-                                id: paymentResult.id,
-                                status: paymentResult.status,
-                                value: paymentResult.value,
-                                dueDate: paymentResult.dueDate,
-                                customer: paymentResult.customer,
-                            },
-                            assinatura: null,
-                        },
-                    };
-                }
-                console.log('✅ Pagamento aprovado:', paymentResult);
-                (0, newrelic_logger_1.newRelicLog)('info', 'Pagamento avulso processado na criação de assinatura', {
-                    asaasPaymentId: paymentResult.id,
-                    status: paymentResult.status,
-                    valor: valorFinal,
-                    customerId: asaasCustomerId,
-                    planoId: createSubscriptionDto.planoId,
-                    aprovado: statusConfirmado,
-                });
+                const billingAddress = {
+                    country: 'BR',
+                    state: createSubscriptionDto.state || '',
+                    city: createSubscriptionDto.city || '',
+                    zip_code: (createSubscriptionDto.postalCode || '').replace(/\D/g, ''),
+                    line_1: [createSubscriptionDto.address, createSubscriptionDto.addressNumber]
+                        .filter(Boolean)
+                        .join(', '),
+                    line_2: createSubscriptionDto.complement || '',
+                };
+                const cardIdRes = await this.pagarMeService.addCard(pagarMeCustomerId, creditCardToken, billingAddress);
+                cardId = cardIdRes.id;
             }
             catch (error) {
-                console.error('❌ Erro ao processar pagamento:', error);
-                (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao processar pagamento na criação de assinatura', {
-                    error: error.message,
-                    customerId: asaasCustomerId,
-                    valor: valorFinal,
-                    planoId: createSubscriptionDto.planoId,
-                });
-                throw new common_1.BadRequestException(`Erro ao processar pagamento: ${error.message || 'Erro desconhecido'}`);
+                (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao vincular cartão na criação de assinatura', { error: error.message, customerId: pagarMeCustomerId });
+                throw new common_1.BadRequestException(`Erro ao vincular cartão: ${error.message || 'Erro desconhecido'}`);
+            }
+        }
+        if (createSubscriptionDto.billingType === 'CREDIT_CARD' && !cardId) {
+            throw new common_1.BadRequestException('Não foi possível vincular o cartão ao cliente.');
+        }
+        console.log('✅ cardId:', cardId);
+        if (!clienteMaster) {
+            clienteMaster = await this.clientesMasterService.create({
+                userId: userBase.id,
+            });
+            if (!clienteMaster) {
+                throw new common_1.InternalServerErrorException('Erro ao criar ClienteMaster');
             }
         }
         const nextDueDateString = this.calcularProximos7Dias();
         const nextDueDate = this.parseDataBrasil(nextDueDateString);
         const assinaturaData = {
             userId: clienteMaster.id,
-            asaasCustomerId: asaasCustomerId,
+            pagarMeCustomerId,
+            pagarMeCardId: cardId || null,
             planoId: createSubscriptionDto.planoId,
             couponId: couponId || undefined,
             name: createSubscriptionDto.name,
@@ -352,43 +279,16 @@ let AssinaturasService = class AssinaturasService {
         try {
             const savedSubscription = await this.assinaturaRepository.save(assinatura);
             await this.gerenciarRecorrencia(savedSubscription);
-            if (paymentResult && (paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED')) {
-                const cobranca = await this.cobrancaRepository.findOne({
-                    where: { asaasPaymentId: paymentResult.id },
-                });
-                if (cobranca) {
-                    cobranca.assinaturaId = savedSubscription.id;
-                    if (!cobranca.userId) {
-                        cobranca.userId = savedSubscription.userId;
-                    }
-                    await this.cobrancaRepository.save(cobranca);
-                    console.log(`✅ Assinatura ${savedSubscription.id} vinculada à cobrança ${cobranca.id} no checkout`);
-                }
-            }
-            console.log('✅ Assinatura criada com sucesso:', savedSubscription.id);
-            (0, newrelic_logger_1.newRelicLog)('info', 'Assinatura criada com sucesso', {
+            (0, newrelic_logger_1.newRelicLog)('info', 'Assinatura criada com sucesso (recorrência em 7 dias)', {
                 assinaturaId: savedSubscription.id,
                 userId: savedSubscription.userId,
                 planoId: savedSubscription.planoId,
-                valor: savedSubscription.value,
-                billingType: savedSubscription.billingType,
-                status: savedSubscription.status,
-                couponId: couponId || null,
-                pagamentoAprovado: paymentResult?.status === 'CONFIRMED' || paymentResult?.status === 'RECEIVED',
-                asaasPaymentId: paymentResult?.id || null,
+                nextDueDate: nextDueDateString,
             });
             return {
                 statusCode: 200,
-                message: 'Pagamento aprovado e assinatura criada com sucesso',
+                message: 'Assinatura criada com sucesso. A primeira cobrança será em 7 dias.',
                 data: {
-                    pagamento: paymentResult ? {
-                        id: paymentResult.id,
-                        status: paymentResult.status,
-                        value: paymentResult.value,
-                        dueDate: paymentResult.dueDate,
-                        paymentDate: paymentResult.paymentDate,
-                        customer: paymentResult.customer,
-                    } : null,
                     assinatura: this.toResponseDto(savedSubscription),
                 },
             };
@@ -434,6 +334,8 @@ let AssinaturasService = class AssinaturasService {
         let creditCardToken = null;
         let creditCardNumber = null;
         let creditCardBrand = null;
+        let pagarMeCustomerId = null;
+        let pagarMeCardId = null;
         if (createSimpleSubscriptionDto.billingType === 'CREDIT_CARD') {
             if (!createSimpleSubscriptionDto.creditCardToken) {
                 throw new common_1.BadRequestException('Token do cartão de crédito é obrigatório. A tokenização deve ser feita no frontend.');
@@ -441,11 +343,31 @@ let AssinaturasService = class AssinaturasService {
             creditCardToken = createSimpleSubscriptionDto.creditCardToken;
             creditCardNumber = createSimpleSubscriptionDto.creditCardNumber || null;
             creditCardBrand = createSimpleSubscriptionDto.creditCardBrand || null;
+            if (!userBase.pagarMeCustomerId) {
+                const customerRes = await this.pagarMeService.createCustomer(this.preparePagarMeCustomerData(userBase.nome || '', userBase.email, userBase.cpf || '', userBase.telefone || '', userBase.postalCode || '', userBase.address || '', userBase.addressNumber || '', userBase.complement, userBase.province, userBase.city, userBase.state, userBase.id, undefined));
+                pagarMeCustomerId = customerRes.id;
+                await this.userBaseService.update(userBase.id, { pagarMeCustomerId });
+            }
+            else {
+                pagarMeCustomerId = userBase.pagarMeCustomerId;
+            }
+            const billingAddress = {
+                country: 'BR',
+                state: userBase.state || '',
+                city: userBase.city || '',
+                zip_code: (userBase.postalCode || '').replace(/\D/g, ''),
+                line_1: [userBase.address, userBase.addressNumber].filter(Boolean).join(', '),
+                line_2: userBase.complement || '',
+            };
+            const cardRes = await this.pagarMeService.addCard(pagarMeCustomerId, creditCardToken, billingAddress);
+            pagarMeCardId = cardRes.id;
         }
         const nextDueDateString = this.calcularProximos7Dias();
         const nextDueDate = this.parseDataBrasil(nextDueDateString);
         const assinaturaData = {
             userId: clienteMaster.id,
+            pagarMeCustomerId: pagarMeCustomerId || null,
+            pagarMeCardId: pagarMeCardId || null,
             planoId: createSimpleSubscriptionDto.planoId,
             couponId: couponId || undefined,
             name: userBase.nome,
@@ -509,85 +431,70 @@ let AssinaturasService = class AssinaturasService {
         if (!subscription) {
             throw new common_1.NotFoundException('Assinatura não encontrada para este usuário');
         }
-        if (!subscription.asaasSubscriptionId) {
-            throw new common_1.BadRequestException('Assinatura não possui ID da ASAAS');
+        const cobranca = await this.cobrancaRepository.findOne({
+            where: { assinaturaId: subscription.id },
+            order: { createdAt: 'ASC' },
+        });
+        if (!cobranca) {
+            return { status: 'NO_PAYMENTS' };
         }
-        try {
-            const paymentsResponse = await this.asaasService.getSubscriptionPayments(subscription.asaasSubscriptionId);
-            if (!paymentsResponse.data || paymentsResponse.data.length === 0) {
-                return { status: 'NO_PAYMENTS' };
-            }
-            const firstPayment = paymentsResponse.data[0];
-            const paymentStatus = firstPayment.status;
-            if (paymentStatus === 'CONFIRMED') {
+        if (cobranca.status === 'paid') {
+            if (subscription.status !== 'ACTIVE') {
                 subscription.status = 'ACTIVE';
                 if (!subscription.nextDueDate) {
                     subscription.nextDueDate = this.parseDataBrasil(this.calcularProximoMes());
                 }
                 await this.assinaturaRepository.save(subscription);
                 await this.gerenciarRecorrencia(subscription);
-                return { status: 'CONFIRMED' };
             }
-            return { status: paymentStatus };
+            return { status: 'CONFIRMED' };
+        }
+        return { status: cobranca.status };
+    }
+    async atualizarCobrancaComStatusPagarMe(orderId) {
+        let orderData = null;
+        try {
+            orderData = await this.pagarMeService.getOrder(orderId);
         }
         catch (error) {
-            throw new common_1.InternalServerErrorException(`Erro ao verificar status do pagamento: ${error.message || 'Erro desconhecido'}`);
+            console.error('Erro ao buscar pedido no Pagar.me:', error);
+            throw new common_1.NotFoundException('Pedido não encontrado no Pagar.me');
         }
-    }
-    async atualizarCobrancaComStatusAsaas(paymentId) {
-        const paymentStatusResponse = await this.asaasService.getPaymentStatus(paymentId);
-        const novoStatus = paymentStatusResponse.status;
         const cobranca = await this.cobrancaRepository.findOne({
-            where: { asaasPaymentId: paymentId },
+            where: { pagarMeOrderId: orderId },
         });
         if (!cobranca) {
-            throw new common_1.NotFoundException('Cobrança não encontrada para este pagamento');
+            throw new common_1.NotFoundException('Cobrança não encontrada para este pedido');
         }
-        let paymentData = null;
-        try {
-            paymentData = await this.asaasService.getPayment(paymentId);
-        }
-        catch (error) {
-            console.error('Erro ao buscar dados completos do pagamento:', error);
-        }
+        const novoStatus = orderData.status === 'paid' ? 'paid' : orderData.status;
         const statusMudou = cobranca.status !== novoStatus;
         let precisaAtualizar = statusMudou;
-        if (paymentData) {
-            if (paymentData.paymentDate) {
-                const novoPaymentDate = this.parseDataBrasil(paymentData.paymentDate);
-                if (!cobranca.paymentDate || cobranca.paymentDate.getTime() !== novoPaymentDate?.getTime()) {
-                    cobranca.paymentDate = novoPaymentDate;
-                    precisaAtualizar = true;
-                }
-            }
-            if (paymentData.dueDate) {
-                const novoDueDate = this.parseDataBrasil(paymentData.dueDate);
-                if (!cobranca.dueDate || cobranca.dueDate.getTime() !== novoDueDate?.getTime()) {
-                    cobranca.dueDate = novoDueDate;
-                    precisaAtualizar = true;
-                }
-            }
-            const novaResposta = JSON.stringify(paymentData);
-            if (cobranca.asaasResponse !== novaResposta) {
-                cobranca.asaasResponse = novaResposta;
+        const charge = orderData.charges?.[0];
+        if (charge?.paid_at) {
+            const novoPaymentDate = this.parseDataBrasil(charge.paid_at.split('T')[0]);
+            if (!cobranca.paymentDate || cobranca.paymentDate.getTime() !== novoPaymentDate?.getTime()) {
+                cobranca.paymentDate = novoPaymentDate;
                 precisaAtualizar = true;
             }
         }
+        const novaResposta = JSON.stringify(orderData);
+        if (cobranca.pagarMeResponse !== novaResposta) {
+            cobranca.pagarMeResponse = novaResposta;
+            precisaAtualizar = true;
+        }
         if (statusMudou) {
-            console.log(`🔄 Status da cobrança ${paymentId} mudou: ${cobranca.status} → ${novoStatus}`);
             cobranca.status = novoStatus;
         }
         if (precisaAtualizar) {
             await this.cobrancaRepository.save(cobranca);
-            console.log(`✅ Cobrança ${paymentId} atualizada com sucesso`);
         }
         return cobranca;
     }
     async checkPaymentStatus(paymentId) {
         try {
-            const cobranca = await this.atualizarCobrancaComStatusAsaas(paymentId);
+            const cobranca = await this.atualizarCobrancaComStatusPagarMe(paymentId);
             const status = cobranca.status;
-            if ((status === 'CONFIRMED' || status === 'RECEIVED') && !cobranca.assinaturaId) {
+            if (status === 'paid' && !cobranca.assinaturaId) {
                 if (!cobranca.userId && cobranca.dadosAssinatura) {
                     try {
                         const dadosAssinatura = JSON.parse(cobranca.dadosAssinatura);
@@ -667,7 +574,8 @@ let AssinaturasService = class AssinaturasService {
         const nextDueDate = this.parseDataBrasil(nextDueDateString);
         const assinaturaData = {
             userId: cobranca.userId,
-            asaasCustomerId: cobranca.asaasCustomerId,
+            pagarMeCustomerId: cobranca.pagarMeCustomerId,
+            pagarMeCardId: dadosAssinatura.pagarMeCardId || null,
             planoId: cobranca.planoId,
             couponId: cobranca.couponId || undefined,
             name: dadosAssinatura.name,
@@ -1164,52 +1072,43 @@ let AssinaturasService = class AssinaturasService {
     async registrarCobranca(data) {
         try {
             const cobrancaExistente = await this.cobrancaRepository.findOne({
-                where: { asaasPaymentId: data.asaasPaymentId },
+                where: { pagarMeOrderId: data.pagarMeOrderId },
             });
             if (cobrancaExistente) {
                 cobrancaExistente.status = data.status;
-                if (data.paymentDate) {
+                if (data.paymentDate)
                     cobrancaExistente.paymentDate = data.paymentDate;
-                }
-                if (data.userId && !cobrancaExistente.userId) {
+                if (data.userId && !cobrancaExistente.userId)
                     cobrancaExistente.userId = data.userId;
-                }
-                if (data.assinaturaId) {
+                if (data.assinaturaId)
                     cobrancaExistente.assinaturaId = data.assinaturaId;
-                }
-                cobrancaExistente.asaasResponse = data.asaasResponse;
-                if (data.dueDate !== undefined) {
+                cobrancaExistente.pagarMeResponse = data.pagarMeResponse;
+                if (data.dueDate !== undefined)
                     cobrancaExistente.dueDate = data.dueDate;
-                }
-                if (data.planoId !== undefined) {
+                if (data.planoId !== undefined)
                     cobrancaExistente.planoId = data.planoId;
-                }
-                if (data.couponId !== undefined) {
+                if (data.couponId !== undefined)
                     cobrancaExistente.couponId = data.couponId;
-                }
-                if (data.dadosAssinatura !== undefined) {
+                if (data.dadosAssinatura !== undefined)
                     cobrancaExistente.dadosAssinatura = data.dadosAssinatura;
-                }
                 return await this.cobrancaRepository.save(cobrancaExistente);
             }
-            else {
-                const cobranca = this.cobrancaRepository.create({
-                    userId: data.userId || null,
-                    asaasPaymentId: data.asaasPaymentId,
-                    asaasCustomerId: data.asaasCustomerId,
-                    value: data.value,
-                    billingType: data.billingType,
-                    status: data.status,
-                    dueDate: data.dueDate,
-                    paymentDate: data.paymentDate,
-                    asaasResponse: data.asaasResponse,
-                    assinaturaId: data.assinaturaId || null,
-                    planoId: data.planoId || null,
-                    couponId: data.couponId || null,
-                    dadosAssinatura: data.dadosAssinatura || null,
-                });
-                return await this.cobrancaRepository.save(cobranca);
-            }
+            const cobranca = this.cobrancaRepository.create({
+                userId: data.userId || null,
+                pagarMeOrderId: data.pagarMeOrderId,
+                pagarMeCustomerId: data.pagarMeCustomerId,
+                value: data.value,
+                billingType: data.billingType,
+                status: data.status,
+                dueDate: data.dueDate,
+                paymentDate: data.paymentDate,
+                pagarMeResponse: data.pagarMeResponse,
+                assinaturaId: data.assinaturaId || null,
+                planoId: data.planoId || null,
+                couponId: data.couponId || null,
+                dadosAssinatura: data.dadosAssinatura || null,
+            });
+            return await this.cobrancaRepository.save(cobranca);
         }
         catch (error) {
             console.error('Erro ao registrar cobrança:', error.message);
@@ -1248,80 +1147,86 @@ let AssinaturasService = class AssinaturasService {
     }
     async createPayment(createPaymentDto) {
         if (createPaymentDto.creditCard && createPaymentDto.creditCardToken) {
-            throw new common_1.BadRequestException('Não é possível enviar creditCard e creditCardToken ao mesmo tempo. Use apenas um deles.');
+            throw new common_1.BadRequestException('Use apenas creditCard ou creditCardToken.');
         }
-        if (!createPaymentDto.creditCard && !createPaymentDto.creditCardToken) {
-            throw new common_1.BadRequestException('É necessário enviar creditCard ou creditCardToken.');
-        }
-        if (createPaymentDto.creditCard) {
-            if (!createPaymentDto.creditCard.holderName ||
-                !createPaymentDto.creditCard.number ||
-                !createPaymentDto.creditCard.expiryMonth ||
-                !createPaymentDto.creditCard.expiryYear ||
-                !createPaymentDto.creditCard.ccv) {
-                throw new common_1.BadRequestException('Todos os campos do cartão são obrigatórios quando usar creditCard.');
-            }
-            const holderInfo = createPaymentDto.creditCardHolderInfo;
-            if (!holderInfo) {
-                throw new common_1.BadRequestException('creditCardHolderInfo é obrigatório quando usar creditCard.');
-            }
-            if (!holderInfo.name ||
-                !holderInfo.email ||
-                !holderInfo.postalCode ||
-                !holderInfo.addressNumber ||
-                !holderInfo.cpfCnpj ||
-                !holderInfo.phone) {
-                throw new common_1.BadRequestException('Todos os campos de creditCardHolderInfo são obrigatórios.');
-            }
-        }
-        const paymentData = {
-            billingType: createPaymentDto.billingType,
-            customer: createPaymentDto.customer,
-            value: createPaymentDto.value,
-            dueDate: createPaymentDto.dueDate,
-        };
-        if (createPaymentDto.creditCard) {
-            paymentData.creditCard = {
-                holderName: createPaymentDto.creditCard.holderName,
-                number: createPaymentDto.creditCard.number,
-                expiryMonth: createPaymentDto.creditCard.expiryMonth,
-                expiryYear: createPaymentDto.creditCard.expiryYear,
-                ccv: createPaymentDto.creditCard.ccv,
+        const customerId = createPaymentDto.customer;
+        let cardId;
+        const assinaturaParaBilling = await this.assinaturaRepository.findOne({
+            where: { pagarMeCustomerId: customerId },
+            order: { createdAt: 'DESC' },
+        });
+        const billingAddress = assinaturaParaBilling
+            ? await this.buildBillingAddressFromAssinatura(assinaturaParaBilling)
+            : {
+                country: 'BR',
+                state: '',
+                city: '',
+                zip_code: '',
+                line_1: '',
+                line_2: '',
             };
-            const holderInfo = createPaymentDto.creditCardHolderInfo;
-            paymentData.creditCardHolderInfo = {
-                name: holderInfo.name,
-                email: holderInfo.email,
-                postalCode: holderInfo.postalCode,
-                addressNumber: holderInfo.addressNumber,
-                cpfCnpj: holderInfo.cpfCnpj,
-                phone: holderInfo.phone,
-            };
-        }
-        else if (createPaymentDto.creditCardToken) {
-            paymentData.creditCardToken = createPaymentDto.creditCardToken;
-        }
-        if (createPaymentDto.remoteIp) {
-            paymentData.remoteIp = createPaymentDto.remoteIp;
-        }
-        try {
-            const result = await this.asaasService.createPayment(paymentData);
-            (0, newrelic_logger_1.newRelicLog)('info', 'Pagamento avulso criado', {
-                asaasPaymentId: result.id,
-                status: result.status,
-                valor: createPaymentDto.value,
-                customerId: createPaymentDto.customer,
-                billingType: createPaymentDto.billingType,
-                aprovado: result.status === 'CONFIRMED' || result.status === 'RECEIVED',
+        if (createPaymentDto.creditCardToken) {
+            const cardRes = await this.pagarMeService.addCard(customerId, createPaymentDto.creditCardToken, billingAddress);
+            cardId = cardRes.id;
+            const assinatura = await this.assinaturaRepository.findOne({
+                where: { pagarMeCustomerId: customerId },
+                order: { createdAt: 'DESC' },
             });
-            return result;
+            if (assinatura) {
+                assinatura.pagarMeCardId = cardRes.id;
+                await this.assinaturaRepository.save(assinatura);
+            }
+        }
+        else {
+            const assinatura = await this.assinaturaRepository.findOne({
+                where: { pagarMeCustomerId: customerId },
+                order: { createdAt: 'DESC' },
+            });
+            if (!assinatura?.pagarMeCardId) {
+                throw new common_1.BadRequestException('Envie creditCardToken (token do cartão) ou vincule um cartão antes. O card_id fica na assinatura e é usado para cobranças avulsas.');
+            }
+            cardId = assinatura.pagarMeCardId;
+        }
+        const amountCentavos = Math.round(createPaymentDto.value * 100);
+        const orderCode = `pay_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+        try {
+            const order = await this.pagarMeService.createOrder({
+                code: orderCode,
+                customer_id: customerId,
+                items: [
+                    {
+                        amount: amountCentavos,
+                        description: `Cobrança avulsa - R$ ${createPaymentDto.value}`,
+                        quantity: 1,
+                        code: orderCode,
+                    },
+                ],
+                payments: [
+                    {
+                        payment_method: 'credit_card',
+                        credit_card: {
+                            card_id: cardId,
+                            installments: 1,
+                            operation_type: 'auth_and_capture',
+                            statement_descriptor: 'NODON',
+                            card: { billing_address: billingAddress },
+                        },
+                    },
+                ],
+            });
+            (0, newrelic_logger_1.newRelicLog)('info', 'Pagamento avulso Pagar.me criado', {
+                orderId: order.id,
+                status: order.status,
+                valor: createPaymentDto.value,
+                customerId,
+            });
+            return order;
         }
         catch (error) {
-            (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao criar pagamento avulso', {
+            (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao criar pagamento avulso Pagar.me', {
                 error: error.message,
-                customerId: createPaymentDto.customer,
+                customerId,
                 valor: createPaymentDto.value,
-                billingType: createPaymentDto.billingType,
             });
             throw error;
         }
@@ -1403,18 +1308,16 @@ let AssinaturasService = class AssinaturasService {
             }
             console.log(`   Assinatura encontrada: ${assinatura.id}`);
             console.log(`   Status da assinatura: ${assinatura.status}`);
-            console.log(`   Customer ID (ASAAS): ${assinatura.asaasCustomerId || 'NÃO ENCONTRADO'}`);
-            console.log(`   Token do cartão: ${assinatura.creditCardToken ? 'PRESENTE' : 'NÃO ENCONTRADO'}`);
+            console.log(`   Customer ID (Pagar.me): ${assinatura.pagarMeCustomerId || 'NÃO ENCONTRADO'}`);
+            console.log(`   Card ID: ${assinatura.pagarMeCardId ? 'PRESENTE' : 'NÃO ENCONTRADO'}`);
             if (assinatura.status !== 'ACTIVE') {
-                console.log(`⚠️ [${i + 1}/${recorrencias.length}] Assinatura ${assinatura.id} não está ativa (status: ${assinatura.status}). Removendo da recorrência.`);
+                console.log(`⚠️ [${i + 1}/${recorrencias.length}] Assinatura ${assinatura.id} não está ativa. Removendo da recorrência.`);
                 await this.removerRecorrencia(assinatura.id);
                 jobsPulados++;
                 continue;
             }
-            if (!assinatura.creditCardToken || !assinatura.asaasCustomerId) {
-                console.error(`❌ [${i + 1}/${recorrencias.length}] Assinatura ${assinatura.id} não tem token do cartão ou customer ID`);
-                console.error(`   creditCardToken: ${assinatura.creditCardToken ? 'OK' : 'FALTANDO'}`);
-                console.error(`   asaasCustomerId: ${assinatura.asaasCustomerId ? 'OK' : 'FALTANDO'}`);
+            if (!assinatura.pagarMeCardId || !assinatura.pagarMeCustomerId) {
+                console.error(`❌ [${i + 1}/${recorrencias.length}] Assinatura ${assinatura.id} sem pagarMeCardId ou pagarMeCustomerId`);
                 jobsPulados++;
                 continue;
             }
@@ -1428,7 +1331,7 @@ let AssinaturasService = class AssinaturasService {
                 console.log(`⚠️ [${i + 1}/${recorrencias.length}] JÁ EXISTE cobrança para assinatura ${assinatura.id} na data ${hoje}`);
                 console.log(`   Cobrança ID: ${cobrancaExistente.id}`);
                 console.log(`   Status: ${cobrancaExistente.status}`);
-                console.log(`   ASAAS Payment ID: ${cobrancaExistente.asaasPaymentId}`);
+                console.log(`   Pagar.me Order ID: ${cobrancaExistente.pagarMeOrderId}`);
                 console.log(`   ⏭️ Pulando esta recorrência para evitar cobrança duplicada`);
                 (0, newrelic_logger_1.newRelicLog)('warn', 'Recorrência pulada - cobrança já existe', {
                     assinaturaId: assinatura.id,
@@ -1495,8 +1398,8 @@ let AssinaturasService = class AssinaturasService {
             await this.removerRecorrencia(assinatura.id);
             throw new Error(`Assinatura não está ativa (status: ${assinatura.status})`);
         }
-        if (!assinatura.creditCardToken || !assinatura.asaasCustomerId) {
-            throw new Error('Dados insuficientes para cobrança (falta token ou customer ID)');
+        if (!assinatura.pagarMeCardId || !assinatura.pagarMeCustomerId) {
+            throw new Error('Dados insuficientes para cobrança (falta pagarMeCardId ou pagarMeCustomerId)');
         }
         const hoje = this.getDataAtualBrasil();
         const hojeDate = this.parseDataBrasil(hoje);
@@ -1510,7 +1413,7 @@ let AssinaturasService = class AssinaturasService {
             console.log(`⚠️ JÁ EXISTE cobrança para assinatura ${assinatura.id} na data ${hoje}`);
             console.log(`   Cobrança ID: ${cobrancaExistente.id}`);
             console.log(`   Status: ${cobrancaExistente.status}`);
-            console.log(`   ASAAS Payment ID: ${cobrancaExistente.asaasPaymentId}`);
+            console.log(`   Pagar.me Order ID: ${cobrancaExistente.pagarMeOrderId}`);
             console.log(`   ⏭️ Pulando esta recorrência para evitar cobrança duplicada`);
             (0, newrelic_logger_1.newRelicLog)('warn', 'Recorrência pulada - cobrança já existe', {
                 assinaturaId: assinatura.id,
@@ -1524,75 +1427,85 @@ let AssinaturasService = class AssinaturasService {
         }
         console.log(`✅ Nenhuma cobrança encontrada para esta data. Prosseguindo...`);
         try {
-            console.log(`💳 Criando cobrança na ASAAS...`);
-            console.log(`   Valor: R$ ${Number(recorrencia.valor)}`);
-            console.log(`   Due Date: ${hoje}`);
-            console.log(`   Customer: ${assinatura.asaasCustomerId}`);
-            console.log(`   Billing Type: ${assinatura.billingType || 'CREDIT_CARD'}`);
-            const paymentResult = await this.asaasService.createPayment({
-                billingType: assinatura.billingType || 'CREDIT_CARD',
-                customer: assinatura.asaasCustomerId,
-                value: Number(recorrencia.valor),
-                dueDate: hoje,
-                creditCardToken: assinatura.creditCardToken,
+            let phoneForGateway = assinatura.phone || '';
+            if (!phoneForGateway && assinatura.userId) {
+                const cm = await this.clientesMasterService.findById(assinatura.userId);
+                if (cm?.userId) {
+                    const ub = await this.userBaseService.findById(cm.userId);
+                    if (ub?.telefone)
+                        phoneForGateway = ub.telefone;
+                }
+            }
+            console.log(`💳 Criando cobrança no Pagar.me...`);
+            const amountCentavos = Math.round(Number(recorrencia.valor) * 100);
+            const orderCode = `rec_${recorrencia.id}_${Date.now()}`;
+            const billingAddress = await this.buildBillingAddressFromAssinatura(assinatura);
+            const orderResult = await this.pagarMeService.createOrder({
+                code: orderCode,
+                customer_id: assinatura.pagarMeCustomerId,
+                items: [
+                    {
+                        amount: amountCentavos,
+                        description: `Recorrência assinatura - NODON`,
+                        quantity: 1,
+                        code: orderCode,
+                    },
+                ],
+                payments: [
+                    {
+                        payment_method: 'credit_card',
+                        credit_card: {
+                            card_id: assinatura.pagarMeCardId,
+                            installments: 1,
+                            operation_type: 'auth_and_capture',
+                            statement_descriptor: 'NODON',
+                            card: { billing_address: billingAddress },
+                        },
+                    },
+                ],
             });
-            console.log(`✅ Cobrança criada na ASAAS`);
-            console.log(`   Payment ID: ${paymentResult.id}`);
-            console.log(`   Status: ${paymentResult.status}`);
-            console.log(`💾 Registrando cobrança na tabela...`);
             await this.registrarCobranca({
                 userId: assinatura.userId,
-                asaasPaymentId: paymentResult.id,
-                asaasCustomerId: assinatura.asaasCustomerId,
+                pagarMeOrderId: orderResult.id,
+                pagarMeCustomerId: assinatura.pagarMeCustomerId,
                 value: Number(recorrencia.valor),
                 billingType: assinatura.billingType || 'CREDIT_CARD',
-                status: paymentResult.status,
+                status: orderResult.status,
                 dueDate: hojeDate,
-                paymentDate: paymentResult.paymentDate ? this.parseDataBrasil(paymentResult.paymentDate) : null,
-                asaasResponse: JSON.stringify(paymentResult),
+                paymentDate: orderResult.status === 'paid' && orderResult.charges?.[0]?.paid_at
+                    ? this.parseDataBrasil(orderResult.charges[0].paid_at.split('T')[0])
+                    : null,
+                pagarMeResponse: JSON.stringify(orderResult),
                 assinaturaId: null,
                 planoId: assinatura.planoId || null,
                 couponId: assinatura.couponId || null,
             });
-            console.log(`✅ Cobrança registrada na tabela`);
-            if (paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED') {
-                console.log(`✅ Pagamento CONFIRMED! Atualizando assinatura e recorrência...`);
+            if (orderResult.status === 'paid') {
                 const proximoMes = this.calcularProximoMes();
                 const proximoMesDate = this.parseDataBrasil(proximoMes);
-                console.log(`   Próxima data de cobrança: ${proximoMes}`);
-                console.log(`   Atualizando assinatura ${assinatura.id}...`);
                 assinatura.nextDueDate = proximoMesDate;
                 await this.assinaturaRepository.save(assinatura);
-                console.log(`   ✅ Assinatura atualizada`);
-                console.log(`   Atualizando recorrência ${recorrencia.id}...`);
                 recorrencia.nextDueDate = proximoMesDate;
                 recorrencia.valor = assinatura.value;
                 await this.recorrenciaRepository.save(recorrencia);
-                console.log(`   ✅ Recorrência atualizada`);
-                console.log(`   Vinculando cobrança à assinatura...`);
                 const cobranca = await this.cobrancaRepository.findOne({
-                    where: { asaasPaymentId: paymentResult.id },
+                    where: { pagarMeOrderId: orderResult.id },
                 });
                 if (cobranca) {
                     cobranca.assinaturaId = assinatura.id;
                     await this.cobrancaRepository.save(cobranca);
-                    console.log(`   ✅ Cobrança vinculada`);
-                    (0, newrelic_logger_1.newRelicLog)('info', 'Recorrência processada com sucesso', {
+                    (0, newrelic_logger_1.newRelicLog)('info', 'Recorrência Pagar.me processada com sucesso', {
                         assinaturaId: assinatura.id,
                         recorrenciaId: recorrencia.id,
-                        asaasPaymentId: paymentResult.id,
+                        orderId: orderResult.id,
                         valor: Number(recorrencia.valor),
                         proximaCobranca: proximoMes,
-                        status: 'CONFIRMED',
                     });
                 }
-                else {
-                    console.log(`   ⚠️ Cobrança não encontrada para vincular`);
-                }
-                console.log(`✅ SUCESSO: Cobrança confirmada para assinatura ${assinatura.id}. Próxima cobrança: ${proximoMes}`);
+                console.log(`✅ SUCESSO: Cobrança confirmada para assinatura ${assinatura.id}. Próxima: ${proximoMes}`);
             }
             else {
-                console.log(`❌ Pagamento NÃO confirmado. Status: ${paymentResult.status}`);
+                console.log(`❌ Pagamento não aprovado. Status: ${orderResult.status}`);
                 console.log(`   Colocando assinatura como PENDING e removendo da recorrência...`);
                 assinatura.status = 'PENDING';
                 await this.assinaturaRepository.save(assinatura);
@@ -1600,22 +1513,21 @@ let AssinaturasService = class AssinaturasService {
                 await this.removerRecorrencia(assinatura.id);
                 console.log(`   ✅ Assinatura removida da recorrência`);
                 const cobranca = await this.cobrancaRepository.findOne({
-                    where: { asaasPaymentId: paymentResult.id },
+                    where: { pagarMeOrderId: orderResult.id },
                 });
                 if (cobranca) {
-                    cobranca.status = 'FAILED';
+                    cobranca.status = 'failed';
                     await this.cobrancaRepository.save(cobranca);
-                    console.log(`   ✅ Cobrança marcada como FAILED`);
                 }
-                console.error(`❌ FALHA: Cobrança falhou para assinatura ${assinatura.id}. Status: ${paymentResult.status}`);
+                console.error(`❌ FALHA: Cobrança falhou para assinatura ${assinatura.id}. Status: ${orderResult.status}`);
                 (0, newrelic_logger_1.newRelicLog)('warn', 'Recorrência falhou - pagamento não confirmado', {
                     assinaturaId: assinatura.id,
                     recorrenciaId: recorrencia.id,
-                    asaasPaymentId: paymentResult.id,
+                    orderId: orderResult.id,
                     valor: Number(recorrencia.valor),
-                    status: paymentResult.status,
+                    status: orderResult.status,
                 });
-                throw new Error(`Pagamento não confirmado. Status: ${paymentResult.status}`);
+                throw new Error(`Pagamento não confirmado. Status: ${orderResult.status}`);
             }
         }
         catch (error) {
@@ -1679,32 +1591,31 @@ let AssinaturasService = class AssinaturasService {
             const existingClienteMaster = await this.clientesMasterService.findByEmail(createCustomerDto.email);
             let clienteMaster;
             let userBase;
-            let asaasCustomerId;
+            let pagarMeCustomerId;
             if (existingClienteMaster) {
                 clienteMaster = existingClienteMaster;
                 userBase = await this.userBaseService.findById(existingClienteMaster.userId);
                 if (!userBase) {
                     throw new common_1.InternalServerErrorException('UserBase não encontrado para o ClienteMaster existente');
                 }
-                if (userBase.asaasCustomerId) {
+                if (userBase.pagarMeCustomerId) {
                     return {
-                        asaasCustomerId: userBase.asaasCustomerId,
+                        pagarMeCustomerId: userBase.pagarMeCustomerId,
                         userId: userBase.id,
                     };
                 }
-                asaasCustomerId = await this.asaasService.createCustomer(this.prepareAsaasCustomerData(createCustomerDto));
-                await this.userBaseService.update(userBase.id, { asaasCustomerId });
-                return {
-                    asaasCustomerId,
-                    userId: userBase.id,
-                };
+                const customerRes = await this.pagarMeService.createCustomer(this.preparePagarMeCustomerData(createCustomerDto.name, createCustomerDto.email, createCustomerDto.cpf, createCustomerDto.phone, createCustomerDto.postalCode, createCustomerDto.address, createCustomerDto.addressNumber, createCustomerDto.complement, createCustomerDto.province, createCustomerDto.city, createCustomerDto.state, userBase.id, createCustomerDto.birthdate));
+                pagarMeCustomerId = customerRes.id;
+                await this.userBaseService.update(userBase.id, { pagarMeCustomerId });
+                return { pagarMeCustomerId, userId: userBase.id };
             }
             else {
                 const hashedPassword = await bcrypt.hash(createCustomerDto.password, 10);
                 const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
                 const tokenExpiresAt = new Date();
                 tokenExpiresAt.setMinutes(tokenExpiresAt.getMinutes() + 15);
-                asaasCustomerId = await this.asaasService.createCustomer(this.prepareAsaasCustomerData(createCustomerDto));
+                const customerRes = await this.pagarMeService.createCustomer(this.preparePagarMeCustomerData(createCustomerDto.name, createCustomerDto.email, createCustomerDto.cpf, createCustomerDto.phone, createCustomerDto.postalCode, createCustomerDto.address, createCustomerDto.addressNumber, createCustomerDto.complement, createCustomerDto.province, createCustomerDto.city, createCustomerDto.state, undefined, createCustomerDto.birthdate));
+                pagarMeCustomerId = customerRes.id;
                 userBase = await this.userBaseService.create({
                     nome: createCustomerDto.name,
                     email: createCustomerDto.email,
@@ -1721,13 +1632,10 @@ let AssinaturasService = class AssinaturasService {
                     isVerified: false,
                     verificationToken,
                     tokenExpiresAt,
-                    asaasCustomerId,
+                    pagarMeCustomerId,
                 });
             }
-            return {
-                asaasCustomerId,
-                userId: userBase.id,
-            };
+            return { pagarMeCustomerId, userId: userBase.id };
         }
         catch (error) {
             if (error instanceof common_1.ConflictException || error instanceof common_1.BadRequestException || error instanceof common_1.InternalServerErrorException) {
@@ -1745,40 +1653,101 @@ let AssinaturasService = class AssinaturasService {
         });
         return !!assinatura;
     }
-    prepareAsaasCustomerData(createCustomerDto) {
-        return {
-            name: createCustomerDto.name,
-            email: createCustomerDto.email,
-            cpfCnpj: createCustomerDto.cpf.replace(/\D/g, ''),
-            phone: createCustomerDto.phone.replace(/\D/g, ''),
-            postalCode: createCustomerDto.postalCode.replace(/\D/g, ''),
-            address: createCustomerDto.address,
-            addressNumber: createCustomerDto.addressNumber,
-            complement: createCustomerDto.complement,
-            province: createCustomerDto.province,
-            city: createCustomerDto.city,
-            state: createCustomerDto.state,
+    preparePagarMeCustomerData(name, email, cpf, phone, postalCode, address, addressNumber, complement, province, city, state, code, birthdate) {
+        const doc = (cpf || '').replace(/\D/g, '');
+        const dto = {
+            name,
+            email,
+            document: doc,
+            document_type: doc.length <= 11 ? 'cpf' : 'cnpj',
+            type: 'individual',
+            address: {
+                country: 'BR',
+                state: state || '',
+                city: city || '',
+                zip_code: (postalCode || '').replace(/\D/g, ''),
+                line_1: [address, addressNumber].filter(Boolean).join(', '),
+                line_2: complement,
+            },
         };
+        if (birthdate)
+            dto.birthdate = birthdate;
+        if (code)
+            dto.code = code;
+        const phones = this.buildPagarMePhones(phone);
+        if (phones)
+            dto.phones = phones;
+        return dto;
     }
-    async ensureAsaasCustomer(userBase, createCustomerDto) {
-        const customerData = this.prepareAsaasCustomerData(createCustomerDto);
-        if (userBase.asaasCustomerId) {
-            try {
-                await this.asaasService.updateCustomer(userBase.asaasCustomerId, customerData);
-                return userBase.asaasCustomerId;
-            }
-            catch (error) {
-                console.error('Erro ao atualizar customer na Asaas:', error);
-                return userBase.asaasCustomerId;
-            }
+    buildPagarMePhones(phone) {
+        const digits = (phone || '').replace(/\D/g, '');
+        if (digits.length < 10)
+            return undefined;
+        const countryCode = '55';
+        let areaCode;
+        let number;
+        if (digits.length === 11 && digits.startsWith('9')) {
+            areaCode = digits.slice(0, 2);
+            number = digits.slice(2);
+        }
+        else if (digits.length === 10) {
+            areaCode = digits.slice(0, 2);
+            number = digits.slice(2);
+        }
+        else if (digits.length === 11) {
+            areaCode = digits.slice(0, 2);
+            number = digits.slice(2);
+        }
+        else if (digits.length >= 12 && digits.startsWith('55')) {
+            areaCode = digits.slice(2, 4);
+            number = digits.slice(4);
         }
         else {
-            const asaasCustomerId = await this.asaasService.createCustomer(customerData);
-            await this.userBaseService.update(userBase.id, { asaasCustomerId });
-            return asaasCustomerId;
+            areaCode = digits.slice(0, 2);
+            number = digits.slice(2).slice(-8);
         }
+        if (!areaCode || !number)
+            return undefined;
+        const mobile = { country_code: countryCode, area_code: areaCode, number: number.slice(-9) };
+        return { mobile_phone: mobile };
     }
-    async updateExistingUserBase(userBase, createCustomerDto, telefoneNormalizado, asaasCustomerId) {
+    async buildBillingAddressFromAssinatura(assinatura) {
+        let line1 = [assinatura.address, assinatura.addressNumber].filter(Boolean).join(', ').trim();
+        let city = assinatura.city || '';
+        let state = assinatura.state || '';
+        let zipCode = (assinatura.postalCode || '').replace(/\D/g, '');
+        let line2 = assinatura.complement || undefined;
+        if (!line1 && assinatura.userId) {
+            const cm = await this.clientesMasterService.findById(assinatura.userId);
+            if (cm?.userId) {
+                const ub = await this.userBaseService.findById(cm.userId);
+                if (ub) {
+                    line1 = [ub.address, ub.addressNumber].filter(Boolean).join(', ').trim();
+                    city = ub.city || city;
+                    state = ub.state || state;
+                    zipCode = zipCode || (ub.postalCode || '').replace(/\D/g, '');
+                    line2 = line2 || ub.complement || undefined;
+                }
+            }
+        }
+        return {
+            country: 'BR',
+            state: state || '',
+            city: city || '',
+            zip_code: zipCode || '',
+            line_1: line1 || '',
+            line_2: line2,
+        };
+    }
+    async ensurePagarMeCustomer(userBase, createCustomerDto) {
+        if (userBase.pagarMeCustomerId) {
+            return userBase.pagarMeCustomerId;
+        }
+        const customerRes = await this.pagarMeService.createCustomer(this.preparePagarMeCustomerData(createCustomerDto.name, createCustomerDto.email, createCustomerDto.cpf, createCustomerDto.phone, createCustomerDto.postalCode, createCustomerDto.address, createCustomerDto.addressNumber, createCustomerDto.complement, createCustomerDto.province, createCustomerDto.city, createCustomerDto.state, userBase.id, createCustomerDto.birthdate));
+        await this.userBaseService.update(userBase.id, { pagarMeCustomerId: customerRes.id });
+        return customerRes.id;
+    }
+    async updateExistingUserBase(userBase, createCustomerDto, telefoneNormalizado, pagarMeCustomerId) {
         const updateData = {
             nome: createCustomerDto.name,
             cpf: createCustomerDto.cpf,
@@ -1790,7 +1759,7 @@ let AssinaturasService = class AssinaturasService {
             province: createCustomerDto.province,
             city: createCustomerDto.city,
             state: createCustomerDto.state,
-            asaasCustomerId,
+            pagarMeCustomerId,
         };
         if (createCustomerDto.password) {
             updateData.password = await bcrypt.hash(createCustomerDto.password, 10);
@@ -1798,12 +1767,9 @@ let AssinaturasService = class AssinaturasService {
         await this.userBaseService.update(userBase.id, updateData);
     }
     async handleExistingCustomerWithoutSubscription(userBase, createCustomerDto, telefoneNormalizado) {
-        const asaasCustomerId = await this.ensureAsaasCustomer(userBase, createCustomerDto);
-        await this.updateExistingUserBase(userBase, createCustomerDto, telefoneNormalizado, asaasCustomerId);
-        return {
-            asaasCustomerId,
-            userId: userBase.id,
-        };
+        const pagarMeCustomerId = await this.ensurePagarMeCustomer(userBase, createCustomerDto);
+        await this.updateExistingUserBase(userBase, createCustomerDto, telefoneNormalizado, pagarMeCustomerId);
+        return { pagarMeCustomerId, userId: userBase.id };
     }
     async checkoutComplete(checkoutDto) {
         const userBase = await this.userBaseService.findById(checkoutDto.userId);
@@ -1823,20 +1789,20 @@ let AssinaturasService = class AssinaturasService {
                 throw new common_1.BadRequestException('Assinatura ativa. Fale com o Suporte.');
             }
         }
-        let asaasCustomerId;
+        let pagarMeCustomerId;
         const PLANOS_TESTE = [
             '677c76e6-0ab0-4626-87bd-23f13ad2cd76',
             'ca772fbf-d9c7-4ef7-9f6c-84e535c393f0',
         ];
         const isPlanoTeste = PLANOS_TESTE.includes(checkoutDto.planoId);
-        if (userBase.asaasCustomerId) {
-            asaasCustomerId = userBase.asaasCustomerId;
+        if (userBase.pagarMeCustomerId) {
+            pagarMeCustomerId = userBase.pagarMeCustomerId;
         }
         else if (isPlanoTeste) {
-            asaasCustomerId = `cus_fake_test_${userBase.id}`;
+            pagarMeCustomerId = `cus_fake_test_${userBase.id}`;
         }
         else {
-            throw new common_1.BadRequestException(`Usuário não possui Id de pagamentos no gateway.`);
+            throw new common_1.BadRequestException('Usuário não possui Id de pagamentos no gateway. Chame POST /assinaturas/customer antes.');
         }
         const plano = await this.planosService.findById(checkoutDto.planoId);
         if (!plano) {
@@ -1865,21 +1831,38 @@ let AssinaturasService = class AssinaturasService {
         let creditCardToken = null;
         let creditCardNumber = null;
         let creditCardBrand = null;
+        let cardId = null;
         if (checkoutDto.billingType === 'CREDIT_CARD') {
-            if (checkoutDto.creditCardToken) {
-                creditCardToken = checkoutDto.creditCardToken;
-                creditCardNumber = checkoutDto.creditCardNumber || null;
-                creditCardBrand = checkoutDto.creditCardBrand || null;
+            if (!checkoutDto.creditCardToken) {
+                throw new common_1.BadRequestException('Token do cartão de crédito é obrigatório. A tokenização deve ser feita no frontend.');
             }
-            else {
-                if (!checkoutDto.creditCardHolderName ||
-                    !checkoutDto.creditCardNumber ||
-                    !checkoutDto.creditCardExpiryMonth ||
-                    !checkoutDto.creditCardExpiryYear ||
-                    !checkoutDto.creditCardCcv) {
-                    throw new common_1.BadRequestException('Dados do cartão de crédito são obrigatórios ou forneça creditCardToken');
+            creditCardToken = checkoutDto.creditCardToken;
+            creditCardNumber = checkoutDto.creditCardNumber || null;
+            creditCardBrand = checkoutDto.creditCardBrand || null;
+            if (!isPlanoTeste) {
+                try {
+                    const billingAddress = {
+                        country: 'BR',
+                        state: userBase.state || '',
+                        city: userBase.city || '',
+                        zip_code: (userBase.postalCode || '').replace(/\D/g, ''),
+                        line_1: [userBase.address, userBase.addressNumber].filter(Boolean).join(', '),
+                        line_2: userBase.complement || '',
+                    };
+                    const cardRes = await this.pagarMeService.addCard(pagarMeCustomerId, creditCardToken, billingAddress);
+                    cardId = cardRes.id;
+                    if (!cardId) {
+                        throw new common_1.BadRequestException('Cartão nao encontrado');
+                    }
+                }
+                catch (error) {
+                    (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao vincular cartão no checkoutComplete', { error: error.message, customerId: pagarMeCustomerId });
+                    throw new common_1.BadRequestException(`Erro ao vincular cartão: ${error.message || 'Erro desconhecido'}`);
                 }
             }
+        }
+        if (checkoutDto.billingType === 'CREDIT_CARD' && !isPlanoTeste && !cardId) {
+            throw new common_1.BadRequestException('Não foi possível vincular o cartão ao cliente.');
         }
         let paymentResult = null;
         if (isPlanoTeste && checkoutDto.billingType === 'CREDIT_CARD') {
@@ -1887,15 +1870,15 @@ let AssinaturasService = class AssinaturasService {
             const dueDateString = this.getDataAtualBrasil();
             const paymentDateString = this.getDataAtualBrasil();
             paymentResult = {
-                id: `pay_fake_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                customer: asaasCustomerId || 'cus_fake_test',
+                id: `or_fake_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                customer: pagarMeCustomerId || 'cus_fake_test',
                 value: valorFinal,
                 netValue: valorFinal,
                 originalValue: valorFinal,
                 interestValue: 0,
                 description: `Pagamento TESTE - ${plano.nome}`,
                 billingType: 'CREDIT_CARD',
-                status: 'CONFIRMED',
+                status: 'paid',
                 dueDate: dueDateString,
                 paymentDate: paymentDateString,
                 originalDueDate: dueDateString,
@@ -1926,14 +1909,14 @@ let AssinaturasService = class AssinaturasService {
             };
             await this.registrarCobranca({
                 userId: null,
-                asaasPaymentId: paymentResult.id,
-                asaasCustomerId: asaasCustomerId,
+                pagarMeOrderId: paymentResult.id,
+                pagarMeCustomerId: pagarMeCustomerId,
                 value: valorFinal,
                 billingType: 'CREDIT_CARD',
-                status: paymentResult.status,
+                status: 'paid',
                 dueDate: paymentResult.dueDate ? this.parseDataBrasil(paymentResult.dueDate) : null,
                 paymentDate: paymentResult.paymentDate ? this.parseDataBrasil(paymentResult.paymentDate) : null,
-                asaasResponse: JSON.stringify(paymentResult),
+                pagarMeResponse: JSON.stringify(paymentResult),
                 assinaturaId: null,
                 planoId: checkoutDto.planoId,
                 couponId: couponId || null,
@@ -1959,10 +1942,7 @@ let AssinaturasService = class AssinaturasService {
             console.log('✅ Pagamento fake criado para plano de teste:', paymentResult.id);
         }
         else if (checkoutDto.billingType === 'CREDIT_CARD') {
-            if (!creditCardToken) {
-                throw new common_1.BadRequestException('Token do cartão é obrigatório para processar a primeira cobrança após o período grátis');
-            }
-            console.log('✅ Token do cartão validado. Período grátis de 7 dias ativado. Primeira cobrança será processada automaticamente após 7 dias.');
+            console.log('✅ Cartão vinculado (card_id). Primeira cobrança em 7 dias pela recorrência.');
         }
         if (!clienteMaster) {
             clienteMaster = await this.clientesMasterService.create({
@@ -1981,7 +1961,7 @@ let AssinaturasService = class AssinaturasService {
         const nextDueDate = this.parseDataBrasil(nextDueDateString);
         const assinaturaData = {
             userId: clienteMaster.id,
-            asaasCustomerId: asaasCustomerId,
+            pagarMeCustomerId: pagarMeCustomerId,
             planoId: checkoutDto.planoId,
             couponId: couponId || undefined,
             name: userBase.nome,
@@ -2002,14 +1982,15 @@ let AssinaturasService = class AssinaturasService {
             creditCardBrand: creditCardBrand || '',
             status: 'ACTIVE',
             nextDueDate: nextDueDate,
+            pagarMeCardId: cardId || null,
         };
         const assinatura = this.assinaturaRepository.create(assinaturaData);
         try {
             const savedSubscription = await this.assinaturaRepository.save(assinatura);
             await this.gerenciarRecorrencia(savedSubscription);
-            if (isPlanoTeste && paymentResult && (paymentResult.status === 'CONFIRMED' || paymentResult.status === 'RECEIVED')) {
+            if (isPlanoTeste && paymentResult && paymentResult.status === 'paid') {
                 const cobranca = await this.cobrancaRepository.findOne({
-                    where: { asaasPaymentId: paymentResult.id },
+                    where: { pagarMeOrderId: paymentResult.id },
                 });
                 if (cobranca) {
                     cobranca.userId = clienteMaster.id;
@@ -2034,12 +2015,10 @@ let AssinaturasService = class AssinaturasService {
                         } : null,
                         assinatura: this.toResponseDto(savedSubscription),
                     },
-                    asaasCustomerId: asaasCustomerId,
+                    pagarMeCustomerId: pagarMeCustomerId,
                 };
             }
             else {
-                console.log('✅ Assinatura criada com sucesso. Período grátis de 7 dias ativado:', savedSubscription.id);
-                console.log(`📅 Primeira cobrança será processada automaticamente em: ${nextDueDateString}`);
                 return {
                     statusCode: 200,
                     message: 'Assinatura criada com sucesso! Período grátis de 7 dias ativado.',
@@ -2052,7 +2031,7 @@ let AssinaturasService = class AssinaturasService {
                             mensagem: 'A primeira cobrança será processada automaticamente após 7 dias.',
                         },
                     },
-                    asaasCustomerId: asaasCustomerId,
+                    pagarMeCustomerId: pagarMeCustomerId,
                 };
             }
         }
@@ -2064,8 +2043,8 @@ let AssinaturasService = class AssinaturasService {
         return {
             id: subscription.id,
             userId: subscription.userId,
-            asaasCustomerId: subscription.asaasCustomerId,
-            asaasSubscriptionId: subscription.asaasSubscriptionId,
+            pagarMeCustomerId: subscription.pagarMeCustomerId,
+            pagarMeCardId: subscription.pagarMeCardId,
             name: subscription.name,
             email: subscription.email,
             cpf: subscription.cpf,
@@ -2090,7 +2069,7 @@ let AssinaturasService = class AssinaturasService {
 };
 exports.AssinaturasService = AssinaturasService;
 __decorate([
-    (0, schedule_1.Cron)('0 9 * * *', {
+    (0, schedule_1.Cron)('* * * * *', {
         name: 'processar-recorrencias',
         timeZone: 'America/Sao_Paulo',
     }),
@@ -2112,7 +2091,7 @@ exports.AssinaturasService = AssinaturasService = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        asaas_service_1.AsaasService,
+        pagar_me_service_1.PagarMeService,
         planos_service_1.PlanosService,
         cupons_service_1.CuponsService,
         clientes_master_service_1.ClientesMasterService,

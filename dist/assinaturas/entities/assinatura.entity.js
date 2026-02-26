@@ -18,8 +18,8 @@ let Assinatura = class Assinatura {
     id;
     userId;
     clienteMaster;
-    asaasCustomerId;
-    asaasSubscriptionId;
+    pagarMeCustomerId;
+    pagarMeCardId;
     name;
     email;
     cpf;
@@ -35,7 +35,7 @@ let Assinatura = class Assinatura {
     billingType;
     creditCardToken;
     status;
-    asaasResponse;
+    pagarMeResponse;
     nextDueDate;
     adminId;
     creditCardNumber;
@@ -62,13 +62,13 @@ __decorate([
     __metadata("design:type", cliente_master_entity_1.ClienteMaster)
 ], Assinatura.prototype, "clienteMaster", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'asaas_customer_id', nullable: true }),
-    __metadata("design:type", String)
-], Assinatura.prototype, "asaasCustomerId", void 0);
+    (0, typeorm_1.Column)({ name: 'pagar_me_customer_id', type: 'varchar', nullable: true }),
+    __metadata("design:type", Object)
+], Assinatura.prototype, "pagarMeCustomerId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'asaas_subscription_id', nullable: true }),
-    __metadata("design:type", String)
-], Assinatura.prototype, "asaasSubscriptionId", void 0);
+    (0, typeorm_1.Column)({ name: 'pagar_me_card_id', type: 'varchar', nullable: true }),
+    __metadata("design:type", Object)
+], Assinatura.prototype, "pagarMeCardId", void 0);
 __decorate([
     (0, typeorm_1.Column)(),
     __metadata("design:type", String)
@@ -130,9 +130,9 @@ __decorate([
     __metadata("design:type", String)
 ], Assinatura.prototype, "status", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'text', name: 'asaas_response', nullable: true }),
-    __metadata("design:type", String)
-], Assinatura.prototype, "asaasResponse", void 0);
+    (0, typeorm_1.Column)({ type: 'text', name: 'pagar_me_response', nullable: true }),
+    __metadata("design:type", Object)
+], Assinatura.prototype, "pagarMeResponse", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'next_due_date', type: 'date', nullable: true }),
     __metadata("design:type", Object)

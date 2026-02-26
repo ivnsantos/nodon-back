@@ -17,7 +17,7 @@ export declare class AssinaturasController {
         statusCode: number;
         message: string;
         data: {
-            asaasCustomerId: string;
+            pagarMeCustomerId: string;
             userId: string;
         };
     }>;

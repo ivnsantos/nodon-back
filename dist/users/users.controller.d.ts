@@ -39,7 +39,7 @@ export declare class UsersController {
         foto: string | null;
         passwordResetToken: string | null;
         passwordResetExpiresAt: Date | null;
-        asaasCustomerId: string | null;
+        pagarMeCustomerId: string | null;
         createdAt: Date;
         updatedAt: Date;
         clientesMaster: import("./entities/cliente-master.entity").ClienteMaster[];
