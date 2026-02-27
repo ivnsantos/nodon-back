@@ -1000,6 +1000,22 @@ let AssinaturasService = class AssinaturasService {
         const dia = partes.find(p => p.type === 'day')?.value.padStart(2, '0') || '00';
         return `${ano}-${mes}-${dia}`;
     }
+    calcularProximos2Dias() {
+        const agora = new Date();
+        const formatter = new Intl.DateTimeFormat('pt-BR', {
+            timeZone: 'America/Sao_Paulo',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        });
+        const futuros2Dias = new Date(agora);
+        futuros2Dias.setDate(futuros2Dias.getDate() + 2);
+        const partes = formatter.formatToParts(futuros2Dias);
+        const ano = partes.find(p => p.type === 'year')?.value || '0000';
+        const mes = partes.find(p => p.type === 'month')?.value.padStart(2, '0') || '00';
+        const dia = partes.find(p => p.type === 'day')?.value.padStart(2, '0') || '00';
+        return `${ano}-${mes}-${dia}`;
+    }
     calcularProximos7Dias() {
         const agora = new Date();
         const formatter = new Intl.DateTimeFormat('pt-BR', {
@@ -1955,9 +1971,17 @@ let AssinaturasService = class AssinaturasService {
                 console.log('✅ ClienteMaster criado. Período grátis de 7 dias ativado:', clienteMaster.id);
             }
         }
-        const nextDueDateString = isPlanoTeste
-            ? this.calcularProximoMes()
-            : this.calcularProximos7Dias();
+        const planoEstudanteId = '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7';
+        let nextDueDateString;
+        if (checkoutDto.planoId === planoEstudanteId) {
+            nextDueDateString = this.calcularProximos2Dias();
+        }
+        else if (isPlanoTeste) {
+            nextDueDateString = this.calcularProximoMes();
+        }
+        else {
+            nextDueDateString = this.calcularProximos7Dias();
+        }
         const nextDueDate = this.parseDataBrasil(nextDueDateString);
         const assinaturaData = {
             userId: clienteMaster.id,
@@ -2069,7 +2093,7 @@ let AssinaturasService = class AssinaturasService {
 };
 exports.AssinaturasService = AssinaturasService;
 __decorate([
-    (0, schedule_1.Cron)('* * * * *', {
+    (0, schedule_1.Cron)('0 9 * * *', {
         name: 'processar-recorrencias',
         timeZone: 'America/Sao_Paulo',
     }),

@@ -154,6 +154,7 @@ export declare class AssinaturasService {
         };
     }>;
     private getDataAtualBrasil;
+    private calcularProximos2Dias;
     private calcularProximos7Dias;
     private calcularProximoMes;
     private parseDataBrasil;

@@ -1277,7 +1277,30 @@ export class AssinaturasService {
    * Retorna no formato YYYY-MM-DD
    */
   /**
-   * Calcula a data de 7 dias à frente (período de teste grátis)
+   * Calcula a data de 2 dias à frente (período de teste grátis do Plano Estudante)
+   */
+  private calcularProximos2Dias(): string {
+    const agora = new Date();
+    const formatter = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+    
+    const futuros2Dias = new Date(agora);
+    futuros2Dias.setDate(futuros2Dias.getDate() + 2);
+    
+    const partes = formatter.formatToParts(futuros2Dias);
+    const ano = partes.find(p => p.type === 'year')?.value || '0000';
+    const mes = partes.find(p => p.type === 'month')?.value.padStart(2, '0') || '00';
+    const dia = partes.find(p => p.type === 'day')?.value.padStart(2, '0') || '00';
+    
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  /**
+   * Calcula a data de 7 dias à frente (período de teste grátis dos planos normais)
    * Usado na primeira criação da assinatura
    */
   private calcularProximos7Dias(): string {
@@ -1289,7 +1312,6 @@ export class AssinaturasService {
       day: '2-digit',
     });
     
-    // Adiciona 7 dias
     const proximos7Dias = new Date(agora);
     proximos7Dias.setDate(proximos7Dias.getDate() + 7);
     
@@ -2613,11 +2635,18 @@ export class AssinaturasService {
     }
 
     // 9. Criar assinatura no banco de dados
-    // Planos de teste: próximo mês (comportamento original)
-    // Planos normais: 7 dias grátis
-    const nextDueDateString = isPlanoTeste 
-      ? this.calcularProximoMes() 
-      : this.calcularProximos7Dias();
+    // Planos de teste (PLANOS_TESTE): próximo mês (comportamento original)
+    // Plano Estudante: 2 dias grátis
+    // Demais planos: 7 dias grátis
+    const planoEstudanteId = '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7';
+    let nextDueDateString: string;
+    if (checkoutDto.planoId === planoEstudanteId) {
+      nextDueDateString = this.calcularProximos2Dias();
+    } else if (isPlanoTeste) {
+      nextDueDateString = this.calcularProximoMes();
+    } else {
+      nextDueDateString = this.calcularProximos7Dias();
+    }
     const nextDueDate = this.parseDataBrasil(nextDueDateString);
 
     const assinaturaData: Partial<Assinatura> = {
