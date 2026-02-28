@@ -15,6 +15,7 @@ import { ClientesMasterModule } from '../users/clientes-master.module';
 import { AuthModule } from '../auth/auth.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { QueueModule } from '../queue/queue.module';
+import { NecessidadesModule } from '../necessidades/necessidades.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { QueueModule } from '../queue/queue.module';
     forwardRef(() => AuthModule),
     WhatsAppModule,
     forwardRef(() => QueueModule),
+    NecessidadesModule,
   ],
   controllers: [CalendarioController],
   providers: [CalendarioService, CalendarioCronService],

@@ -11,6 +11,7 @@ import { StorageService } from '../storage/storage.service';
 import { ChatService } from '../chat/chat.service';
 import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { AnalisesService } from '../analises/analises.service';
+import { NecessidadesService } from '../necessidades/necessidades.service';
 import axios from 'axios';
 
 @Injectable()
@@ -30,6 +31,7 @@ export class RadiografiasService {
     private assinaturasService: AssinaturasService,
     @Inject(forwardRef(() => AnalisesService))
     private analisesService: AnalisesService,
+    private necessidadesService: NecessidadesService,
   ) {}
 
   async create(createRadiografiaDto: CreateRadiografiaDto, userId: string, userTipo: string, clienteMasterId: string): Promise<Radiografia & { tokensUsed: number }> {
@@ -135,8 +137,8 @@ export class RadiografiasService {
       }
     }
 
-      // Analisar radiografias com DeepSeek antes de salvar
-      console.log('🤖 Iniciando análise de radiografias com DeepSeek...');
+      // Analisar radiografias com OpenAI (ChatGPT) antes de salvar
+      console.log('🤖 Iniciando análise de radiografias com OpenAI...');
       let descricaoExame: string | null = null;
       let achadosRadiograficos: string[] | null = null;
       let necessidades: string[] | null = null;
@@ -153,13 +155,12 @@ export class RadiografiasService {
         
         console.log(`✅ Análise de radiografias concluída com sucesso (${tokensUsed} tokens utilizados)`);
       } catch (error: any) {
-        console.error('⚠️ Erro ao analisar radiografias com DeepSeek:', error.message);
+        console.error('⚠️ Erro ao analisar radiografias com OpenAI:', error.message);
         // Não bloquear a criação da radiografia se a análise falhar
         // Os campos ficarão como null
       }
 
-      // Criar radiografia
-      // descricaoExame, achadosRadiograficos e necessidades são gerados pela IA e retornados na resposta
+      // Criar radiografia (necessidades vão para a tabela necessidades, não no jsonb)
       const radiografia = this.radiografiaRepository.create({
         masterClient: { id: clienteMasterId } as any,
         nome: createRadiografiaDto.nome,
@@ -171,21 +172,34 @@ export class RadiografiasService {
         imagens: imagensComUrls,
         descricaoExame: descricaoExame,
         achadosRadiograficos: achadosRadiograficos,
-        necessidades: necessidades,
+        necessidades: null,
         responsavelId: createRadiografiaDto.responsavel || null,
         pacienteId: createRadiografiaDto.pacienteId || null,
       });
 
       const radiografiaSalva = await this.radiografiaRepository.save(radiografia);
 
-      // Registrar análise após criar radiografia com sucesso
-      try {
-        console.log('📝 Registrando análise...');
-        await this.analisesService.registrarAnalise(userId, userTipo);
-        console.log('✅ Análise registrada com sucesso');
-      } catch (error: any) {
-        console.error('⚠️ Erro ao registrar análise (não bloqueia criação):', error.message);
-        // Não bloquear a criação da radiografia se o registro de análise falhar
+      // Salvar necessidades na tabela necessidades (origem: radiografia, status analisado_ia)
+      if (necessidades && necessidades.length > 0) {
+        await this.necessidadesService.syncFromRadiografia(
+          radiografiaSalva.id,
+          radiografiaSalva.pacienteId ?? null,
+          clienteMasterId,
+          necessidades,
+        );
+      }
+
+      // Registrar como "radiografia usada" (conta no limite do plano) apenas quando a análise da IA foi bem-sucedida
+      if (tokensUsed > 0) {
+        try {
+          console.log('📝 Registrando análise (conta no limite do plano)...');
+          await this.analisesService.registrarAnalise(userId, userTipo);
+          console.log('✅ Análise registrada com sucesso');
+        } catch (error: any) {
+          console.error('⚠️ Erro ao registrar análise (não bloqueia criação):', error.message);
+        }
+      } else {
+        console.log('📋 Análise da IA não foi utilizada (erro ou indisponível), não conta no limite do plano');
       }
 
       // Retornar radiografia com tokens utilizados na análise
@@ -214,11 +228,15 @@ export class RadiografiasService {
     // Verificar permissão
     await this.verificarPermissao(userId, userTipo, clienteMasterId);
 
-    return this.radiografiaRepository.find({
+    const radiografias = await this.radiografiaRepository.find({
       where: { masterClient: { id: clienteMasterId } },
       relations: ['masterClient', 'desenhosProfissionais'],
       order: { createdAt: 'DESC' },
     });
+    for (const r of radiografias) {
+      (r as any).necessidades = await this.necessidadesService.findByRadiografia(r.id);
+    }
+    return radiografias;
   }
 
   async findOne(id: string, userId: string, userTipo: string): Promise<Radiografia> {
@@ -234,6 +252,7 @@ export class RadiografiasService {
     // Verificar permissão
     await this.verificarPermissao(userId, userTipo, radiografia.masterClient?.id);
 
+    (radiografia as any).necessidades = await this.necessidadesService.findByRadiografia(radiografia.id);
     return radiografia;
   }
 
@@ -243,6 +262,8 @@ export class RadiografiasService {
     // Verificar se o usuário pode excluir (responsável ou dono do consultório)
     await this.verificarPermissaoEdicaoExclusao(userId, radiografia);
     
+    // Deletar necessidades vinculadas à radiografia
+    await this.necessidadesService.deleteByRadiografiaId(id);
     // Deletar todos os desenhos profissionais relacionados à radiografia primeiro
     console.log(`🗑️ Deletando desenhos profissionais relacionados à radiografia ${id}...`);
     await this.desenhoProfissionalRepository.delete({ radiografiaId: id });
@@ -374,7 +395,12 @@ export class RadiografiasService {
       }
 
       if (updateRadiografiaDto.necessidades !== undefined) {
-        updateData.necessidades = updateRadiografiaDto.necessidades || null;
+        await this.necessidadesService.syncFromRadiografia(
+          id,
+          radiografia.pacienteId ?? null,
+          radiografia.masterClient?.id ?? radiografia.clienteMasterId,
+          updateRadiografiaDto.necessidades || [],
+        );
       }
 
       // Se novas imagens foram fornecidas, processá-las
@@ -437,7 +463,12 @@ export class RadiografiasService {
             
             updateData.descricaoExame = analise.descricaoExame;
             updateData.achadosRadiograficos = analise.achadosRadiograficos.length > 0 ? analise.achadosRadiograficos : null;
-            updateData.necessidades = analise.necessidades.length > 0 ? analise.necessidades : null;
+            await this.necessidadesService.syncFromRadiografia(
+              id,
+              radiografia.pacienteId ?? null,
+              radiografia.masterClient?.id ?? radiografia.clienteMasterId,
+              analise.necessidades || [],
+            );
             
             console.log('✅ Reanálise de radiografias concluída com sucesso');
           } catch (error: any) {

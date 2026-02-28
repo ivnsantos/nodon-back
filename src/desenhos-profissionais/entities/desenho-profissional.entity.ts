@@ -38,8 +38,9 @@ export class DesenhoProfissional {
   @Column({ name: 'dentes_anotacoes', type: 'jsonb' })
   dentesAnotacoes: Array<{ dente: string; descricao: string }>;
 
-  @Column({ type: 'jsonb' })
-  necessidades: Array<{ procedimento: string; anotacoes: string }>;
+  /** Depreciado: necessidades ficam na tabela necessidades (com desenho_profissional_id). */
+  @Column({ type: 'jsonb', nullable: true })
+  necessidades: Array<{ procedimento: string; anotacoes: string }> | null;
 
   @Column({ type: 'text', nullable: true })
   observacoes: string | null;

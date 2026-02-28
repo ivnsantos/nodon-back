@@ -27,6 +27,7 @@ import { PlanosService } from './planos/planos.service';
 import { SmsModule } from './sms/sms.module';
 import { QueueModule } from './queue/queue.module';
 import { PastasPacienteModule } from './pastas-paciente/pastas-paciente.module';
+import { NecessidadesModule } from './necessidades/necessidades.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { PastasPacienteModule } from './pastas-paciente/pastas-paciente.module';
     CalendarioModule,
     QueueModule,
     PastasPacienteModule,
+    NecessidadesModule,
   ],
 })
 export class AppModule implements OnModuleInit {

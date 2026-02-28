@@ -7,6 +7,7 @@ import { Radiografia } from '../radiografias/entities/radiografia.entity';
 import { UsersModule } from '../users/users.module';
 import { ClientesMasterModule } from '../users/clientes-master.module';
 import { StorageModule } from '../storage/storage.module';
+import { NecessidadesModule } from '../necessidades/necessidades.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { StorageModule } from '../storage/storage.module';
     UsersModule,
     ClientesMasterModule,
     StorageModule,
+    NecessidadesModule,
   ],
   controllers: [DesenhosProfissionaisController],
   providers: [DesenhosProfissionaisService],

@@ -10,6 +10,7 @@ import { UserComumService } from '../users/services/user-comum.service';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { PacientesHistoricoService } from './pacientes-historico.service';
 import { QuestionariosService } from '../questionarios/questionarios.service';
+import { NecessidadesService } from '../necessidades/necessidades.service';
 
 @Injectable()
 export class PacientesService {
@@ -23,6 +24,7 @@ export class PacientesService {
     private userComumService: UserComumService,
     @Inject(forwardRef(() => ClientesMasterService))
     private clientesMasterService: ClientesMasterService,
+    private necessidadesService: NecessidadesService,
     @Optional()
     @Inject(forwardRef(() => PacientesHistoricoService))
     private historicoService?: PacientesHistoricoService,
@@ -62,10 +64,19 @@ export class PacientesService {
       paciente.bairro = createPacienteDto.endereco?.bairro || null;
       paciente.cidade = createPacienteDto.endereco?.cidade || null;
       paciente.estado = createPacienteDto.endereco?.estado || null;
-      paciente.necessidades = createPacienteDto.informacoesClinicas?.necessidades || null;
+      paciente.necessidades = null;
       paciente.observacoes = createPacienteDto.informacoesClinicas?.observacoes || null;
 
-      return await this.pacienteRepository.save(paciente);
+      const pacienteSalvo = await this.pacienteRepository.save(paciente);
+      if (createPacienteDto.informacoesClinicas?.necessidades?.length) {
+        await this.necessidadesService.syncFromPaciente(
+          pacienteSalvo.id,
+          pacienteSalvo.clienteMasterId,
+          createPacienteDto.informacoesClinicas.necessidades,
+          'validado',
+        );
+      }
+      return pacienteSalvo;
     } catch (error) {
       console.error('❌ Erro ao criar paciente:', {
         error: error?.message || error,
@@ -232,8 +243,9 @@ export class PacientesService {
       queryBuilder.orderBy('paciente.createdAt', 'DESC');
 
       const pacientes = await queryBuilder.getMany();
+      const necessidadesPorPaciente = await this.necessidadesService.findByPacienteIds(pacientes.map((p) => p.id));
       
-      // Converter para objetos simples sem propriedades do TypeORM
+      // Converter para objetos simples (necessidades vêm da tabela necessidades)
       return pacientes.map(paciente => ({
         id: paciente.id,
         clienteMasterId: paciente.clienteMasterId,
@@ -250,7 +262,7 @@ export class PacientesService {
         bairro: paciente.bairro,
         cidade: paciente.cidade,
         estado: paciente.estado,
-        necessidades: paciente.necessidades,
+        necessidades: necessidadesPorPaciente.get(paciente.id) ?? [],
         observacoes: paciente.observacoes,
         createdAt: paciente.createdAt,
         updatedAt: paciente.updatedAt,
@@ -282,6 +294,8 @@ export class PacientesService {
     // Verificar permissão
     await this.verificarPermissao(userId, userTipo, paciente.clienteMasterId);
 
+    const necessidadesList = await this.necessidadesService.findByPaciente(paciente.id, paciente.clienteMasterId);
+    (paciente as any).necessidades = necessidadesList;
     return paciente;
   }
 
@@ -369,10 +383,13 @@ export class PacientesService {
       }
 
       console.log('✅ Paciente encontrado:', paciente.id);
+
+      const necessidadesList = await this.necessidadesService.findByPaciente(paciente.id, paciente.clienteMasterId);
       
-      // Retornar paciente com informações de feedback
+      // Retornar paciente com informações de feedback (necessidades vêm da tabela necessidades)
       return {
         ...paciente,
+        necessidades: necessidadesList,
         temFeedback,
         questionarios: questionariosVinculados.map(q => ({
           id: q.id,
@@ -548,15 +565,13 @@ export class PacientesService {
     }
     if (updatePacienteDto.informacoesClinicas) {
       if (updatePacienteDto.informacoesClinicas.necessidades !== undefined) {
-        // Comparar necessidades individualmente
-        const necessidadesAntigas: string[] = this.parseNecessidades(paciente.necessidades);
+        const necessidadesAntigasEnt = await this.necessidadesService.findByPaciente(paciente.id, paciente.clienteMasterId);
+        const necessidadesAntigas: string[] = necessidadesAntigasEnt.map((n) => n.descricao);
         const necessidadesNovas: string[] = updatePacienteDto.informacoesClinicas.necessidades || [];
         
-        // Detectar alterações individuais nas necessidades
         const alteracoesNecessidades = this.detectarAlteracoesNecessidades(necessidadesAntigas, necessidadesNovas);
         
         if (alteracoesNecessidades.length > 0) {
-          // Adicionar cada alteração individual ao histórico
           for (const alt of alteracoesNecessidades) {
             alteracoes.push({
               campo: 'necessidades',
@@ -564,8 +579,13 @@ export class PacientesService {
               valorNovo: alt.valorNovo,
             });
           }
-          updateData.necessidades = updatePacienteDto.informacoesClinicas.necessidades;
         }
+        await this.necessidadesService.syncFromPaciente(
+          paciente.id,
+          paciente.clienteMasterId,
+          necessidadesNovas,
+          'validado',
+        );
       }
       if (updatePacienteDto.informacoesClinicas.observacoes !== undefined && updatePacienteDto.informacoesClinicas.observacoes !== paciente.observacoes) {
         alteracoes.push({
@@ -622,6 +642,9 @@ export class PacientesService {
     await this.historicoPacienteRepository.delete({ pacienteId: id });
     console.log(`✅ Histórico deletado`);
     
+    // Deletar necessidades vinculadas ao paciente
+    await this.necessidadesService.deleteByPacienteId(id);
+
     // Deletar consultas relacionadas ao paciente (se a tabela existir)
     try {
       console.log(`🗑️ Deletando consultas relacionadas ao paciente ${id}...`);

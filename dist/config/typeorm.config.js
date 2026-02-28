@@ -32,6 +32,7 @@ const anamnese_entity_1 = require("../anamneses/entities/anamnese.entity");
 const pergunta_anamnese_entity_1 = require("../anamneses/entities/pergunta-anamnese.entity");
 const resposta_anamnese_entity_1 = require("../anamneses/entities/resposta-anamnese.entity");
 const resposta_pergunta_entity_1 = require("../anamneses/entities/resposta-pergunta.entity");
+const necessidade_entity_1 = require("../necessidades/entities/necessidade.entity");
 const envLocalPath = (0, path_1.resolve)(process.cwd(), '.env.local');
 if ((0, fs_1.existsSync)(envLocalPath)) {
     (0, dotenv_1.config)({ path: envLocalPath });
@@ -96,6 +97,7 @@ let TypeOrmConfigService = class TypeOrmConfigService {
                 pergunta_anamnese_entity_1.PerguntaAnamnese,
                 resposta_anamnese_entity_1.RespostaAnamnese,
                 resposta_pergunta_entity_1.RespostaPergunta,
+                necessidade_entity_1.Necessidade,
             ],
             synchronize: true,
             logging: this.configService.get('NODE_ENV') === 'development',

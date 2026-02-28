@@ -22,6 +22,7 @@ import { Anamnese } from '../anamneses/entities/anamnese.entity';
 import { PerguntaAnamnese } from '../anamneses/entities/pergunta-anamnese.entity';
 import { RespostaAnamnese } from '../anamneses/entities/resposta-anamnese.entity';
 import { RespostaPergunta } from '../anamneses/entities/resposta-pergunta.entity';
+import { Necessidade } from '../necessidades/entities/necessidade.entity';
 
 // Carregar .env.local primeiro (tem prioridade), depois .env
 const envLocalPath = resolve(process.cwd(), '.env.local');
@@ -101,6 +102,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
         PerguntaAnamnese,
         RespostaAnamnese,
         RespostaPergunta,
+        Necessidade,
       ],
       // Desabilitar synchronize para evitar problemas com alterações de schema
       // Use migrations manuais em vez de synchronize

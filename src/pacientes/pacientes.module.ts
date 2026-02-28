@@ -9,6 +9,7 @@ import { Radiografia } from '../radiografias/entities/radiografia.entity';
 import { UsersModule } from '../users/users.module';
 import { ClientesMasterModule } from '../users/clientes-master.module';
 import { QuestionariosModule } from '../questionarios/questionarios.module';
+import { NecessidadesModule } from '../necessidades/necessidades.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { QuestionariosModule } from '../questionarios/questionarios.module';
     forwardRef(() => UsersModule),
     forwardRef(() => ClientesMasterModule),
     forwardRef(() => QuestionariosModule),
+    NecessidadesModule,
   ],
   controllers: [PacientesController],
   providers: [

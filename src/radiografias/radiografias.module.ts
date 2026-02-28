@@ -10,6 +10,7 @@ import { StorageModule } from '../storage/storage.module';
 import { ChatModule } from '../chat/chat.module';
 import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { AnalisesModule } from '../analises/analises.module';
+import { NecessidadesModule } from '../necessidades/necessidades.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AnalisesModule } from '../analises/analises.module';
     forwardRef(() => ChatModule),
     forwardRef(() => AssinaturasModule),
     forwardRef(() => AnalisesModule),
+    NecessidadesModule,
   ],
   controllers: [RadiografiasController],
   providers: [RadiografiasService],

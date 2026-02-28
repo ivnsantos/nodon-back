@@ -8,6 +8,8 @@ import { UpdateDesenhoProfissionalDto } from './dto/update-desenho-profissional.
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { UserComumService } from '../users/services/user-comum.service';
 import { StorageService } from '../storage/storage.service';
+import { NecessidadesService } from '../necessidades/necessidades.service';
+import { Necessidade } from '../necessidades/entities/necessidade.entity';
 import axios from 'axios';
 
 @Injectable()
@@ -20,6 +22,7 @@ export class DesenhosProfissionaisService {
     private clientesMasterService: ClientesMasterService,
     private userComumService: UserComumService,
     private storageService: StorageService,
+    private necessidadesService: NecessidadesService,
   ) {}
 
   async create(
@@ -129,18 +132,33 @@ export class DesenhosProfissionaisService {
         throw new BadRequestException(`Erro ao processar imagem: ${error.message || 'URL inválida ou inacessível'}`);
       }
 
-      // Criar desenho profissional
+      // Criar desenho profissional (necessidades vão só para a tabela necessidades, não no JSONB)
       const desenhoProfissional = this.desenhoProfissionalRepository.create({
         clienteMasterId,
         tituloDesenho: createDesenhoProfissionalDto.tituloDesenho,
         imagemDesenhada: imagemDesenhadaComUrl,
         dentesAnotacoes: createDesenhoProfissionalDto.dentesAnotacoes,
-        necessidades: createDesenhoProfissionalDto.necessidades,
+        necessidades: null,
         observacoes: createDesenhoProfissionalDto.observacoes || null,
         radiografiaId: createDesenhoProfissionalDto.radiografiaId || null,
       });
 
       const desenhoSalvo = await this.desenhoProfissionalRepository.save(desenhoProfissional);
+
+      // Gravar necessidades na tabela necessidades com radiografiaId + desenhoProfissionalId
+      const necessidadesDto = createDesenhoProfissionalDto.necessidades;
+      if (necessidadesDto?.length > 0 && clienteMasterId) {
+        const descricoes = necessidadesDto.map((n) =>
+          [n.procedimento, n.anotacoes].filter(Boolean).join(': ') || n.procedimento,
+        );
+        await this.necessidadesService.syncFromDesenhoProfissional(
+          radiografia.id,
+          radiografia.pacienteId ?? null,
+          clienteMasterId,
+          descricoes,
+          desenhoSalvo.id,
+        );
+      }
 
       // Retornar id do desenho e id do usuário autenticado
       return {
@@ -198,19 +216,26 @@ export class DesenhosProfissionaisService {
     });
   }
 
-  async findOne(id: string, userId: string, userTipo: string): Promise<DesenhoProfissional> {
+  async findOne(
+    id: string,
+    userId: string,
+    userTipo: string,
+  ): Promise<Omit<DesenhoProfissional, 'necessidades'> & { necessidades: Necessidade[] }> {
+    const desenhoProfissional = await this.getOneEntity(id, userId, userTipo);
+    const necessidades = await this.necessidadesService.findByDesenhoProfissionalId(id);
+    return { ...desenhoProfissional, necessidades };
+  }
+
+  /** Retorna apenas a entidade (para update/remove). */
+  private async getOneEntity(id: string, userId: string, userTipo: string): Promise<DesenhoProfissional> {
     const desenhoProfissional = await this.desenhoProfissionalRepository.findOne({
       where: { id },
       relations: ['masterClient', 'radiografia'],
     });
-
     if (!desenhoProfissional) {
       throw new NotFoundException('Desenho profissional não encontrado');
     }
-
-    // Verificar permissão
     await this.verificarPermissao(userId, userTipo, desenhoProfissional.clienteMasterId);
-
     return desenhoProfissional;
   }
 
@@ -220,7 +245,7 @@ export class DesenhosProfissionaisService {
     userId: string,
     userTipo: string,
   ): Promise<DesenhoProfissional> {
-    const desenhoProfissional = await this.findOne(id, userId, userTipo);
+    const desenhoProfissional = await this.getOneEntity(id, userId, userTipo);
 
     // Se houver nova imagem, fazer upload para S3
     if (updateDesenhoProfissionalDto.imagemDesenhada) {
@@ -291,7 +316,7 @@ export class DesenhosProfissionaisService {
   }
 
   async remove(id: string, userId: string, userTipo: string): Promise<void> {
-    const desenhoProfissional = await this.findOne(id, userId, userTipo);
+    const desenhoProfissional = await this.getOneEntity(id, userId, userTipo);
     await this.desenhoProfissionalRepository.remove(desenhoProfissional);
   }
 

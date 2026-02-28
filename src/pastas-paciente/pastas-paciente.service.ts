@@ -182,7 +182,10 @@ export class PastasPacienteService {
   }
 
   async deleteArquivo(arquivoId: string, userId: string, userTipo: string): Promise<void> {
-    await this.findOneArquivo(arquivoId, userId, userTipo);
+    const arquivo = await this.findOneArquivo(arquivoId, userId, userTipo);
+    if (arquivo.url) {
+      await this.storageService.deleteFromDocClientsByUrl(arquivo.url);
+    }
     await this.arquivoRepository.delete(arquivoId);
   }
 
@@ -192,6 +195,10 @@ export class PastasPacienteService {
     userTipo: string,
   ): Promise<{ deleted: number }> {
     await this.findOnePasta(pastaId, userId, userTipo);
+    const arquivos = await this.arquivoRepository.find({ where: { pastaId } });
+    for (const arq of arquivos) {
+      if (arq.url) await this.storageService.deleteFromDocClientsByUrl(arq.url);
+    }
     const result = await this.arquivoRepository.delete({ pastaId });
     return { deleted: result.affected ?? 0 };
   }

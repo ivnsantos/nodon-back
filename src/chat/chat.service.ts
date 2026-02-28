@@ -749,7 +749,8 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
   }
 
   /**
-   * Analisa radiografias usando OpenAI/DeepSeek e retorna descrição do exame, achados radiográficos, necessidades e imagens anotadas
+   * Analisa radiografias usando exclusivamente OpenAI (ChatGPT)
+   * e retorna descrição do exame, achados radiográficos, necessidades e imagens anotadas
    */
   async analisarRadiografias(imageUrls: string[]): Promise<{
     descricaoExame: string;
@@ -757,12 +758,25 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     necessidades: string[];
     tokensUsed: number;
   }> {
-    if (!this.apiKey) {
-      throw new InternalServerErrorException('API do DeepSeek não está configurada');
-    }
-
     if (!imageUrls || imageUrls.length === 0) {
       throw new InternalServerErrorException('É necessário pelo menos uma imagem para análise');
+    }
+
+    // Para análise de radiografias, usamos apenas OpenAI.
+    // Se a chave não estiver configurada, retornamos valores padrão
+    if (!this.openAiApiKey) {
+      console.error('❌ OPENAI_API_KEY não configurada para análise de radiografias');
+      return {
+        descricaoExame:
+          'Análise automática de imagens não está disponível. Configure OPENAI_API_KEY para habilitar a análise automática. Por favor, preencha manualmente.',
+        achadosRadiograficos: [
+          'Análise automática de imagens não está disponível. Configure OPENAI_API_KEY para habilitar a análise automática. Por favor, preencha manualmente.',
+        ],
+        necessidades: [
+          'Análise automática de imagens não está disponível. Configure OPENAI_API_KEY para habilitar a análise automática. Por favor, preencha manualmente.',
+        ],
+        tokensUsed: 0,
+      };
     }
 
     const systemPrompt = `Você é um especialista em diagnósticos com base em imagens de radiografias odontológicas. 
@@ -793,8 +807,8 @@ IMPORTANTE:
         },
       ];
 
-      // Converter cada imagem para base64 e adicionar ao conteúdo
-      // O DeepSeek requer imagens em formato base64 data URI
+      // Converter cada imagem para base64 e adicionar ao conteúdo (data URI),
+      // formato aceito pelo GPT com visão
       for (const imageUrl of imageUrls) {
         try {
           console.log(`📥 Baixando imagem para análise: ${imageUrl}`);
@@ -829,123 +843,44 @@ IMPORTANTE:
         throw new InternalServerErrorException('Não foi possível processar nenhuma imagem para análise');
       }
 
-      console.log(`🔍 Analisando ${imageUrls.length} radiografia(s) com DeepSeek...`);
+      console.log(`🔍 Analisando ${imageUrls.length} radiografia(s) com OpenAI (ChatGPT)...`);
 
-      // Tentar primeiro com OpenAI GPT-4 Vision se disponível (melhor suporte)
+      // Tentar com OpenAI GPT-4 (o4) com visão
       let response;
-      let modelTried = 'deepseek-chat';
-      let usedOpenAI = false;
+      let modelTried = 'o4';
       
-      if (this.openAiApiKey) {
-        try {
-          console.log('🤖 Tentando análise com OpenAI GPT-4 Vision...');
-          response = await axios.post(
-            this.openAiApiUrl,
-            {
-              model: 'o4-mini',
-              messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: content },
-              ],
-              temperature: 0.3,
-              max_tokens: 2000,
+      try {
+        console.log('🤖 Enviando imagens para OpenAI (o4)...');
+        response = await axios.post(
+          this.openAiApiUrl,
+          {
+            model: 'gpt-4o',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: content },
+            ],
+            temperature: 0.3,
+            max_tokens: 2000,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${this.openAiApiKey}`,
             },
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.openAiApiKey}`,
-              },
-              timeout: 120000,
-            },
-          );
-          usedOpenAI = true;
-          modelTried = 'o4-mini';
-          console.log('✅ Análise realizada com OpenAI GPT-4 Vision');
-        } catch (openAiError: any) {
-          console.warn('⚠️ OpenAI não disponível, tentando DeepSeek...', openAiError.response?.data?.error?.message || openAiError.message);
-        }
+            timeout: 120000,
+          },
+        );
+        console.log('✅ Análise realizada com OpenAI GPT-4 Vision');
+      } catch (openAiError: any) {
+        console.error(
+          '❌ Erro ao analisar radiografias com OpenAI:',
+          openAiError.response?.data || openAiError.message,
+        );
       }
       
-      // Tentar DeepSeek com diferentes abordagens
-      if (!response && this.apiKey) {
-        // Primeiro tentar endpoint de visão específico
-        try {
-          console.log('🤖 Tentando endpoint de visão do DeepSeek...');
-          const visionUrl = 'https://api.deepseek.com/v1/vision/analyze';
-          response = await axios.post(
-            visionUrl,
-            {
-              model: 'deepseek-vision',
-              messages: [
-                { role: 'system', content: systemPrompt },
-                { role: 'user', content: content },
-              ],
-              temperature: 0.3,
-              max_tokens: 2000,
-            },
-            {
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey}`,
-              },
-              timeout: 120000,
-            },
-          );
-          modelTried = 'deepseek-vision';
-          console.log('✅ Análise realizada com DeepSeek Vision endpoint');
-        } catch (visionError: any) {
-          console.warn('⚠️ Endpoint de visão não disponível, tentando modelo VL...');
-          
-          // Tentar modelo VL no endpoint padrão
-          try {
-            console.log('🤖 Tentando modelo deepseek-vl-chat...');
-            modelTried = 'deepseek-vl-chat';
-            response = await axios.post(
-              this.apiUrl,
-              {
-                model: 'deepseek-vl-chat',
-                messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: content },
-                ],
-                temperature: 0.3,
-                max_tokens: 2000,
-              },
-              {
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${this.apiKey}`,
-                },
-                timeout: 120000,
-              },
-            );
-            console.log('✅ Análise realizada com DeepSeek VL');
-          } catch (vlError: any) {
-            const errorMessage = vlError.response?.data?.error?.message || vlError.message;
-            console.error('❌ Erro ao usar DeepSeek VL:', errorMessage);
-            
-            // Se o erro for de formato de imagem, retornar valores padrão
-            if (errorMessage.includes('image_url') || 
-                errorMessage.includes('unknown variant') || 
-                errorMessage.includes('expected `text`')) {
-              console.error('❌ DeepSeek não suporta análise de imagens no formato atual');
-              
-              return {
-                descricaoExame: 'Análise automática de imagens não está disponível no momento. Por favor, preencha manualmente.',
-                achadosRadiograficos: ['Análise automática de imagens não está disponível no momento. Por favor, preencha manualmente.'],
-                necessidades: ['Análise automática de imagens não está disponível no momento. Por favor, preencha manualmente.'],
-                tokensUsed: 0,
-              };
-            }
-            
-            throw vlError;
-          }
-        }
-      }
-      
-      // Se nenhuma API funcionou
+      // Se nenhuma API funcionou (OpenAI indisponível)
       if (!response) {
-        console.error('❌ Nenhuma API de análise de imagens disponível');
+        console.error('❌ Nenhuma API de análise de imagens disponível (OpenAI indisponível)');
         return {
           descricaoExame: 'Análise automática de imagens não está disponível. Configure OPENAI_API_KEY para melhor suporte. Por favor, preencha manualmente.',
           achadosRadiograficos: ['Análise automática de imagens não está disponível. Configure OPENAI_API_KEY para melhor suporte. Por favor, preencha manualmente.'],
@@ -956,7 +891,7 @@ IMPORTANTE:
 
       const assistantMessage = response.data.choices[0]?.message?.content;
       const tokensUsed = response.data.usage?.total_tokens || 0;
-      const apiUsed = usedOpenAI ? 'OpenAI GPT-4 Vision' : 'DeepSeek VL';
+      const apiUsed = 'OpenAI GPT-4 Vision';
       console.log(`📋 Resposta recebida da ${apiUsed} (modelo: ${modelTried}) para análise de radiografias`);
 
       // Tentar extrair JSON da resposta

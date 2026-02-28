@@ -17,6 +17,8 @@ import { CreateConsultaDto } from './dto/create-consulta.dto';
 import { UpdateConsultaDto } from './dto/update-consulta.dto';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { ConfigService } from '@nestjs/config';
+import { NecessidadesService } from '../necessidades/necessidades.service';
+
 @Injectable()
 export class CalendarioService {
   constructor(
@@ -34,6 +36,7 @@ export class CalendarioService {
     private userBaseRepository: Repository<UserBase>,
     private whatsappService: WhatsAppService,
     private configService: ConfigService,
+    private necessidadesService: NecessidadesService,
   ) {}
 
   /**
@@ -206,6 +209,7 @@ export class CalendarioService {
         paciente.observacoes = null;
 
         pacienteSalvo = await this.pacienteRepository.save(paciente);
+        await this.necessidadesService.syncFromPaciente(pacienteSalvo.id, pacienteSalvo.clienteMasterId, [], 'validado');
       }
     } else {
       // Se não tem CPF, criar novo paciente

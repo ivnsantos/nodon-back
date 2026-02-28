@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 
 @Injectable()
@@ -16,7 +16,6 @@ export class StorageService {
     const accessKeyId = this.configService.get<string>('R2_ACCESS_KEY_ID');
     const secretAccessKey = this.configService.get<string>('R2_SECRET_ACCESS_KEY');
     this.bucketName = this.configService.get<string>('R2_BUCKET_NAME') || 'hml';
-    this.bucketNameDocClients = this.configService.get<string>('R2_BUCKET_NAME_DOC_CLIENTS') || 'doc_clients';
     this.publicDomain = this.configService.get<string>('R2_PUBLIC_DOMAIN') || 'https://pub-f6373861b23346918a681332b65f9a68.r2.dev';
     this.publicDomainDocClients = this.configService.get<string>('R2_PUBLIC_DOMAIN_DOC_CLIENTS') || this.publicDomain;
 
@@ -174,13 +173,40 @@ export class StorageService {
       throw new BadRequestException(`O arquivo deve ter no máximo ${Math.round(maxSizeBytes / 1024 / 1024)}MB`);
     }
     const uploadCommand = new PutObjectCommand({
-      Bucket: this.bucketNameDocClients,
+      Bucket: this.bucketName,
       Key: path,
       Body: file,
       ContentType: contentType,
     });
     await this.s3Client.send(uploadCommand);
     return `${this.publicDomainDocClients}/${path}`;
+  }
+
+  /**
+   * Remove um objeto do bucket principal (R2_BUCKET_NAME, ex.: hml) pelo URL (ex.: ao excluir arquivo da pasta do paciente).
+   * Aceita URL completa (https://...) ou apenas o key/path (paciente-arquivos/...).
+   */
+  async deleteFromDocClientsByUrl(url: string): Promise<void> {
+    if (!this.s3Client || !url?.trim()) return;
+    let key: string;
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      try {
+        key = new URL(url).pathname.replace(/^\//, '').trim();
+      } catch {
+        console.warn('[Storage] deleteFromDocClientsByUrl: URL inválida:', url);
+        return;
+      }
+    } else {
+      key = url.replace(/^\//, '').trim();
+    }
+    if (!key) return;
+    try {
+      await this.s3Client.send(
+        new DeleteObjectCommand({ Bucket: this.bucketName, Key: key }),
+      );
+    } catch (err: any) {
+      console.error('[Storage] Erro ao remover arquivo do R2:', err?.message || err);
+    }
   }
 
   /**
@@ -195,7 +221,7 @@ export class StorageService {
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const uuid = randomUUID();
     const extension = filename.split('.').pop() || 'bin';
-    return `${prefix}/${year}/${month}/${uuid}.${extension}`;
+    return `${prefix}/pr/${uuid}.${extension}`;
   }
 }
 
