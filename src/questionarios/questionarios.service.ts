@@ -398,6 +398,10 @@ export class QuestionariosService {
   async responderQuestionarioPublico(responderQuestionarioDto: ResponderQuestionarioDto): Promise<RespostaQuestionario> {
     const { respostaQuestionarioId, respostas } = responderQuestionarioDto;
 
+    if (!respostas?.length) {
+      throw new BadRequestException('Nenhuma resposta enviada');
+    }
+
     const respostaQuestionario = await this.findQuestionarioPublico(respostaQuestionarioId);
 
     if (respostaQuestionario.concluida) {
@@ -405,42 +409,63 @@ export class QuestionariosService {
     }
 
     const questionario = respostaQuestionario.questionario;
-
-    for (const respostaDto of respostas) {
-      const pergunta = questionario.perguntas.find((p) => p.id === respostaDto.perguntaId);
-
-      if (!pergunta) {
-        throw new BadRequestException(`Pergunta ${respostaDto.perguntaId} não encontrada neste questionário`);
-      }
-
-      if (pergunta.obrigatoria && !respostaDto.valor) {
-        throw new BadRequestException(`Pergunta "${pergunta.texto}" é obrigatória`);
-      }
-
-      const respostaExistente = await this.respostaPerguntaRepository.findOne({
-        where: {
-          respostaQuestionarioId,
-          perguntaId: respostaDto.perguntaId,
-        },
-      });
-
-      if (respostaExistente) {
-        respostaExistente.valor = respostaDto.valor;
-        await this.respostaPerguntaRepository.save(respostaExistente);
-      } else {
-        const respostaPergunta = new RespostaPerguntaQuestionario();
-        respostaPergunta.respostaQuestionarioId = respostaQuestionarioId;
-        respostaPergunta.perguntaId = respostaDto.perguntaId;
-        respostaPergunta.valor = respostaDto.valor;
-
-        await this.respostaPerguntaRepository.save(respostaPergunta);
-      }
+    if (!questionario) {
+      throw new BadRequestException('Questionário não encontrado');
+    }
+    const perguntas = questionario.perguntas ?? [];
+    if (perguntas.length === 0) {
+      throw new BadRequestException('Questionário sem perguntas configuradas');
     }
 
-    respostaQuestionario.concluida = true;
-    await this.respostaQuestionarioRepository.save(respostaQuestionario);
+    try {
+      for (const respostaDto of respostas) {
+        const pergunta = perguntas.find((p) => p.id === respostaDto.perguntaId);
 
-    return this.findQuestionarioPublico(respostaQuestionarioId);
+        if (!pergunta) {
+          throw new BadRequestException(`Pergunta ${respostaDto.perguntaId} não encontrada neste questionário`);
+        }
+
+        if (pergunta.obrigatoria && (respostaDto.valor === undefined || respostaDto.valor === null || String(respostaDto.valor).trim() === '')) {
+          throw new BadRequestException(`Pergunta "${pergunta.texto}" é obrigatória`);
+        }
+
+        const valor = respostaDto.valor != null ? String(respostaDto.valor) : null;
+
+        const respostaExistente = await this.respostaPerguntaRepository.findOne({
+          where: {
+            respostaQuestionarioId,
+            perguntaId: respostaDto.perguntaId,
+          },
+        });
+
+        if (respostaExistente) {
+          respostaExistente.valor = valor;
+          await this.respostaPerguntaRepository.save(respostaExistente);
+        } else {
+          const respostaPergunta = new RespostaPerguntaQuestionario();
+          respostaPergunta.respostaQuestionarioId = respostaQuestionarioId;
+          respostaPergunta.perguntaId = respostaDto.perguntaId;
+          respostaPergunta.valor = valor;
+
+          await this.respostaPerguntaRepository.save(respostaPergunta);
+        }
+      }
+
+      respostaQuestionario.concluida = true;
+      await this.respostaQuestionarioRepository.save(respostaQuestionario);
+
+      return this.findQuestionarioPublico(respostaQuestionarioId);
+    } catch (err: any) {
+      if (err instanceof BadRequestException || err instanceof NotFoundException) {
+        throw err;
+      }
+      console.error('❌ Erro ao responder questionário público:', err?.message, err?.stack);
+      throw new BadRequestException(
+        err?.message?.includes('violates') || err?.detail
+          ? 'Dados inválidos. Verifique as respostas enviadas.'
+          : `Erro ao salvar respostas: ${err?.message || 'Tente novamente.'}`,
+      );
+    }
   }
 
   /**

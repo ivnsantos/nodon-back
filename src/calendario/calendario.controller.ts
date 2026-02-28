@@ -497,17 +497,17 @@ export class CalendarioController {
     @Headers('x-cliente-master-id') clienteMasterId: string,
     @Body() updateDto: UpdateConsultaDto,
   ) {
+    if (!clienteMasterId) {
+      throw new BadRequestException('Header x-cliente-master-id é obrigatório');
+    }
     const consulta = await this.calendarioService.updateConsulta(
       id,
       clienteMasterId,
       updateDto,
     );
 
-    // Buscar relacionamentos para resposta
-    const consultaCompleta = await this.calendarioService.findConsultaById(
-      consulta.id,
-      clienteMasterId,
-    );
+    // updateConsulta já retorna a consulta com relacionamentos
+    const consultaCompleta = consulta;
 
     return {
       statusCode: 200,

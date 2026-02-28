@@ -686,13 +686,18 @@ export class CalendarioService {
       consulta.status = updateDto.status;
     }
 
-    await this.consultaRepository.save(consulta);
+    try {
+      await this.consultaRepository.save(consulta);
+    } catch (err: any) {
+      console.error('❌ Erro ao salvar consulta (updateConsulta):', err?.message, err?.detail);
+      throw new BadRequestException(
+        err?.message?.includes('violates') || err?.detail
+          ? 'Dados inválidos para atualizar a consulta. Verifique os valores enviados.'
+          : `Erro ao atualizar consulta: ${err?.message || 'Tente novamente.'}`,
+      );
+    }
 
-    // Buscar com relacionamentos
-    return this.consultaRepository.findOne({
-      where: { id, clienteMasterId },
-      relations: ['tipoConsulta', 'paciente', 'profissional', 'profissional.user', 'createdByUser'],
-    }) as Promise<Consulta>;
+    return this.findConsultaById(id, clienteMasterId);
   }
 
   async deleteConsulta(id: string, clienteMasterId: string): Promise<void> {
