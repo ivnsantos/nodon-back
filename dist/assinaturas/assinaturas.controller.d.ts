@@ -30,9 +30,9 @@ export declare class AssinaturasController {
         clienteMasterId: string;
         tokensChat: {
             tokensUtilizados: number;
+            tokensUtilizadosMes: number;
             limitePlano: number;
             porcentagemUso: number;
-            tokensUtilizadosMes?: undefined;
             ultimaAtualizacao?: undefined;
         };
         analises: {

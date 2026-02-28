@@ -55,9 +55,9 @@ export declare class AssinaturasService {
         clienteMasterId: string;
         tokensChat: {
             tokensUtilizados: number;
+            tokensUtilizadosMes: number;
             limitePlano: number;
             porcentagemUso: number;
-            tokensUtilizadosMes?: undefined;
             ultimaAtualizacao?: undefined;
         };
         analises: {

@@ -677,11 +677,15 @@ let AssinaturasService = class AssinaturasService {
         const todosHistoricos = await this.historicoRepository.find({
             where: { clienteMasterId: clienteMaster.id },
         });
-        const tokensChatUsados = await this.chatService.getTotalTokensByClienteMaster(clienteMaster.id);
+        const tokensFromConversations = await this.chatService.getTotalTokensForDashboard(clienteMaster.id, clienteMaster.userId);
+        const tokensFromMessages = await this.chatService.getTotalTokensFromMessagesForDashboard(clienteMaster.id, clienteMaster.userId);
+        const tokensChatUsados = Math.max(tokensFromConversations, tokensFromMessages);
         let tokensChatUsadosPeriodo = 0;
         let analisesFeitasPeriodo = 0;
         if (dataInicioAssinatura) {
-            tokensChatUsadosPeriodo = await this.chatService.getTotalTokensByClienteMasterInPeriod(clienteMaster.id, dataInicioAssinatura, dataFimAssinatura || agora);
+            const periodoFromConversations = await this.chatService.getTotalTokensForDashboardInPeriod(clienteMaster.id, clienteMaster.userId, dataInicioAssinatura, dataFimAssinatura || agora);
+            const periodoFromMessages = await this.chatService.getTotalTokensFromMessagesForDashboardInPeriod(clienteMaster.id, clienteMaster.userId, dataInicioAssinatura, dataFimAssinatura || agora);
+            tokensChatUsadosPeriodo = Math.max(periodoFromConversations, periodoFromMessages);
             const dataFimComparacao = dataFimAssinatura || agora;
             for (const h of todosHistoricos) {
                 const inicioMesHistorico = new Date(h.ano, h.mes - 1, 1);
@@ -722,6 +726,7 @@ let AssinaturasService = class AssinaturasService {
                 clienteMasterId: clienteMaster.id,
                 tokensChat: {
                     tokensUtilizados: tokensChatUsadosPeriodo,
+                    tokensUtilizadosMes: tokensChatUsadosPeriodo,
                     limitePlano: tokensChatLimite,
                     porcentagemUso: porcentagemUsoTokens,
                 },

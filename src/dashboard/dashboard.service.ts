@@ -7,6 +7,7 @@ import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { CalendarioService } from '../calendario/calendario.service';
 import { ChatService } from '../chat/chat.service';
 import { PacientesService } from '../pacientes/pacientes.service';
+import { ClientesMasterService } from '../users/clientes-master.service';
 
 @Injectable()
 export class DashboardService {
@@ -23,6 +24,7 @@ export class DashboardService {
     private chatService: ChatService,
     @Inject(forwardRef(() => PacientesService))
     private pacientesService: PacientesService,
+    private clientesMasterService: ClientesMasterService,
   ) {}
 
   async getDashboardData(clienteMasterId: string, userId: string, userTipo: string) {
@@ -56,9 +58,25 @@ export class DashboardService {
     // 2. Conversas (Chat)
     const conversas = await this.chatService.getConversationsByUser(userId);
     const totalConversas = conversas.length;
-    const dashboardInfo = await this.assinaturasService.getDashboardInfo(clienteMasterId, userTipo);
-    const tokensUsados = dashboardInfo?.tokensChat?.tokensUtilizadosMes || 0;
-    const tokensLimite = dashboardInfo?.tokensChat?.limitePlano || 0;
+
+    // Tokens: buscar direto no Chat (conversas + mensagens) e limite na assinatura
+    let tokensUsados = 0;
+    let tokensLimite = 0;
+    try {
+      const clienteMaster = await this.clientesMasterService.findById(clienteMasterId);
+      const ownerUserId = clienteMaster?.userId;
+      if (ownerUserId) {
+        const fromConversations = await this.chatService.getTotalTokensForDashboard(clienteMasterId, ownerUserId);
+        const fromMessages = await this.chatService.getTotalTokensFromMessagesForDashboard(clienteMasterId, ownerUserId);
+        tokensUsados = Math.max(Number(fromConversations), Number(fromMessages));
+      } else {
+        tokensUsados = Number(await this.chatService.getTotalTokensByClienteMaster(clienteMasterId));
+      }
+      const dashboardInfo = await this.assinaturasService.getDashboardInfo(clienteMasterId, userTipo);
+      tokensLimite = Number(dashboardInfo?.tokensChat?.limitePlano ?? 0);
+    } catch (err: any) {
+      console.warn('[Dashboard] Erro ao buscar tokens/limite:', err?.message);
+    }
     const porcentagemTokens = tokensLimite > 0 ? Math.round((tokensUsados / tokensLimite) * 100 * 10) / 10 : 0;
 
     // 3. Consultas
@@ -135,10 +153,11 @@ export class DashboardService {
       .limit(5)
       .getMany();
 
-    // 6. Uso de Tokens
+    // 6. Uso de Tokens (utilizados, limite, quanto falta, porcentagem)
     const usoTokens = {
       utilizados: tokensUsados,
       limite: tokensLimite,
+      restantes: Math.max(0, tokensLimite - tokensUsados),
       porcentagem: porcentagemTokens,
     };
 

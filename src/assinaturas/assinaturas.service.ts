@@ -830,20 +830,35 @@ export class AssinaturasService {
       where: { clienteMasterId: clienteMaster.id },
     });
 
-    // Busca tokens do chat da tabela chat_conversations
-    const tokensChatUsados = await this.chatService.getTotalTokensByClienteMaster(clienteMaster.id);
+    // Busca tokens do chat: por conversas e por mensagens (usa o maior para refletir uso real)
+    const tokensFromConversations = await this.chatService.getTotalTokensForDashboard(
+      clienteMaster.id,
+      clienteMaster.userId,
+    );
+    const tokensFromMessages = await this.chatService.getTotalTokensFromMessagesForDashboard(
+      clienteMaster.id,
+      clienteMaster.userId,
+    );
+    const tokensChatUsados = Math.max(tokensFromConversations, tokensFromMessages);
     
     // Calcula tokens e análises do período da assinatura (desde criação até próxima renovação)
     let tokensChatUsadosPeriodo = 0;
     let analisesFeitasPeriodo = 0;
     
     if (dataInicioAssinatura) {
-      // Busca tokens do chat no período completo da assinatura (desde criação até próxima renovação)
-      tokensChatUsadosPeriodo = await this.chatService.getTotalTokensByClienteMasterInPeriod(
-        clienteMaster.id, 
+      const periodoFromConversations = await this.chatService.getTotalTokensForDashboardInPeriod(
+        clienteMaster.id,
+        clienteMaster.userId,
         dataInicioAssinatura,
-        dataFimAssinatura || agora // Se não tem data fim, usa data atual
+        dataFimAssinatura || agora,
       );
+      const periodoFromMessages = await this.chatService.getTotalTokensFromMessagesForDashboardInPeriod(
+        clienteMaster.id,
+        clienteMaster.userId,
+        dataInicioAssinatura,
+        dataFimAssinatura || agora,
+      );
+      tokensChatUsadosPeriodo = Math.max(periodoFromConversations, periodoFromMessages);
       
       // Filtra históricos de análises que estão dentro do período da assinatura
       // Verifica se há interseção entre o período do histórico e o período da assinatura
@@ -898,12 +913,13 @@ export class AssinaturasService {
       };
     }
 
-    // Se não for master, retorna apenas tokens e análises
+    // Se não for master, retorna apenas tokens e análises (com tokensUtilizadosMes para o dashboard)
     if (userTipo !== 'master') {
       return {
         clienteMasterId: clienteMaster.id,
         tokensChat: {
           tokensUtilizados: tokensChatUsadosPeriodo,
+          tokensUtilizadosMes: tokensChatUsadosPeriodo,
           limitePlano: tokensChatLimite,
           porcentagemUso: porcentagemUsoTokens,
         },

@@ -166,16 +166,77 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
   async getTotalTokensByClienteMaster(clienteMasterId: string): Promise<number> {
     const result = await this.conversationRepository
       .createQueryBuilder('c')
-      .select('SUM(c.total_tokens)', 'total')
+      .select('COALESCE(SUM(c.total_tokens), 0)', 'total')
       .where('c.cliente_master_id = :clienteMasterId', { clienteMasterId })
       .getRawOne();
-    return Number(result?.total || 0);
+    return Number(result?.total ?? 0);
+  }
+
+  /**
+   * Retorna total de tokens para o dashboard: conversas com cliente_master_id = id
+   * OU conversas do dono (user_id = ownerUserId) quando cliente_master_id for null.
+   */
+  async getTotalTokensForDashboard(clienteMasterId: string, ownerUserId: string): Promise<number> {
+    const result = await this.conversationRepository
+      .createQueryBuilder('c')
+      .select('COALESCE(SUM(c.total_tokens), 0)', 'total')
+      .where(
+        '(c.cliente_master_id = :clienteMasterId OR (c.cliente_master_id IS NULL AND c.user_id = :ownerUserId))',
+        { clienteMasterId, ownerUserId },
+      )
+      .getRawOne();
+    return Number(result?.total ?? 0);
+  }
+
+  /**
+   * Soma tokens a partir das mensagens (fonte por mensagem). Usado quando conversation.total_tokens não está atualizado.
+   */
+  async getTotalTokensFromMessagesForDashboard(clienteMasterId: string, ownerUserId: string): Promise<number> {
+    const result = await this.messageRepository
+      .createQueryBuilder('m')
+      .innerJoin('m.conversation', 'c')
+      .select('COALESCE(SUM(m.tokens_used), 0)', 'total')
+      .where(
+        '(c.cliente_master_id = :clienteMasterId OR (c.cliente_master_id IS NULL AND c.user_id = :ownerUserId))',
+        { clienteMasterId, ownerUserId },
+      )
+      .andWhere('m.tokens_used IS NOT NULL')
+      .andWhere('m.tokens_used > 0')
+      .getRawOne();
+    return Number(result?.total ?? 0);
+  }
+
+  /**
+   * Tokens do período a partir das mensagens (created_at no período).
+   */
+  async getTotalTokensFromMessagesForDashboardInPeriod(
+    clienteMasterId: string,
+    ownerUserId: string,
+    dataInicio: Date,
+    dataFim?: Date,
+  ): Promise<number> {
+    const qb = this.messageRepository
+      .createQueryBuilder('m')
+      .innerJoin('m.conversation', 'c')
+      .select('COALESCE(SUM(m.tokens_used), 0)', 'total')
+      .where(
+        '(c.cliente_master_id = :clienteMasterId OR (c.cliente_master_id IS NULL AND c.user_id = :ownerUserId))',
+        { clienteMasterId, ownerUserId },
+      )
+      .andWhere('m.tokens_used IS NOT NULL')
+      .andWhere('m.tokens_used > 0')
+      .andWhere('m.created_at >= :dataInicio', { dataInicio });
+    if (dataFim) {
+      qb.andWhere('m.created_at <= :dataFim', { dataFim });
+    }
+    const result = await qb.getRawOne();
+    return Number(result?.total ?? 0);
   }
 
   async getTotalTokensByClienteMasterInPeriod(clienteMasterId: string, dataInicio: Date, dataFim?: Date): Promise<number> {
     const queryBuilder = this.conversationRepository
       .createQueryBuilder('c')
-      .select('SUM(c.total_tokens)', 'total')
+      .select('COALESCE(SUM(c.total_tokens), 0)', 'total')
       .where('c.cliente_master_id = :clienteMasterId', { clienteMasterId })
       .andWhere('c.created_at >= :dataInicio', { dataInicio });
     
@@ -184,7 +245,31 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     }
     
     const result = await queryBuilder.getRawOne();
-    return Number(result?.total || 0);
+    return Number(result?.total ?? 0);
+  }
+
+  /**
+   * Tokens no período para dashboard: por cliente_master_id ou por dono (user_id) quando null.
+   */
+  async getTotalTokensForDashboardInPeriod(
+    clienteMasterId: string,
+    ownerUserId: string,
+    dataInicio: Date,
+    dataFim?: Date,
+  ): Promise<number> {
+    const queryBuilder = this.conversationRepository
+      .createQueryBuilder('c')
+      .select('COALESCE(SUM(c.total_tokens), 0)', 'total')
+      .where(
+        '(c.cliente_master_id = :clienteMasterId OR (c.cliente_master_id IS NULL AND c.user_id = :ownerUserId))',
+        { clienteMasterId, ownerUserId },
+      )
+      .andWhere('c.created_at >= :dataInicio', { dataInicio });
+    if (dataFim) {
+      queryBuilder.andWhere('c.created_at <= :dataFim', { dataFim });
+    }
+    const result = await queryBuilder.getRawOne();
+    return Number(result?.total ?? 0);
   }
 
   async saveMessage(
