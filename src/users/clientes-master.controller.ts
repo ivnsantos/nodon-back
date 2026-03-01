@@ -72,8 +72,10 @@ export class ClientesMasterController {
         cnpj: clienteMaster.cnpj,
         logo: clienteMaster.logo,
         cor: clienteMaster.cor,
+        corSecundaria: clienteMaster.corSecundaria,
         telefoneEmpresa: clienteMaster.telefoneEmpresa,
         site: clienteMaster.site,
+        endereco: clienteMaster.endereco,
         descricao: clienteMaster.descricao,
         outrasInformacoes: clienteMaster.outrasInformacoes,
         valorhora: clienteMaster.valorHora,
@@ -224,16 +226,20 @@ export class ClientesMasterController {
     }
     
     // Se for do tipo "clienteMaster", retornar dados completos
-    const completeInfo = await this.clientesMasterService.getCompleteInfo(id);
-    
-    // Adicionar informações do relacionamento
-    return {
-      ...completeInfo,
-      relacionamento: {
-        tipo: tipoRelacionamento, // 'clienteMaster' ou 'usuario'
-        id: idRelacionamento, // ID do ClienteMaster ou UserComum
-      },
-    };
+
+    try {
+      const completeInfo = await this.clientesMasterService.getCompleteInfo(id);
+      return {
+        ...completeInfo,
+        relacionamento: {
+          tipo: tipoRelacionamento, // 'clienteMaster' ou 'usuario'
+          id: idRelacionamento, // ID do ClienteMaster ou UserComum
+        },
+      };
+    } catch (err: any) {
+      console.error('[clientes-master/complete] Erro em getCompleteInfo:', err?.message ?? err);
+      throw err;
+    }
   }
 
   @Post('meus-dados')
@@ -264,21 +270,15 @@ export class ClientesMasterController {
     const clienteMaster = clientesMaster[0];
     const clienteMasterId = clienteMaster.id;
 
-    // Se houver arquivo, fazer upload para R2 primeiro
-    // Se não houver arquivo mas houver URL no logo, usar a URL diretamente
-    if (file) {
+    // Logo: (1) arquivo no campo "file" → upload para S3 (pasta logos) e usa a URL; (2) URL no body (campo "logo") → usa direto
+    if (file?.buffer) {
       try {
-        // Gerar caminho único para o logo
-        const path = this.storageService.generateFilePath('logos', file.originalname);
-
-        // Fazer upload para R2
+        const path = this.storageService.generateFilePath('logos', file.originalname || 'logo');
         const logoUrl = await this.storageService.uploadImage(
           file.buffer,
           path,
-          file.mimetype,
+          file.mimetype || 'image/png',
         );
-
-        // Adicionar a URL do logo ao DTO de atualização (sobrescreve qualquer URL enviada)
         updateDto.logo = logoUrl;
       } catch (error: any) {
         console.error('Erro ao fazer upload do logo:', error);
@@ -287,7 +287,7 @@ export class ClientesMasterController {
         );
       }
     }
-    // Se não houver arquivo, o campo logo do DTO (se fornecido) será usado diretamente
+    // Se não enviou arquivo, updateDto.logo (se vier como URL no body) é usado diretamente
 
     // Mapear "documento" para "cnpj" se fornecido (documento pode ser CPF ou CNPJ)
     const updateData: any = { ...updateDto };
@@ -315,8 +315,10 @@ export class ClientesMasterController {
         cnpj: updated.cnpj,
         logo: updated.logo,
         cor: updated.cor,
+        corSecundaria: updated.corSecundaria,
         telefoneEmpresa: updated.telefoneEmpresa,
         site: updated.site,
+        endereco: updated.endereco,
         descricao: updated.descricao,
         outrasInformacoes: updated.outrasInformacoes,
         valorhora: updated.valorHora,

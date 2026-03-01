@@ -29,6 +29,11 @@ export class UpdateClienteMasterDto {
 
   @IsString()
   @IsOptional()
+  @MaxLength(50)
+  corSecundaria?: string | null;
+
+  @IsString()
+  @IsOptional()
   @MaxLength(255)
   telefoneEmpresa?: string;
 
@@ -36,6 +41,11 @@ export class UpdateClienteMasterDto {
   @IsOptional()
   @MaxLength(500)
   site?: string;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(1000)
+  endereco?: string | null;
 
   @IsString()
   @IsOptional()

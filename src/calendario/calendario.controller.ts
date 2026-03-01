@@ -254,6 +254,14 @@ export class CalendarioController {
             ? {
                 id: consulta.clienteMaster.id,
                 nomeEmpresa: consulta.clienteMaster.nomeEmpresa,
+                cnpj: consulta.clienteMaster.cnpj,
+                logo: consulta.clienteMaster.logo,
+                cor: consulta.clienteMaster.cor,
+                corSecundaria: consulta.clienteMaster.corSecundaria ?? null,
+                telefoneEmpresa: consulta.clienteMaster.telefoneEmpresa,
+                site: consulta.clienteMaster.site,
+                endereco: consulta.clienteMaster.endereco ?? null,
+                descricao: consulta.clienteMaster.descricao,
               }
             : null,
           createdAt: consulta.createdAt,

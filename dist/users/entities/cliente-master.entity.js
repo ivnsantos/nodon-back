@@ -22,6 +22,7 @@ let ClienteMaster = class ClienteMaster {
     cnpj;
     logo;
     cor;
+    corSecundaria;
     telefoneEmpresa;
     site;
     endereco;
@@ -65,6 +66,10 @@ __decorate([
     (0, typeorm_1.Column)({ nullable: true }),
     __metadata("design:type", String)
 ], ClienteMaster.prototype, "cor", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'cor_secundaria', type: 'varchar', nullable: true }),
+    __metadata("design:type", Object)
+], ClienteMaster.prototype, "corSecundaria", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'telefone_empresa', nullable: true }),
     __metadata("design:type", String)

@@ -9,6 +9,7 @@ export declare class ClienteMaster {
     cnpj: string;
     logo: string;
     cor: string;
+    corSecundaria: string | null;
     telefoneEmpresa: string;
     site: string;
     endereco: string | null;

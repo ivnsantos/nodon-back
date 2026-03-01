@@ -41,6 +41,9 @@ export class ClienteMaster {
   @Column({ nullable: true })
   cor: string; // Cor principal da empresa (hexadecimal ou nome)
 
+  @Column({ name: 'cor_secundaria', type: 'varchar', nullable: true })
+  corSecundaria: string | null; // Cor secundária (hexadecimal ou nome)
+
   @Column({ name: 'telefone_empresa', nullable: true })
   telefoneEmpresa: string; // Telefone da empresa (pode ser diferente do telefone pessoal)
 

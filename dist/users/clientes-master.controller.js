@@ -94,8 +94,10 @@ let ClientesMasterController = class ClientesMasterController {
                 cnpj: clienteMaster.cnpj,
                 logo: clienteMaster.logo,
                 cor: clienteMaster.cor,
+                corSecundaria: clienteMaster.corSecundaria,
                 telefoneEmpresa: clienteMaster.telefoneEmpresa,
                 site: clienteMaster.site,
+                endereco: clienteMaster.endereco,
                 descricao: clienteMaster.descricao,
                 outrasInformacoes: clienteMaster.outrasInformacoes,
                 valorhora: clienteMaster.valorHora,
@@ -208,14 +210,20 @@ let ClientesMasterController = class ClientesMasterController {
                 },
             };
         }
-        const completeInfo = await this.clientesMasterService.getCompleteInfo(id);
-        return {
-            ...completeInfo,
-            relacionamento: {
-                tipo: tipoRelacionamento,
-                id: idRelacionamento,
-            },
-        };
+        try {
+            const completeInfo = await this.clientesMasterService.getCompleteInfo(id);
+            return {
+                ...completeInfo,
+                relacionamento: {
+                    tipo: tipoRelacionamento,
+                    id: idRelacionamento,
+                },
+            };
+        }
+        catch (err) {
+            console.error('[clientes-master/complete] Erro em getCompleteInfo:', err?.message ?? err);
+            throw err;
+        }
     }
     async atualizarMeusDados(req, updateDto, file) {
         const userBaseId = req.user.id;
@@ -229,10 +237,10 @@ let ClientesMasterController = class ClientesMasterController {
         }
         const clienteMaster = clientesMaster[0];
         const clienteMasterId = clienteMaster.id;
-        if (file) {
+        if (file?.buffer) {
             try {
-                const path = this.storageService.generateFilePath('logos', file.originalname);
-                const logoUrl = await this.storageService.uploadImage(file.buffer, path, file.mimetype);
+                const path = this.storageService.generateFilePath('logos', file.originalname || 'logo');
+                const logoUrl = await this.storageService.uploadImage(file.buffer, path, file.mimetype || 'image/png');
                 updateDto.logo = logoUrl;
             }
             catch (error) {
@@ -260,8 +268,10 @@ let ClientesMasterController = class ClientesMasterController {
                 cnpj: updated.cnpj,
                 logo: updated.logo,
                 cor: updated.cor,
+                corSecundaria: updated.corSecundaria,
                 telefoneEmpresa: updated.telefoneEmpresa,
                 site: updated.site,
+                endereco: updated.endereco,
                 descricao: updated.descricao,
                 outrasInformacoes: updated.outrasInformacoes,
                 valorhora: updated.valorHora,

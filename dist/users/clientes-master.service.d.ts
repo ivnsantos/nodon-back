@@ -33,8 +33,10 @@ export declare class ClientesMasterService {
         cnpj?: string;
         logo?: string;
         cor?: string;
+        corSecundaria?: string | null;
         telefoneEmpresa?: string;
         site?: string;
+        endereco?: string | null;
         descricao?: string;
         outrasInformacoes?: string;
     }): Promise<ClienteMaster>;
@@ -53,8 +55,10 @@ export declare class ClientesMasterService {
             cnpj: string;
             logo: string;
             cor: string;
+            corSecundaria: string | null;
             telefoneEmpresa: string;
             site: string;
+            endereco: string | null;
             descricao: string;
             outrasInformacoes: string;
             ativo: boolean;
@@ -140,8 +144,10 @@ export declare class ClientesMasterService {
             cnpj: string;
             logo: string;
             cor: string;
+            corSecundaria: string | null;
             telefoneEmpresa: string;
             site: string;
+            endereco: string | null;
             descricao: string;
             outrasInformacoes: string;
             valorhora: number | null;

@@ -170,7 +170,7 @@ export class AnamnesesService {
   }
 
   /**
-   * Remove uma anamnese
+   * Remove uma anamnese e todos os dados relacionados (respostas de perguntas, respostas de anamnese, perguntas).
    */
   async remove(id: string, userId: string, userTipo: string): Promise<void> {
     const anamnese = await this.findOne(id, userId, userTipo);
@@ -178,7 +178,14 @@ export class AnamnesesService {
     // Verificar se é o dono do cliente master (apenas dono pode deletar)
     await this.verificarPermissaoEdicaoExclusao(userId, anamnese.clienteMasterId);
 
-    await this.anamneseRepository.remove(anamnese);
+    const respostas = await this.respostaAnamneseRepository.find({ where: { anamneseId: id } });
+    const respostaIds = respostas.map((r) => r.id);
+    if (respostaIds.length > 0) {
+      await this.respostaPerguntaRepository.delete({ respostaAnamneseId: In(respostaIds) });
+    }
+    await this.respostaAnamneseRepository.delete({ anamneseId: id });
+    await this.perguntaRepository.delete({ anamneseId: id });
+    await this.anamneseRepository.delete(id);
   }
 
   /**
@@ -446,8 +453,10 @@ export class AnamnesesService {
         cnpj: string | null;
         logo: string | null;
         cor: string | null;
+        corSecundaria: string | null;
         telefoneEmpresa: string | null;
         site: string | null;
+        endereco: string | null;
         descricao: string | null;
       } | null;
     } | null;
@@ -461,8 +470,10 @@ export class AnamnesesService {
         cnpj: string | null;
         logo: string | null;
         cor: string | null;
+        corSecundaria: string | null;
         telefoneEmpresa: string | null;
         site: string | null;
+        endereco: string | null;
         descricao: string | null;
       } | null;
       perguntas: Array<{
@@ -520,8 +531,10 @@ export class AnamnesesService {
                   cnpj: respostaAnamnese.paciente.masterClient.cnpj,
                   logo: respostaAnamnese.paciente.masterClient.logo,
                   cor: respostaAnamnese.paciente.masterClient.cor,
+                  corSecundaria: respostaAnamnese.paciente.masterClient.corSecundaria ?? null,
                   telefoneEmpresa: respostaAnamnese.paciente.masterClient.telefoneEmpresa,
                   site: respostaAnamnese.paciente.masterClient.site,
+                  endereco: respostaAnamnese.paciente.masterClient.endereco ?? null,
                   descricao: respostaAnamnese.paciente.masterClient.descricao,
                 }
               : null,
@@ -538,8 +551,10 @@ export class AnamnesesService {
               cnpj: respostaAnamnese.anamnese.clienteMaster.cnpj,
               logo: respostaAnamnese.anamnese.clienteMaster.logo,
               cor: respostaAnamnese.anamnese.clienteMaster.cor,
+              corSecundaria: respostaAnamnese.anamnese.clienteMaster.corSecundaria ?? null,
               telefoneEmpresa: respostaAnamnese.anamnese.clienteMaster.telefoneEmpresa,
               site: respostaAnamnese.anamnese.clienteMaster.site,
+              endereco: respostaAnamnese.anamnese.clienteMaster.endereco ?? null,
               descricao: respostaAnamnese.anamnese.clienteMaster.descricao,
             }
           : null,

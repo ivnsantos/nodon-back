@@ -180,11 +180,19 @@ export class QuestionariosService {
   }
 
   /**
-   * Remove um questionário
+   * Remove um questionário e todos os dados relacionados (respostas, respostas de perguntas, perguntas).
    */
   async remove(id: string, userId: string, userTipo: string): Promise<void> {
-    const questionario = await this.findOne(id, userId, userTipo);
-    await this.questionarioRepository.remove(questionario);
+    await this.findOne(id, userId, userTipo);
+
+    const respostas = await this.respostaQuestionarioRepository.find({ where: { questionarioId: id } });
+    const respostaIds = respostas.map((r) => r.id);
+    if (respostaIds.length > 0) {
+      await this.respostaPerguntaRepository.delete({ respostaQuestionarioId: In(respostaIds) });
+    }
+    await this.respostaQuestionarioRepository.delete({ questionarioId: id });
+    await this.perguntaRepository.delete({ questionarioId: id });
+    await this.questionarioRepository.delete(id);
   }
 
   /**
@@ -378,7 +386,14 @@ export class QuestionariosService {
   async findQuestionarioPublico(respostaQuestionarioId: string): Promise<RespostaQuestionario> {
     const respostaQuestionario = await this.respostaQuestionarioRepository.findOne({
       where: { id: respostaQuestionarioId },
-      relations: ['questionario', 'questionario.perguntas', 'paciente', 'respostasPerguntas', 'respostasPerguntas.pergunta'],
+      relations: [
+        'questionario',
+        'questionario.perguntas',
+        'questionario.clienteMaster',
+        'paciente',
+        'respostasPerguntas',
+        'respostasPerguntas.pergunta',
+      ],
     });
 
     if (!respostaQuestionario) {

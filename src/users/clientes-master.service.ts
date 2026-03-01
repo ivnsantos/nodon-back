@@ -52,8 +52,10 @@ export class ClientesMasterService {
     cnpj?: string;
     logo?: string;
     cor?: string;
+    corSecundaria?: string | null;
     telefoneEmpresa?: string;
     site?: string;
+    endereco?: string | null;
     descricao?: string;
     outrasInformacoes?: string;
   }): Promise<ClienteMaster> {
@@ -78,8 +80,10 @@ export class ClientesMasterService {
       cnpj: data.cnpj,
       logo: data.logo,
       cor: data.cor,
+      corSecundaria: data.corSecundaria ?? null,
       telefoneEmpresa: data.telefoneEmpresa,
       site: data.site,
+      endereco: data.endereco ?? null,
       descricao: data.descricao,
       outrasInformacoes: data.outrasInformacoes,
       hash: hash!,
@@ -222,8 +226,10 @@ export class ClientesMasterService {
           cnpj: clienteMaster.cnpj,
           logo: clienteMaster.logo,
           cor: clienteMaster.cor,
+          corSecundaria: clienteMaster.corSecundaria,
           telefoneEmpresa: clienteMaster.telefoneEmpresa,
           site: clienteMaster.site,
+          endereco: clienteMaster.endereco,
           descricao: clienteMaster.descricao,
           outrasInformacoes: clienteMaster.outrasInformacoes,
           ativo: clienteMaster.ativo,
@@ -272,8 +278,10 @@ export class ClientesMasterService {
         cnpj: clienteMaster.cnpj,
         logo: clienteMaster.logo,
         cor: clienteMaster.cor,
+        corSecundaria: clienteMaster.corSecundaria,
         telefoneEmpresa: clienteMaster.telefoneEmpresa,
         site: clienteMaster.site,
+        endereco: clienteMaster.endereco,
         descricao: clienteMaster.descricao,
         outrasInformacoes: clienteMaster.outrasInformacoes,
         valorhora: clienteMaster.valorHora,

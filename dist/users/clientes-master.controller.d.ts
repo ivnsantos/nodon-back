@@ -24,8 +24,10 @@ export declare class ClientesMasterController {
             cnpj: string;
             logo: string;
             cor: string;
+            corSecundaria: string | null;
             telefoneEmpresa: string;
             site: string;
+            endereco: string | null;
             descricao: string;
             outrasInformacoes: string;
             valorhora: number | null;
@@ -84,8 +86,10 @@ export declare class ClientesMasterController {
             cnpj: string;
             logo: string;
             cor: string;
+            corSecundaria: string | null;
             telefoneEmpresa: string;
             site: string;
+            endereco: string | null;
             descricao: string;
             outrasInformacoes: string;
             ativo: boolean;
@@ -178,8 +182,10 @@ export declare class ClientesMasterController {
             cnpj: string;
             logo: string;
             cor: string;
+            corSecundaria: string | null;
             telefoneEmpresa: string;
             site: string;
+            endereco: string | null;
             descricao: string;
             outrasInformacoes: string;
             valorhora: number | null;
@@ -280,8 +286,10 @@ export declare class ClientesMasterController {
             cnpj: string;
             logo: string;
             cor: string;
+            corSecundaria: string | null;
             telefoneEmpresa: string;
             site: string;
+            endereco: string | null;
             descricao: string;
             outrasInformacoes: string;
             valorhora: number | null;

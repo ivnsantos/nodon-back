@@ -83,6 +83,7 @@ export class CalendarioService {
       site: string | null;
       logo: string | null;
       cor: string | null;
+      cor_secundaria: string | null;
       endereco: string | null;
     } | null;
     jaConfirmada: boolean;
@@ -121,7 +122,8 @@ export class CalendarioService {
             site: consulta.clienteMaster.site,
             logo: consulta.clienteMaster.logo,
             cor: consulta.clienteMaster.cor,
-            endereco: consulta.clienteMaster.endereco,
+            cor_secundaria: consulta.clienteMaster.corSecundaria ?? null,
+            endereco: consulta.clienteMaster.endereco ?? null,
           }
         : null,
       jaConfirmada,
