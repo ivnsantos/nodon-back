@@ -7,6 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
+  DeleteDateColumn,
 } from 'typeorm';
 import { ClienteMaster } from '../../users/entities/cliente-master.entity';
 import { DesenhoProfissional } from '../../desenhos-profissionais/entities/desenho-profissional.entity';
@@ -71,4 +72,7 @@ export class Radiografia {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date | null;
 }

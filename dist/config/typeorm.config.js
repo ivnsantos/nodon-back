@@ -21,6 +21,7 @@ const cliente_master_entity_1 = require("../users/entities/cliente-master.entity
 const plano_entity_1 = require("../planos/entities/plano.entity");
 const cupom_entity_1 = require("../cupons/entities/cupom.entity");
 const assinatura_entity_1 = require("../assinaturas/entities/assinatura.entity");
+const recorrencia_entity_1 = require("../assinaturas/entities/recorrencia.entity");
 const historico_mensal_entity_1 = require("../analises/entities/historico-mensal.entity");
 const tipo_consulta_entity_1 = require("../calendario/entities/tipo-consulta.entity");
 const consulta_entity_1 = require("../calendario/entities/consulta.entity");
@@ -33,6 +34,11 @@ const pergunta_anamnese_entity_1 = require("../anamneses/entities/pergunta-anamn
 const resposta_anamnese_entity_1 = require("../anamneses/entities/resposta-anamnese.entity");
 const resposta_pergunta_entity_1 = require("../anamneses/entities/resposta-pergunta.entity");
 const necessidade_entity_1 = require("../necessidades/entities/necessidade.entity");
+const treatment_entity_1 = require("../treatments/entities/treatment.entity");
+const treatment_product_entity_1 = require("../treatments/entities/treatment-product.entity");
+const product_entity_1 = require("../treatments/entities/product.entity");
+const orcamento_entity_1 = require("../orcamentos/entities/orcamento.entity");
+const item_orcamento_entity_1 = require("../orcamentos/entities/item-orcamento.entity");
 const envLocalPath = (0, path_1.resolve)(process.cwd(), '.env.local');
 if ((0, fs_1.existsSync)(envLocalPath)) {
     (0, dotenv_1.config)({ path: envLocalPath });
@@ -86,6 +92,7 @@ let TypeOrmConfigService = class TypeOrmConfigService {
                 plano_entity_1.Plano,
                 cupom_entity_1.Cupom,
                 assinatura_entity_1.Assinatura,
+                recorrencia_entity_1.Recorrencia,
                 historico_mensal_entity_1.HistoricoMensal,
                 tipo_consulta_entity_1.TipoConsulta,
                 consulta_entity_1.Consulta,
@@ -98,6 +105,11 @@ let TypeOrmConfigService = class TypeOrmConfigService {
                 resposta_anamnese_entity_1.RespostaAnamnese,
                 resposta_pergunta_entity_1.RespostaPergunta,
                 necessidade_entity_1.Necessidade,
+                treatment_entity_1.Treatment,
+                treatment_product_entity_1.TreatmentProduct,
+                product_entity_1.Product,
+                orcamento_entity_1.Orcamento,
+                item_orcamento_entity_1.ItemOrcamento,
             ],
             synchronize: true,
             logging: this.configService.get('NODE_ENV') === 'development',

@@ -11,6 +11,7 @@ import { ClienteMaster } from '../users/entities/cliente-master.entity';
 import { Plano } from '../planos/entities/plano.entity';
 import { Cupom } from '../cupons/entities/cupom.entity';
 import { Assinatura } from '../assinaturas/entities/assinatura.entity';
+import { Recorrencia } from '../assinaturas/entities/recorrencia.entity';
 import { HistoricoMensal } from '../analises/entities/historico-mensal.entity';
 import { TipoConsulta } from '../calendario/entities/tipo-consulta.entity';
 import { Consulta } from '../calendario/entities/consulta.entity';
@@ -23,6 +24,11 @@ import { PerguntaAnamnese } from '../anamneses/entities/pergunta-anamnese.entity
 import { RespostaAnamnese } from '../anamneses/entities/resposta-anamnese.entity';
 import { RespostaPergunta } from '../anamneses/entities/resposta-pergunta.entity';
 import { Necessidade } from '../necessidades/entities/necessidade.entity';
+import { Treatment } from '../treatments/entities/treatment.entity';
+import { TreatmentProduct } from '../treatments/entities/treatment-product.entity';
+import { Product } from '../treatments/entities/product.entity';
+import { Orcamento } from '../orcamentos/entities/orcamento.entity';
+import { ItemOrcamento } from '../orcamentos/entities/item-orcamento.entity';
 
 // Carregar .env.local primeiro (tem prioridade), depois .env
 const envLocalPath = resolve(process.cwd(), '.env.local');
@@ -91,6 +97,7 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
         Plano,
         Cupom,
         Assinatura,
+        Recorrencia,
         HistoricoMensal,
         TipoConsulta,
         Consulta,
@@ -103,6 +110,11 @@ export class TypeOrmConfigService implements TypeOrmOptionsFactory {
         RespostaAnamnese,
         RespostaPergunta,
         Necessidade,
+        Treatment,
+        TreatmentProduct,
+        Product,
+        Orcamento,
+        ItemOrcamento,
       ],
       // Desabilitar synchronize para evitar problemas com alterações de schema
       // Use migrations manuais em vez de synchronize

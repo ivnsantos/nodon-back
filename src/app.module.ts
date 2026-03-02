@@ -28,6 +28,7 @@ import { SmsModule } from './sms/sms.module';
 import { QueueModule } from './queue/queue.module';
 import { PastasPacienteModule } from './pastas-paciente/pastas-paciente.module';
 import { NecessidadesModule } from './necessidades/necessidades.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { NecessidadesModule } from './necessidades/necessidades.module';
     QueueModule,
     PastasPacienteModule,
     NecessidadesModule,
+    AdminModule,
   ],
 })
 export class AppModule implements OnModuleInit {

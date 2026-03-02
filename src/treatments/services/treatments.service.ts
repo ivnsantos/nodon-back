@@ -242,6 +242,11 @@ export class TreatmentsService {
    */
   async remove(id: string, userId: string, userTipo: string): Promise<void> {
     const treatment = await this.findOne(id, userId, userTipo);
+    
+    // Primeiro remover todos os TreatmentProducts relacionados
+    await this.treatmentProductRepository.delete({ treatmentId: id });
+    
+    // Depois remover o tratamento
     await this.treatmentRepository.remove(treatment);
   }
 

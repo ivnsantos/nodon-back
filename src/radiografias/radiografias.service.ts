@@ -229,9 +229,14 @@ export class RadiografiasService {
     await this.verificarPermissao(userId, userTipo, clienteMasterId);
 
     const radiografias = await this.radiografiaRepository.find({
-      where: { masterClient: { id: clienteMasterId } },
+      where: { 
+        masterClient: { id: clienteMasterId },
+        // Exclui registros com deletedAt não nulo (soft deleted)
+      },
       relations: ['masterClient', 'desenhosProfissionais'],
       order: { createdAt: 'DESC' },
+      // Adiciona condição para excluir soft deletes
+      withDeleted: false,
     });
     for (const r of radiografias) {
       (r as any).necessidades = await this.necessidadesService.findByRadiografia(r.id);
@@ -243,6 +248,7 @@ export class RadiografiasService {
     const radiografia = await this.radiografiaRepository.findOne({
       where: { id },
       relations: ['masterClient'],
+      withDeleted: false, // Exclui soft deletes
     });
 
     if (!radiografia) {
@@ -262,16 +268,9 @@ export class RadiografiasService {
     // Verificar se o usuário pode excluir (responsável ou dono do consultório)
     await this.verificarPermissaoEdicaoExclusao(userId, radiografia);
     
-    // Deletar necessidades vinculadas à radiografia
-    await this.necessidadesService.deleteByRadiografiaId(id);
-    // Deletar todos os desenhos profissionais relacionados à radiografia primeiro
-    console.log(`🗑️ Deletando desenhos profissionais relacionados à radiografia ${id}...`);
-    await this.desenhoProfissionalRepository.delete({ radiografiaId: id });
-    console.log(`✅ Desenhos profissionais deletados`);
-    
-    // Agora pode deletar a radiografia sem violar foreign key constraint
-    await this.radiografiaRepository.remove(radiografia);
-    console.log(`✅ Radiografia ${id} deletada com sucesso`);
+    // Soft delete - apenas marcar como deletado
+    await this.radiografiaRepository.softDelete(id);
+    console.log(`✅ Radiografia ${id} marcada como deletada (soft delete)`);
   }
 
   private async verificarPermissao(userId: string, userTipo: string, clienteMasterId: string): Promise<void> {

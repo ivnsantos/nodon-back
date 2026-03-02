@@ -34,7 +34,7 @@ export class ItemOrcamento {
   @Column({ name: 'tratamento_id', type: 'uuid', nullable: true })
   tratamentoId: string | null;
 
-  @ManyToOne(() => Treatment, { nullable: true })
+  @ManyToOne(() => Treatment, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'tratamento_id' })
   tratamento: Treatment | null;
 
