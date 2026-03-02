@@ -103,5 +103,11 @@ export class CostCategoriesController {
   async remove(@Param('id') id: string, @Request() req) {
     return this.costCategoriesService.remove(id, req.user.id, req.user.tipo);
   }
+
+  @Get(':id/treatment-links')
+  @UseGuards(ValidateResourceAccessGuard)
+  async getTreatmentLinks(@Param('id') id: string, @Request() req) {
+    return this.costCategoriesService.getTreatmentLinks(id, req.user.id, req.user.tipo);
+  }
 }
 

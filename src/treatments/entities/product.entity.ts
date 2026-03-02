@@ -10,6 +10,7 @@ import {
 import { ClienteMaster } from '../../users/entities/cliente-master.entity';
 import { CostCategory } from './cost-category.entity';
 import { TreatmentProduct } from './treatment-product.entity';
+import { UnitType } from '../enums/unit-type.enum';
 
 /**
  * Entidade que representa um produto/material usado nos tratamentos
@@ -42,8 +43,14 @@ export class Product {
   @Column({ name: 'total_quantity', type: 'decimal', precision: 10, scale: 2, nullable: true })
   totalQuantity: number | null; // Quantidade total de referência (ex: 200g, 1 litro, etc)
 
-  @Column({ name: 'unit_type', type: 'varchar', length: 50, nullable: true })
-  unitType: string | null; // Litro, Grama, Unidade, etc
+  @Column({ 
+    name: 'unit_type', 
+    type: 'varchar', 
+    length: 50, 
+    nullable: true,
+    comment: 'Tipo de unidade: Grama, Quilograma, Miligrama, Litro, Mililitro, Centímetro, Milímetro, Unitário'
+  })
+  unitType: UnitType | null; // Apenas unidades válidas definidas no enum
 
   @Column({ name: 'stock_quantity', type: 'decimal', precision: 10, scale: 2, nullable: true })
   stockQuantity: number | null;

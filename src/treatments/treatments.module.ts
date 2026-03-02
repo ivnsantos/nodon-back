@@ -8,6 +8,7 @@ import { TreatmentsService } from './services/treatments.service';
 import { CostCategoriesService } from './services/cost-categories.service';
 import { ProductsService } from './services/products.service';
 import { AnalyticsService } from './services/analytics.service';
+import { TreatmentValidationService } from './services/treatment-validation.service';
 import { TreatmentsController } from './controllers/treatments.controller';
 import { CostCategoriesController } from './controllers/cost-categories.controller';
 import { ProductsController } from './controllers/products.controller';
@@ -37,6 +38,7 @@ import { ClientesMasterModule } from '../users/clientes-master.module';
     CostCategoriesService,
     ProductsService,
     AnalyticsService,
+    TreatmentValidationService,
   ],
   exports: [
     TreatmentsService,

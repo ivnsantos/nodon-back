@@ -18,6 +18,7 @@ import { UpdateProductDto } from '../dto/update-product.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { ValidateResourceAccessGuard } from '../../auth/guards/validate-resource-access.guard';
 import { UserComumService } from '../../users/services/user-comum.service';
+import { UnitType, VALID_UNIT_TYPES, UNIT_TYPE_GROUPS } from '../enums/unit-type.enum';
 
 @Controller('products')
 @UseGuards(JwtAuthGuard)
@@ -141,6 +142,21 @@ export class ProductsController {
   @UseGuards(ValidateResourceAccessGuard)
   async remove(@Param('id') id: string, @Request() req) {
     return this.productsService.remove(id, req.user.id, req.user.tipo);
+  }
+
+  @Get(':id/treatment-links')
+  @UseGuards(ValidateResourceAccessGuard)
+  async getTreatmentLinks(@Param('id') id: string, @Request() req) {
+    return this.productsService.getTreatmentLinks(id, req.user.id, req.user.tipo);
+  }
+
+  @Get('unit-types')
+  async getUnitTypes() {
+    return {
+      unitTypes: VALID_UNIT_TYPES,
+      groups: UNIT_TYPE_GROUPS,
+      total: VALID_UNIT_TYPES.length
+    };
   }
 }
 

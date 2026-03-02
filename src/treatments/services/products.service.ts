@@ -1,19 +1,22 @@
 import {
   Injectable,
   NotFoundException,
-  ForbiddenException,
   BadRequestException,
+  ForbiddenException,
   Inject,
-  forwardRef,
+  forwardRef
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from '../entities/product.entity';
 import { CreateProductDto } from '../dto/create-product.dto';
 import { UpdateProductDto } from '../dto/update-product.dto';
+import { ClienteMaster } from '../../users/entities/cliente-master.entity';
+import { UserComum } from '../../users/entities/user-comum.entity';
+import { TreatmentValidationService } from './treatment-validation.service';
+import { CostCategoriesService } from './cost-categories.service';
 import { ClientesMasterService } from '../../users/clientes-master.service';
 import { UserComumService } from '../../users/services/user-comum.service';
-import { CostCategoriesService } from './cost-categories.service';
 
 @Injectable()
 export class ProductsService {
@@ -25,6 +28,7 @@ export class ProductsService {
     private userComumService: UserComumService,
     @Inject(forwardRef(() => CostCategoriesService))
     private costCategoriesService: CostCategoriesService,
+    private treatmentValidationService: TreatmentValidationService,
   ) {}
 
   /**
@@ -149,7 +153,27 @@ export class ProductsService {
    */
   async remove(id: string, userId: string, userTipo: string): Promise<void> {
     const product = await this.findOne(id, userId, userTipo);
+    
+    // Verificar se o produto está vinculado a algum tratamento
+    await this.treatmentValidationService.validateProductDelete(id);
+    
     await this.productRepository.remove(product);
+  }
+
+  /**
+   * Verifica vínculos do produto com tratamentos
+   */
+  async getTreatmentLinks(id: string, userId: string, userTipo: string): Promise<{
+    isLinked: boolean;
+    treatments: Array<{
+      id: string;
+      name: string;
+      quantityUsed: number;
+    }>;
+  }> {
+    await this.findOne(id, userId, userTipo); // Verifica permissão
+    
+    return this.treatmentValidationService.checkProductTreatments(id);
   }
 
   /**

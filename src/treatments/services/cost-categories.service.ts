@@ -1,16 +1,19 @@
 import {
   Injectable,
   NotFoundException,
-  ForbiddenException,
   BadRequestException,
+  ForbiddenException,
   Inject,
-  forwardRef,
+  forwardRef
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CostCategory } from '../entities/cost-category.entity';
 import { CreateCostCategoryDto } from '../dto/create-cost-category.dto';
 import { UpdateCostCategoryDto } from '../dto/update-cost-category.dto';
+import { ClienteMaster } from '../../users/entities/cliente-master.entity';
+import { UserComum } from '../../users/entities/user-comum.entity';
+import { TreatmentValidationService } from './treatment-validation.service';
 import { ClientesMasterService } from '../../users/clientes-master.service';
 import { UserComumService } from '../../users/services/user-comum.service';
 
@@ -22,6 +25,7 @@ export class CostCategoriesService {
     @Inject(forwardRef(() => ClientesMasterService))
     private clientesMasterService: ClientesMasterService,
     private userComumService: UserComumService,
+    private treatmentValidationService: TreatmentValidationService,
   ) {}
 
   /**
@@ -124,7 +128,31 @@ export class CostCategoriesService {
    */
   async remove(id: string, userId: string, userTipo: string): Promise<void> {
     const costCategory = await this.findOne(id, userId, userTipo);
+    
+    // Verificar se a categoria possui produtos vinculados a tratamentos
+    await this.treatmentValidationService.validateCategoryDelete(id);
+    
     await this.costCategoryRepository.remove(costCategory);
+  }
+
+  /**
+   * Verifica vínculos da categoria com tratamentos (via produtos)
+   */
+  async getTreatmentLinks(id: string, userId: string, userTipo: string): Promise<{
+    isLinked: boolean;
+    products: Array<{
+      id: string;
+      name: string;
+      treatments: Array<{
+        id: string;
+        name: string;
+        quantityUsed: number;
+      }>;
+    }>;
+  }> {
+    await this.findOne(id, userId, userTipo); // Verifica permissão
+    
+    return this.treatmentValidationService.checkCategoryTreatments(id);
   }
 }
 

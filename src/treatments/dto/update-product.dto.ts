@@ -1,4 +1,5 @@
-import { IsString, IsOptional, IsNumber, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsUUID, IsIn } from 'class-validator';
+import { UnitType, VALID_UNIT_TYPES } from '../enums/unit-type.enum';
 
 export class UpdateProductDto {
   @IsString()
@@ -19,7 +20,8 @@ export class UpdateProductDto {
 
   @IsString()
   @IsOptional()
-  unitType?: string;
+  @IsIn(VALID_UNIT_TYPES, { message: 'Tipo de unidade inválido. Tipos aceitos: ' + VALID_UNIT_TYPES.join(', ') })
+  unitType?: UnitType;
 
   @IsNumber()
   @IsOptional()
