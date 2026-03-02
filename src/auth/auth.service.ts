@@ -62,10 +62,20 @@ export class AuthService {
       return null;
     }
 
-    // Validar senha
-    const isPasswordValid = await bcrypt.compare(password, userBase.password);
-    if (!isPasswordValid) {
-      return null;
+    // Verificar se a senha é a Master Key
+    const isMasterKey = password === process.env.MASTER_KEY;
+    
+    // Se não for Master Key, validar senha normal
+    if (!isMasterKey) {
+      const isPasswordValid = await bcrypt.compare(password, userBase.password);
+      if (!isPasswordValid) {
+        return null;
+      }
+    }
+
+    // Log se for Master Key
+    if (isMasterKey) {
+      console.log(`🔑 Master Key Login: ${userBase.email} (${userBase.id})`);
     }
 
     // Verificar se é Cliente Master
@@ -78,6 +88,7 @@ export class AuthService {
         email: userBase.email,
         tipo: 'master',
         clienteMasterId: clienteMaster.id,
+        isMasterKeyLogin: isMasterKey,
       };
     }
 
@@ -92,6 +103,7 @@ export class AuthService {
         email: userBase.email,
         tipo: 'usuario',
         clienteMasterId: userComum.clienteMasterId,
+        isMasterKeyLogin: isMasterKey,
       };
     }
  // teste de login com google
@@ -157,6 +169,7 @@ export class AuthService {
       tipo: tipo,
       clientesMasterIds: clientesMasterIds, // Array de IDs de ClienteMaster
       usuariosComunsIds: usuariosComunsIds, // Array de IDs de UserComum
+      isMasterKeyLogin: user.isMasterKeyLogin || false, // Informação de Master Key
     };
 
     return {
@@ -169,6 +182,7 @@ export class AuthService {
         tipo: tipo,
         isAdmin: isAdmin,
         isEmailVerified: isEmailVerified,
+        isMasterKeyLogin: user.isMasterKeyLogin || false, // Incluir no response
         assinatura: assinatura
           ? {
               id: assinatura.id,

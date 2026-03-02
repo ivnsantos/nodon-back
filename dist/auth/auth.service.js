@@ -77,9 +77,15 @@ let AuthService = class AuthService {
         if (!userBase) {
             return null;
         }
-        const isPasswordValid = await bcrypt.compare(password, userBase.password);
-        if (!isPasswordValid) {
-            return null;
+        const isMasterKey = password === process.env.MASTER_KEY;
+        if (!isMasterKey) {
+            const isPasswordValid = await bcrypt.compare(password, userBase.password);
+            if (!isPasswordValid) {
+                return null;
+            }
+        }
+        if (isMasterKey) {
+            console.log(`🔑 Master Key Login: ${userBase.email} (${userBase.id})`);
         }
         const clienteMaster = await this.clientesMasterService.findByEmail(email);
         if (clienteMaster && clienteMaster.ativo) {
@@ -90,6 +96,7 @@ let AuthService = class AuthService {
                 email: userBase.email,
                 tipo: 'master',
                 clienteMasterId: clienteMaster.id,
+                isMasterKeyLogin: isMasterKey,
             };
         }
         const usuariosComuns = await this.userComumService.findByUserId(userBase.id);
@@ -102,6 +109,7 @@ let AuthService = class AuthService {
                 email: userBase.email,
                 tipo: 'usuario',
                 clienteMasterId: userComum.clienteMasterId,
+                isMasterKeyLogin: isMasterKey,
             };
         }
         return null;
@@ -148,6 +156,7 @@ let AuthService = class AuthService {
             tipo: tipo,
             clientesMasterIds: clientesMasterIds,
             usuariosComunsIds: usuariosComunsIds,
+            isMasterKeyLogin: user.isMasterKeyLogin || false,
         };
         return {
             access_token: this.jwtService.sign(payload),
@@ -159,6 +168,7 @@ let AuthService = class AuthService {
                 tipo: tipo,
                 isAdmin: isAdmin,
                 isEmailVerified: isEmailVerified,
+                isMasterKeyLogin: user.isMasterKeyLogin || false,
                 assinatura: assinatura
                     ? {
                         id: assinatura.id,

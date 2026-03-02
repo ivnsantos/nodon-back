@@ -57,6 +57,7 @@ export declare class AuthService {
             tipo: any;
             isAdmin: boolean;
             isEmailVerified: boolean;
+            isMasterKeyLogin: any;
             assinatura: {
                 id: any;
                 status: any;
