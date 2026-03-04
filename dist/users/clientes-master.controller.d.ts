@@ -55,6 +55,26 @@ export declare class ClientesMasterController {
         };
     }>;
     getCompleteInfo(clienteMasterIdHeader: string, req: any): Promise<{
+        clienteMaster: {
+            id: string;
+            nomeEmpresa: string;
+            logo: string;
+            cor: string;
+            corSecundaria: string | null;
+            site: string;
+            descricao: string;
+            ativo: boolean;
+        };
+        relacionamento: {
+            tipo: "publico";
+            id: string;
+            mensagem: string;
+            status?: undefined;
+        };
+        userComum?: undefined;
+        clienteMasterId?: undefined;
+        assinatura?: undefined;
+    } | {
         userComum: {
             id: any;
             userId: any;
@@ -72,11 +92,14 @@ export declare class ClientesMasterController {
             tipo: "usuario";
             id: string;
             status: any;
+            mensagem?: undefined;
         };
+        clienteMaster?: undefined;
     } | {
         relacionamento: {
             tipo: "clienteMaster";
             id: string;
+            mensagem?: undefined;
             status?: undefined;
         };
         clienteMaster: {
@@ -173,6 +196,7 @@ export declare class ClientesMasterController {
         relacionamento: {
             tipo: "clienteMaster";
             id: string;
+            mensagem?: undefined;
             status?: undefined;
         };
         clienteMaster: {

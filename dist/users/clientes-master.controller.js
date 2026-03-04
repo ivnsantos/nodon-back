@@ -138,6 +138,11 @@ let ClientesMasterController = class ClientesMasterController {
         };
     }
     async getCompleteInfo(clienteMasterIdHeader, req) {
+        console.log('🔍 [COMPLETE] Iniciando método - User:', {
+            userId: req.user?.id,
+            userTipo: req.user?.tipo,
+            clienteMasterIdHeader
+        });
         const userBaseId = req.user.id;
         if (!clienteMasterIdHeader) {
             throw new common_1.BadRequestException('Header X-Cliente-Master-Id é obrigatório');
@@ -181,8 +186,29 @@ let ClientesMasterController = class ClientesMasterController {
                 idRelacionamento = userComumVinculado.id;
             }
             else {
-                throw new common_1.ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+                tipoRelacionamento = 'publico';
+                idRelacionamento = '';
             }
+        }
+        console.log('🔍 [COMPLETE] Tipo de relacionamento:', tipoRelacionamento);
+        if (tipoRelacionamento === 'publico') {
+            return {
+                clienteMaster: {
+                    id: clienteMaster.id,
+                    nomeEmpresa: clienteMaster.nomeEmpresa,
+                    logo: clienteMaster.logo,
+                    cor: clienteMaster.cor,
+                    corSecundaria: clienteMaster.corSecundaria,
+                    site: clienteMaster.site,
+                    descricao: clienteMaster.descricao,
+                    ativo: clienteMaster.ativo,
+                },
+                relacionamento: {
+                    tipo: tipoRelacionamento,
+                    id: idRelacionamento,
+                    mensagem: 'Dados públicos - sem vínculo com este Cliente Master'
+                }
+            };
         }
         if (tipoRelacionamento === 'usuario') {
             if (!userComumVinculado) {
@@ -288,19 +314,6 @@ let ClientesMasterController = class ClientesMasterController {
     }
     async registerUserByHash(hash, registerDto, authorization) {
         try {
-            const clienteMaster = await this.clientesMasterService.findByHash(hash);
-            if (!clienteMaster) {
-                throw new common_1.NotFoundException('Cliente Master não encontrado com este hash');
-            }
-            if (!clienteMaster.id) {
-                throw new common_1.InternalServerErrorException('Cliente Master encontrado mas sem ID válido');
-            }
-            console.log('DEBUG - ClienteMaster encontrado pelo hash:', {
-                id: clienteMaster.id,
-                hash: clienteMaster.hash,
-                userId: clienteMaster.userId,
-                nomeEmpresa: clienteMaster.nomeEmpresa,
-            });
             let userBaseId = null;
             if (authorization) {
                 try {
@@ -314,6 +327,43 @@ let ClientesMasterController = class ClientesMasterController {
                     userBaseId = null;
                 }
             }
+            const clienteMaster = await this.clientesMasterService.findByHash(hash);
+            if (!clienteMaster) {
+                throw new common_1.NotFoundException('Cliente Master não encontrado com este hash');
+            }
+            if (!clienteMaster.id) {
+                throw new common_1.InternalServerErrorException('Cliente Master encontrado mas sem ID válido');
+            }
+            if (registerDto.email) {
+                const existingUserBase = await this.userBaseService.findByEmail(registerDto.email);
+                if (existingUserBase) {
+                    if (!userBaseId) {
+                        throw new common_1.UnauthorizedException('Já existe uma conta cadastrada com este e-mail. Por favor, faça login e tente novamente.');
+                    }
+                    if (userBaseId !== existingUserBase.id) {
+                        throw new common_1.ForbiddenException('O token fornecido não corresponde ao e-mail informado. Por favor, faça login com a conta correta.');
+                    }
+                    userBaseId = existingUserBase.id;
+                }
+            }
+            if (registerDto.email && !userBaseId) {
+                const emailExistente = await this.userBaseService.findByEmail(registerDto.email);
+                if (emailExistente) {
+                    throw new common_1.ConflictException('E-mail já está em uso por outro usuário');
+                }
+            }
+            if (registerDto.telefone && !userBaseId) {
+                const telefoneExistente = await this.userBaseService.findByTelefone(registerDto.telefone);
+                if (telefoneExistente) {
+                    throw new common_1.ConflictException('Telefone já está em uso por outro usuário');
+                }
+            }
+            console.log('DEBUG - ClienteMaster encontrado pelo hash:', {
+                id: clienteMaster.id,
+                hash: clienteMaster.hash,
+                userId: clienteMaster.userId,
+                nomeEmpresa: clienteMaster.nomeEmpresa,
+            });
             if (registerDto.email) {
                 const existingUserBase = await this.userBaseService.findByEmail(registerDto.email);
                 if (existingUserBase) {
@@ -635,7 +685,7 @@ __decorate([
 ], ClientesMasterController.prototype, "getValorHora", null);
 __decorate([
     (0, common_1.Post)('complete'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, validate_resource_access_guard_1.ValidateResourceAccessGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __param(0, (0, common_1.Headers)('x-cliente-master-id')),
     __param(1, (0, common_1.Request)()),
     __metadata("design:type", Function),

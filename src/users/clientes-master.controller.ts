@@ -124,8 +124,14 @@ export class ClientesMasterController {
   }
 
   @Post('complete')
-  @UseGuards(JwtAuthGuard, ValidateResourceAccessGuard)
+  @UseGuards(JwtAuthGuard)
   async getCompleteInfo(@Headers('x-cliente-master-id') clienteMasterIdHeader: string, @Request() req) {
+    console.log('🔍 [COMPLETE] Iniciando método - User:', {
+      userId: req.user?.id,
+      userTipo: req.user?.tipo,
+      clienteMasterIdHeader
+    });
+    
     // req.user.id é o ID do UserBase logado
     const userBaseId = req.user.id;
     
@@ -153,7 +159,7 @@ export class ClientesMasterController {
       possuiClienteMaster = idsDoBanco.includes(String(id).trim());
     }
     
-    let tipoRelacionamento: 'clienteMaster' | 'usuario';
+    let tipoRelacionamento: 'clienteMaster' | 'usuario' | 'publico';
     let idRelacionamento: string;
     let userComumVinculado: any = null;
     
@@ -189,9 +195,34 @@ export class ClientesMasterController {
         tipoRelacionamento = 'usuario';
         idRelacionamento = userComumVinculado.id;
       } else {
-        // Usuário não tem vínculo com este ClienteMaster
-        throw new ForbiddenException('Você não tem permissão para acessar este Cliente Master');
+        // Usuário não tem vínculo com este ClienteMaster - retornar dados públicos
+        tipoRelacionamento = 'publico';
+        idRelacionamento = '';
       }
+    }
+    
+    console.log('🔍 [COMPLETE] Tipo de relacionamento:', tipoRelacionamento);
+    
+    // Se for do tipo "publico", retornar apenas dados públicos do ClienteMaster
+    if (tipoRelacionamento === 'publico') {
+      return {
+        clienteMaster: {
+          id: clienteMaster.id,
+          nomeEmpresa: clienteMaster.nomeEmpresa,
+          logo: clienteMaster.logo,
+          cor: clienteMaster.cor,
+          corSecundaria: clienteMaster.corSecundaria,
+          site: clienteMaster.site,
+          descricao: clienteMaster.descricao,
+          ativo: clienteMaster.ativo,
+          // ⚠️ Não retorna dados sensíveis como CNPJ, telefone, endereço, valorHora
+        },
+        relacionamento: {
+          tipo: tipoRelacionamento,
+          id: idRelacionamento,
+          mensagem: 'Dados públicos - sem vínculo com este Cliente Master'
+        }
+      };
     }
     
     // Se for do tipo "usuario", retornar apenas dados do UserComum
@@ -347,6 +378,24 @@ export class ClientesMasterController {
     @Headers('authorization') authorization?: string,
   ) {
     try {
+      // Verificar se há token de autorização (usuário já logado)
+      let userBaseId: string | null = null;
+      
+      if (authorization) {
+        try {
+          // Extrair token do header
+          const token = authorization.replace('Bearer ', '');
+          // Validar token e obter userBaseId
+          const payload = await this.authService.validateToken(token);
+          if (payload && payload.id) {
+            userBaseId = payload.id;
+          }
+        } catch (error) {
+          // Token inválido
+          userBaseId = null;
+        }
+      }
+
       // Buscar ClienteMaster pelo hash
       const clienteMaster = await this.clientesMasterService.findByHash(hash);
       if (!clienteMaster) {
@@ -357,6 +406,46 @@ export class ClientesMasterController {
       if (!clienteMaster.id) {
         throw new InternalServerErrorException('Cliente Master encontrado mas sem ID válido');
       }
+
+      // Se o email foi fornecido, verificar se já existe em UserBase
+      if (registerDto.email) {
+        const existingUserBase = await this.userBaseService.findByEmail(registerDto.email);
+        
+        if (existingUserBase) {
+          // Se o usuário já tem conta, ele DEVE estar logado
+          if (!userBaseId) {
+            throw new UnauthorizedException(
+              'Já existe uma conta cadastrada com este e-mail. Por favor, faça login e tente novamente.',
+            );
+          }
+          
+          // Verificar se o userId do token corresponde ao UserBase encontrado pelo email
+          if (userBaseId !== existingUserBase.id) {
+            throw new ForbiddenException(
+              'O token fornecido não corresponde ao e-mail informado. Por favor, faça login com a conta correta.',
+            );
+          }
+          
+          // Usuário está logado e o email corresponde - usar o userBaseId do token
+          userBaseId = existingUserBase.id;
+        }
+      }
+
+      // Validar duplicidade de email em UserBase (se for novo cadastro)
+      if (registerDto.email && !userBaseId) {
+        const emailExistente = await this.userBaseService.findByEmail(registerDto.email);
+        if (emailExistente) {
+          throw new ConflictException('E-mail já está em uso por outro usuário');
+        }
+      }
+
+      // Validar duplicidade de telefone em UserBase (se for novo cadastro)
+      if (registerDto.telefone && !userBaseId) {
+        const telefoneExistente = await this.userBaseService.findByTelefone(registerDto.telefone);
+        if (telefoneExistente) {
+          throw new ConflictException('Telefone já está em uso por outro usuário');
+        }
+      }
       
       console.log('DEBUG - ClienteMaster encontrado pelo hash:', {
         id: clienteMaster.id,
@@ -364,24 +453,6 @@ export class ClientesMasterController {
         userId: clienteMaster.userId,
         nomeEmpresa: clienteMaster.nomeEmpresa,
       });
-
-    // Verificar se há token de autorização (usuário já logado)
-    let userBaseId: string | null = null;
-    
-    if (authorization) {
-      try {
-        // Extrair token do header
-        const token = authorization.replace('Bearer ', '');
-        // Validar token e obter userBaseId
-        const payload = await this.authService.validateToken(token);
-        if (payload && payload.id) {
-          userBaseId = payload.id;
-        }
-      } catch (error) {
-        // Token inválido
-        userBaseId = null;
-      }
-    }
 
     // Se o email foi fornecido, verificar se já existe UserBase com este email
     if (registerDto.email) {

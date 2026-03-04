@@ -165,6 +165,11 @@ export declare class AssinaturasService {
     private parseNextDueDate;
     createPayment(createPaymentDto: CreatePaymentDto): Promise<any>;
     handleCronProcessarRecorrencias(): Promise<void>;
+    processarAssinaturasPending(): Promise<{
+        processadas: number;
+        sucesso: number;
+        falhas: number;
+    }>;
     processarRecorrencias(): Promise<{
         processadas: number;
         sucesso: number;

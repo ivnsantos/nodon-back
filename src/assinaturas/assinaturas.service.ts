@@ -1679,6 +1679,203 @@ export class AssinaturasService {
   }
 
   /**
+   * CRON job que roda a cada 2 horas para processar assinaturas PENDING
+   * Usa expressão cron:  (a cada 2 horas)
+   * Timezone: America/Sao_Paulo (horário de Brasília)
+   **/
+  // @Cron('*/1 * * * *', {
+  //   name: 'processar-assinaturas-pending',
+  //   timeZone: 'America/Sao_Paulo',
+  // })
+  // async handleCronProcessarAssinaturasPending() {
+  //   const dataExecucao = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  //   console.log(`\n${'#'.repeat(80)}`);
+  //   console.log(`⏰ [${dataExecucao}] Executando CRON para processar assinaturas PENDING`);
+  //   console.log(`${'#'.repeat(80)}\n`);
+    
+  //   // Log customizado para New Relic
+  //   newRelicLog('info', 'CRON: Iniciando processamento de assinaturas PENDING', {
+  //     cronName: 'processar-assinaturas-pending',
+  //     dataExecucao,
+  //     timeZone: 'America/Sao_Paulo',
+  //   });
+    
+  //   try {
+  //     const resultado = await this.processarAssinaturasPending();
+      
+  //     // Log customizado para New Relic
+  //     newRelicLog('info', 'CRON: Processamento de assinaturas PENDING concluído', {
+  //       cronName: 'processar-assinaturas-pending',
+  //       processadas: resultado.processadas,
+  //       sucesso: resultado.sucesso,
+  //       falhas: resultado.falhas,
+  //     });
+  //   } catch (error: any) {
+  //     console.error(`❌ Erro no CRON de assinaturas PENDING:`, error.message);
+  //     console.error(`   Stack:`, error.stack);
+      
+  //     // Log customizado para New Relic
+  //     newRelicLog('error', 'CRON: Erro ao processar assinaturas PENDING', {
+  //       cronName: 'processar-assinaturas-pending',
+  //       error: error.message,
+  //       stack: error.stack,
+  //     });
+  //   }
+  // }
+
+  /**
+   * Processa assinaturas com status PENDING
+   * Tenta cobrar novamente e, em caso de sucesso, cria nova recorrência para 30 dias
+   */
+  async processarAssinaturasPending(): Promise<{
+    processadas: number;
+    sucesso: number;
+    falhas: number;
+  }> {
+    console.log('🔄 Iniciando processamento de assinaturas PENDING...');
+    
+    // Buscar assinaturas com status PENDING
+    const assinaturasPending = await this.assinaturaRepository.find({
+      where: { status: 'PENDING' },
+      relations: ['clienteMaster', 'plano'],
+    });
+
+    console.log(`📊 Encontradas ${assinaturasPending.length} assinaturas PENDING para processar`);
+
+    if (assinaturasPending.length === 0) {
+      return {
+        processadas: 0,
+        sucesso: 0,
+        falhas: 0,
+      };
+    }
+
+    let processadas = 0;
+    let sucesso = 0;
+    let falhas = 0;
+
+    for (const assinatura of assinaturasPending) {
+      try {
+        processadas++;
+        console.log(`\n⚡ Processando assinatura ${assinatura.id} - Cliente: ${assinatura.clienteMaster?.nomeEmpresa || 'N/A'}`);
+
+        // Buscar informações do cliente master para cobrança
+        const clienteMaster = assinatura.clienteMaster;
+        if (!clienteMaster) {
+          console.log(`❌ Assinatura ${assinatura.id} não possui cliente master vinculado`);
+          falhas++;
+          continue;
+        }
+
+        // Buscar informações do plano
+        const plano = await this.planosService.findById(assinatura.planoId);
+        if (!plano) {
+          console.log(`❌ Plano ${assinatura.planoId} não encontrado para assinatura ${assinatura.id}`);
+          falhas++;
+          continue;
+        }
+
+        // Pagar.me exige pelo menos um telefone no customer para criar pedido
+        let phoneForGateway = assinatura.phone || '';
+        if (!phoneForGateway && assinatura.userId) {
+          const cm = await this.clientesMasterService.findById(assinatura.userId);
+          if (cm?.userId) {
+            const ub = await this.userBaseService.findById(cm.userId);
+            if (ub?.telefone) phoneForGateway = ub.telefone;
+          }
+        }
+
+        console.log(`💳 Tentando cobrar R$ ${assinatura.value}`);
+        
+        // Pagar.me: amount em centavos. assinatura.value em reais.
+        const amountCentavos = Math.round(Number(assinatura.value) * 100);
+        const orderCode = `pending_${assinatura.id}_${Date.now()}`;
+
+        const billingAddress = await this.buildBillingAddressFromAssinatura(assinatura);
+
+        const orderResult = await this.pagarMeService.createOrder({
+          code: orderCode,
+          customer_id: assinatura.pagarMeCustomerId || '',
+          items: [{
+            amount: amountCentavos,
+            description: `Assinatura NODON ${plano.nome}`,
+            quantity: 1,
+            code: orderCode,
+          }],
+          payments: [{
+            payment_method: 'credit_card',
+            credit_card: {
+              card_id: assinatura.pagarMeCardId || '',
+              installments: 1,
+              operation_type: 'auth_and_capture',
+              statement_descriptor: 'NODON',
+              card: { billing_address: billingAddress },
+            },
+          }],
+        });
+
+        if (orderResult.status === 'paid') {
+          console.log(`✅ SUCESSO: Cobrança confirmada para assinatura ${assinatura.id}`);
+          
+          // Atualizar status da assinatura para ACTIVE
+         
+          
+          // Criar nova recorrência para 30 dias
+          const proximaData = new Date();
+          proximaData.setDate(proximaData.getDate() + 30);
+          assinatura.status = 'ACTIVE';
+
+          assinatura.nextDueDate = proximaData
+          await this.assinaturaRepository.save(assinatura);
+          
+          const novaRecorrencia = new Recorrencia();
+          novaRecorrencia.assinaturaId = assinatura.id;
+          novaRecorrencia.nextDueDate = proximaData;
+          novaRecorrencia.valor = assinatura.value;
+          
+          await this.recorrenciaRepository.save(novaRecorrencia);
+          
+          console.log(`📅 Nova recorrência criada para ${proximaData.toISOString().split('T')[0]}`);
+          sucesso++;
+          
+        } else {
+          console.log(`❌ Falha na cobrança: ${orderResult.status}`);
+          if (orderResult.closed && orderResult.status === 'failed') {
+            console.log(`   Erro: Falha no pagamento`);
+          }
+          falhas++;
+        }
+
+      } catch (error: any) {
+        console.error(`❌ Erro ao processar assinatura ${assinatura.id}:`, error.message);
+        if (error.stack) {
+          console.error(`   Stack:`, error.stack);
+        }
+        falhas++;
+      }
+    }
+
+    console.log(`\n✅ Processamento PENDING concluído:`);
+    console.log(`   Processadas: ${processadas}`);
+    console.log(`   Sucesso: ${sucesso}`);
+    console.log(`   Falhas: ${falhas}`);
+
+    // Log customizado para New Relic
+    newRelicLog('info', 'Processamento de assinaturas PENDING concluído', {
+      totalAssinaturas: assinaturasPending.length,
+      processadas,
+      sucesso,
+      falhas,
+    });
+
+    return {
+      processadas,
+      sucesso,
+      falhas,
+    };
+  }
+
+  /**
    * Processa recorrências que vencem hoje
    * Agora usa BullMQ para processar jobs de forma assíncrona
    * CRON job que roda diariamente para cobrar assinaturas

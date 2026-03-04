@@ -1281,6 +1281,119 @@ let AssinaturasService = class AssinaturasService {
             });
         }
     }
+    async processarAssinaturasPending() {
+        console.log('🔄 Iniciando processamento de assinaturas PENDING...');
+        const assinaturasPending = await this.assinaturaRepository.find({
+            where: { status: 'PENDING' },
+            relations: ['clienteMaster', 'plano'],
+        });
+        console.log(`📊 Encontradas ${assinaturasPending.length} assinaturas PENDING para processar`);
+        if (assinaturasPending.length === 0) {
+            return {
+                processadas: 0,
+                sucesso: 0,
+                falhas: 0,
+            };
+        }
+        let processadas = 0;
+        let sucesso = 0;
+        let falhas = 0;
+        for (const assinatura of assinaturasPending) {
+            try {
+                processadas++;
+                console.log(`\n⚡ Processando assinatura ${assinatura.id} - Cliente: ${assinatura.clienteMaster?.nomeEmpresa || 'N/A'}`);
+                const clienteMaster = assinatura.clienteMaster;
+                if (!clienteMaster) {
+                    console.log(`❌ Assinatura ${assinatura.id} não possui cliente master vinculado`);
+                    falhas++;
+                    continue;
+                }
+                const plano = await this.planosService.findById(assinatura.planoId);
+                if (!plano) {
+                    console.log(`❌ Plano ${assinatura.planoId} não encontrado para assinatura ${assinatura.id}`);
+                    falhas++;
+                    continue;
+                }
+                let phoneForGateway = assinatura.phone || '';
+                if (!phoneForGateway && assinatura.userId) {
+                    const cm = await this.clientesMasterService.findById(assinatura.userId);
+                    if (cm?.userId) {
+                        const ub = await this.userBaseService.findById(cm.userId);
+                        if (ub?.telefone)
+                            phoneForGateway = ub.telefone;
+                    }
+                }
+                console.log(`💳 Tentando cobrar R$ ${assinatura.value}`);
+                const amountCentavos = Math.round(Number(assinatura.value) * 100);
+                const orderCode = `pending_${assinatura.id}_${Date.now()}`;
+                const billingAddress = await this.buildBillingAddressFromAssinatura(assinatura);
+                const orderResult = await this.pagarMeService.createOrder({
+                    code: orderCode,
+                    customer_id: assinatura.pagarMeCustomerId || '',
+                    items: [{
+                            amount: amountCentavos,
+                            description: `Assinatura NODON ${plano.nome}`,
+                            quantity: 1,
+                            code: orderCode,
+                        }],
+                    payments: [{
+                            payment_method: 'credit_card',
+                            credit_card: {
+                                card_id: assinatura.pagarMeCardId || '',
+                                installments: 1,
+                                operation_type: 'auth_and_capture',
+                                statement_descriptor: 'NODON',
+                                card: { billing_address: billingAddress },
+                            },
+                        }],
+                });
+                if (orderResult.status === 'paid') {
+                    console.log(`✅ SUCESSO: Cobrança confirmada para assinatura ${assinatura.id}`);
+                    const proximaData = new Date();
+                    proximaData.setDate(proximaData.getDate() + 30);
+                    assinatura.status = 'ACTIVE';
+                    assinatura.nextDueDate = proximaData;
+                    await this.assinaturaRepository.save(assinatura);
+                    const novaRecorrencia = new recorrencia_entity_1.Recorrencia();
+                    novaRecorrencia.assinaturaId = assinatura.id;
+                    novaRecorrencia.nextDueDate = proximaData;
+                    novaRecorrencia.valor = assinatura.value;
+                    await this.recorrenciaRepository.save(novaRecorrencia);
+                    console.log(`📅 Nova recorrência criada para ${proximaData.toISOString().split('T')[0]}`);
+                    sucesso++;
+                }
+                else {
+                    console.log(`❌ Falha na cobrança: ${orderResult.status}`);
+                    if (orderResult.closed && orderResult.status === 'failed') {
+                        console.log(`   Erro: Falha no pagamento`);
+                    }
+                    falhas++;
+                }
+            }
+            catch (error) {
+                console.error(`❌ Erro ao processar assinatura ${assinatura.id}:`, error.message);
+                if (error.stack) {
+                    console.error(`   Stack:`, error.stack);
+                }
+                falhas++;
+            }
+        }
+        console.log(`\n✅ Processamento PENDING concluído:`);
+        console.log(`   Processadas: ${processadas}`);
+        console.log(`   Sucesso: ${sucesso}`);
+        console.log(`   Falhas: ${falhas}`);
+        (0, newrelic_logger_1.newRelicLog)('info', 'Processamento de assinaturas PENDING concluído', {
+            totalAssinaturas: assinaturasPending.length,
+            processadas,
+            sucesso,
+            falhas,
+        });
+        return {
+            processadas,
+            sucesso,
+            falhas,
+        };
+    }
     async processarRecorrencias() {
         const timestamp = new Date().toISOString();
         console.log(`\n${'='.repeat(80)}`);
