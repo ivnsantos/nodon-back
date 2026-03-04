@@ -73,25 +73,33 @@ export class TreatmentsService {
     treatment.averageDurationMinutes = createTreatmentDto.averageDurationMinutes;
     treatment.price = createTreatmentDto.price;
     
-    // Calcular custo automaticamente (produtos + mão de obra)
-    // Se custo for fornecido no body, usar ele; senão calcular
-    if (createTreatmentDto.custo !== undefined && createTreatmentDto.custo !== null) {
-      treatment.custo = Number(createTreatmentDto.custo);
-    } else {
-      // Calcular custo inicial (será recalculado após adicionar produtos)
-      treatment.custo = 0;
-      
-      // Adicionar custo de mão de obra se valorhora estiver configurado
-      if (clienteMaster.valorHora) {
-        const tempoEmHoras = Number(createTreatmentDto.averageDurationMinutes) / 60;
-        const custoMaoDeObra = Number(clienteMaster.valorHora) * tempoEmHoras;
-        treatment.custo = Number(custoMaoDeObra.toFixed(2));
+    // Calcular custo total: soma dos produtos + mão de obra
+    let custoTotal = 0;
+    
+    // 1. Somar valor de cada produto passado pelo front
+    if (createTreatmentDto.products && createTreatmentDto.products.length > 0) {
+      for (const productDto of createTreatmentDto.products) {
+        custoTotal += Number(productDto.costInReais);
       }
     }
     
-    // Calcular lucro apenas se ambos price e custo estiverem definidos
+    // 2. Adicionar custo de mão de obra (valor hora × tempo em minutos convertido para horas)
+    if (clienteMaster.valorHora) {
+      const tempoEmHoras = Number(createTreatmentDto.averageDurationMinutes) / 60;
+      const custoMaoDeObra = Number(clienteMaster.valorHora) * tempoEmHoras;
+      custoTotal += custoMaoDeObra;
+    }
+    
+    // Usar custo fornecido no body ou calcular automaticamente
+    if (createTreatmentDto.custo !== undefined && createTreatmentDto.custo !== null) {
+      treatment.custo = Number(Number(createTreatmentDto.custo).toFixed(2));
+    } else {
+      treatment.custo = Number(custoTotal.toFixed(2));
+    }
+    
+    // Calcular lucro
     if (createTreatmentDto.price !== undefined && treatment.custo !== undefined) {
-      treatment.lucro = Number(createTreatmentDto.price) - treatment.custo;
+      treatment.lucro = Number((Number(createTreatmentDto.price) - treatment.custo).toFixed(2));
     } else {
       treatment.lucro = 0;
     }
@@ -120,9 +128,10 @@ export class TreatmentsService {
 
     await this.verificarPermissao(userId, userTipo, clienteMasterId);
 
+    // Temporariamente sem treatmentProducts para testar
     return this.treatmentRepository.find({
       where: { clienteMasterId },
-      relations: ['treatmentProducts', 'treatmentProducts.product', 'treatmentProducts.product.category', 'clienteMaster'],
+      relations: ['clienteMaster'], // Removido treatmentProducts temporariamente
       order: { createdAt: 'DESC' },
     });
   }
@@ -255,7 +264,7 @@ export class TreatmentsService {
    */
   private async adicionarProdutosAoTratamento(
     treatmentId: string,
-    products: Array<{ productId: string; quantityUsed: number }>,
+    products: Array<{ productId: string; quantityUsed: number; costInReais: number }>,
     userId: string,
     userTipo: string,
   ): Promise<void> {
@@ -272,13 +281,15 @@ export class TreatmentsService {
 
       // Verificar se o produto pertence ao mesmo cliente master
       if (product.clienteMasterId !== treatment.clienteMasterId) {
-        throw new BadRequestException(`Produto ${product.name} não pertence ao mesmo Cliente Master`);
+        throw new ForbiddenException('Produto não pertence a este Cliente Master');
       }
 
+      // Criar TreatmentProduct com o valor em reais
       const treatmentProduct = new TreatmentProduct();
       treatmentProduct.treatmentId = treatmentId;
       treatmentProduct.productId = productDto.productId;
-      treatmentProduct.quantityUsed = productDto.quantityUsed;
+      treatmentProduct.quantityUsed = Number(productDto.quantityUsed);
+      treatmentProduct.costInReais = Number(Number(productDto.costInReais).toFixed(2));
 
       await this.treatmentProductRepository.save(treatmentProduct);
     }
@@ -303,22 +314,27 @@ export class TreatmentsService {
 
     let custoTotal = 0;
 
-    // 1. Calcular custo total de todos os produtos (proporcional)
+    // 1. Calcular custo de cada produto
     for (const treatmentProduct of treatment.treatmentProducts) {
       const product = treatmentProduct.product;
-      const quantidadeUsada = Number(treatmentProduct.quantityUsed);
-      const quantidadeTotal = product.totalQuantity ? Number(product.totalQuantity) : null;
-      const custoTotalProduto = Number(product.unitCost);
+      let custoProduto = 0;
 
-      let custoProduto: number;
-
-      // Se tem quantidade total de referência, calcular proporcionalmente
-      if (quantidadeTotal && quantidadeTotal > 0) {
-        // Exemplo: 200g custa R$ 80, usar 80g = (80/200) * 80 = R$ 32
-        custoProduto = (quantidadeUsada / quantidadeTotal) * custoTotalProduto;
+      // Se tiver costInReais, usar valor fixo
+      if (treatmentProduct.costInReais) {
+        custoProduto = Number(treatmentProduct.costInReais);
       } else {
-        // Se não tem quantidade total, usar custo direto (para produtos unitários)
-        custoProduto = custoTotalProduto * quantidadeUsada;
+        // Senão, usar preço atual do produto (para compatibilidade)
+        const quantidadeUsada = Number(treatmentProduct.quantityUsed);
+        const quantidadeTotal = product.totalQuantity ? Number(product.totalQuantity) : null;
+        const custoTotalProduto = Number(product.unitCost);
+
+        if (quantidadeTotal && quantidadeTotal > 0) {
+          // Calcular proporcionalmente
+          custoProduto = (quantidadeUsada / quantidadeTotal) * custoTotalProduto;
+        } else {
+          // Usar custo direto (para produtos unitários)
+          custoProduto = custoTotalProduto * quantidadeUsada;
+        }
       }
 
       custoTotal += custoProduto;
@@ -367,22 +383,24 @@ export class TreatmentsService {
       cost: number;
     }> = [];
 
-    // 1. Calcular custo de cada produto usado (proporcional)
+    // 1. Somar valor em reais de cada produto
     for (const treatmentProduct of treatment.treatmentProducts) {
       const product = treatmentProduct.product;
       const quantidadeUsada = Number(treatmentProduct.quantityUsed);
-      const quantidadeTotal = product.totalQuantity ? Number(product.totalQuantity) : null;
-      const custoTotalProduto = Number(product.unitCost);
+      let cost = 0;
 
-      let cost: number;
-
-      // Se tem quantidade total de referência, calcular proporcionalmente
-      if (quantidadeTotal && quantidadeTotal > 0) {
-        // Exemplo: 200g custa R$ 80, usar 80g = (80/200) * 80 = R$ 32
-        cost = (quantidadeUsada / quantidadeTotal) * custoTotalProduto;
+      // Usar costInReais se disponível, senão calcular proporcional
+      if (treatmentProduct.costInReais) {
+        cost = Number(treatmentProduct.costInReais);
       } else {
-        // Se não tem quantidade total, usar custo direto (para produtos unitários)
-        cost = custoTotalProduto * quantidadeUsada;
+        const quantidadeTotal = product.totalQuantity ? Number(product.totalQuantity) : null;
+        const custoTotalProduto = Number(product.unitCost);
+
+        if (quantidadeTotal && quantidadeTotal > 0) {
+          cost = (quantidadeUsada / quantidadeTotal) * custoTotalProduto;
+        } else {
+          cost = custoTotalProduto * quantidadeUsada;
+        }
       }
 
       directCost += cost;
@@ -415,6 +433,92 @@ export class TreatmentsService {
       productsBreakdown,
       laborCost: laborCost > 0 ? Number(laborCost.toFixed(2)) : undefined,
     };
+  }
+
+  /**
+   * Atualiza todos os custos de tratamentos que usam um produto específico
+   * Chamado quando o preço de um produto é alterado
+   */
+  async atualizarCustosPorProduto(productId: string): Promise<{
+    atualizados: number;
+    detalhes: Array<{
+      treatmentId: string;
+      nome: string;
+      custoAnterior: number;
+      custoNovo: number;
+    }>;
+  }> {
+    // Buscar o produto para obter o novo preço
+    const produto = await this.productRepository.findOne({
+      where: { id: productId },
+    });
+
+    if (!produto) {
+      throw new NotFoundException('Produto não encontrado');
+    }
+
+    // Buscar todos os TreatmentProducts que usam este produto
+    const treatmentProducts = await this.treatmentProductRepository.find({
+      where: { productId },
+      relations: ['treatment', 'treatment.clienteMaster'],
+    });
+
+    const resultado = {
+      atualizados: 0,
+      detalhes: [] as Array<{
+        treatmentId: string;
+        nome: string;
+        custoAnterior: number;
+        custoNovo: number;
+      }>,
+    };
+
+    for (const treatmentProduct of treatmentProducts) {
+      const treatment = treatmentProduct.treatment;
+      if (!treatment) continue;
+
+      const custoAnterior = Number(treatment.custo);
+      
+      // Atualizar o costInReais com base no novo preço do produto
+      const quantidadeUsada = Number(treatmentProduct.quantityUsed);
+      const quantidadeTotal = produto.totalQuantity ? Number(produto.totalQuantity) : null;
+      const custoTotalProduto = Number(produto.unitCost);
+
+      let novoCostInReais: number;
+
+      if (quantidadeTotal && quantidadeTotal > 0) {
+        // Calcular proporcionalmente
+        novoCostInReais = (quantidadeUsada / quantidadeTotal) * custoTotalProduto;
+      } else {
+        // Usar custo direto (para produtos unitários)
+        novoCostInReais = custoTotalProduto * quantidadeUsada;
+      }
+
+      // Atualizar o TreatmentProduct com o novo costInReais
+      treatmentProduct.costInReais = Number(novoCostInReais.toFixed(2));
+      await this.treatmentProductRepository.save(treatmentProduct);
+      
+      // Recalcular custo total do tratamento
+      await this.recalcularCustoELucro(treatment.id);
+      
+      // Buscar tratamento atualizado
+      const treatmentAtualizado = await this.treatmentRepository.findOne({
+        where: { id: treatment.id },
+      });
+
+      if (treatmentAtualizado) {
+        const custoNovo = Number(treatmentAtualizado.custo);
+        resultado.atualizados++;
+        resultado.detalhes.push({
+          treatmentId: treatment.id,
+          nome: treatment.name,
+          custoAnterior,
+          custoNovo,
+        });
+      }
+    }
+
+    return resultado;
   }
 
   /**

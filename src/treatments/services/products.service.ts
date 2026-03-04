@@ -1,11 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  ForbiddenException,
-  Inject,
-  forwardRef
-} from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Product } from '../entities/product.entity';
@@ -17,6 +10,7 @@ import { TreatmentValidationService } from './treatment-validation.service';
 import { CostCategoriesService } from './cost-categories.service';
 import { ClientesMasterService } from '../../users/clientes-master.service';
 import { UserComumService } from '../../users/services/user-comum.service';
+import { TreatmentsService } from './treatments.service';
 
 @Injectable()
 export class ProductsService {
@@ -29,6 +23,8 @@ export class ProductsService {
     @Inject(forwardRef(() => CostCategoriesService))
     private costCategoriesService: CostCategoriesService,
     private treatmentValidationService: TreatmentValidationService,
+    @Inject(forwardRef(() => TreatmentsService))
+    private treatmentsService: TreatmentsService,
   ) {}
 
   /**
@@ -121,6 +117,10 @@ export class ProductsService {
   async update(id: string, updateProductDto: UpdateProductDto, userId: string, userTipo: string): Promise<Product> {
     const product = await this.findOne(id, userId, userTipo);
 
+    // Verificar se o unitCost foi alterado
+    const unitCostMudou = updateProductDto.unitCost !== undefined && 
+      updateProductDto.unitCost !== product.unitCost;
+
     if (updateProductDto.name !== undefined) {
       product.name = updateProductDto.name;
     }
@@ -145,7 +145,21 @@ export class ProductsService {
       product.stockQuantity = updateProductDto.stockQuantity;
     }
 
-    return this.productRepository.save(product);
+    const produtoAtualizado = await this.productRepository.save(product);
+
+    // Se unitCost foi alterado, atualizar todos os tratamentos que usam este produto
+    if (unitCostMudou) {
+      try {
+        console.log(`🔄 Preço do produto ${id} alterado para R$ ${updateProductDto.unitCost}. Atualizando custos dos tratamentos...`);
+        const resultado = await this.treatmentsService.atualizarCustosPorProduto(id);
+        console.log(`✅ ${resultado.atualizados} tratamentos atualizados com sucesso`);
+      } catch (error: any) {
+        console.error('❌ Erro ao atualizar custos dos tratamentos:', error.message);
+        // Não lança erro para não bloquear a atualização do produto
+      }
+    }
+
+    return produtoAtualizado;
   }
 
   /**

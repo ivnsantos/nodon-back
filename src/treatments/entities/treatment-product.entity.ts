@@ -37,5 +37,8 @@ export class TreatmentProduct {
 
   @Column({ name: 'quantity_used', type: 'decimal', precision: 10, scale: 2 })
   quantityUsed: number;
+
+  @Column({ name: 'cost_in_reais', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  costInReais: number; // Valor em reais do produto usado no tratamento
 }
 

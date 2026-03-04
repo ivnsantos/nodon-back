@@ -9,6 +9,11 @@ export class TreatmentProductDto {
   @IsNumber()
   @IsNotEmpty()
   quantityUsed: number;
+
+  @IsNumber()
+  @IsNotEmpty()
+  @Min(0)
+  costInReais: number; // Valor em reais do produto usado no tratamento
 }
 
 export class CreateTreatmentDto {
