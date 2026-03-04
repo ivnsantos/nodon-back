@@ -117,9 +117,12 @@ export class ProductsService {
   async update(id: string, updateProductDto: UpdateProductDto, userId: string, userTipo: string): Promise<Product> {
     const product = await this.findOne(id, userId, userTipo);
 
-    // Verificar se o unitCost foi alterado
+    // Verificar se o unitCost ou totalQuantity foram alterados
     const unitCostMudou = updateProductDto.unitCost !== undefined && 
       updateProductDto.unitCost !== product.unitCost;
+    const totalQuantityMudou = updateProductDto.totalQuantity !== undefined && 
+      updateProductDto.totalQuantity !== product.totalQuantity;
+    const deveAtualizarTratamentos = unitCostMudou || totalQuantityMudou;
 
     if (updateProductDto.name !== undefined) {
       product.name = updateProductDto.name;
@@ -147,10 +150,14 @@ export class ProductsService {
 
     const produtoAtualizado = await this.productRepository.save(product);
 
-    // Se unitCost foi alterado, atualizar todos os tratamentos que usam este produto
-    if (unitCostMudou) {
+    // Se unitCost ou totalQuantity foram alterados, atualizar todos os tratamentos que usam este produto
+    if (deveAtualizarTratamentos) {
       try {
-        console.log(`🔄 Preço do produto ${id} alterado para R$ ${updateProductDto.unitCost}. Atualizando custos dos tratamentos...`);
+        const motivos: string[] = [];
+        if (unitCostMudou) motivos.push(`preço: R$${product.unitCost} → R$${updateProductDto.unitCost}`);
+        if (totalQuantityMudou) motivos.push(`quantidade: ${product.totalQuantity} → ${updateProductDto.totalQuantity}`);
+        
+        console.log(`🔄 Produto ${id} alterado (${motivos.join(', ')}). Atualizando custos dos tratamentos...`);
         const resultado = await this.treatmentsService.atualizarCustosPorProduto(id);
         console.log(`✅ ${resultado.atualizados} tratamentos atualizados com sucesso`);
       } catch (error: any) {

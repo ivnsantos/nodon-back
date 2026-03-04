@@ -128,10 +128,9 @@ export class TreatmentsService {
 
     await this.verificarPermissao(userId, userTipo, clienteMasterId);
 
-    // Temporariamente sem treatmentProducts para testar
     return this.treatmentRepository.find({
       where: { clienteMasterId },
-      relations: ['clienteMaster'], // Removido treatmentProducts temporariamente
+      relations: ['treatmentProducts', 'treatmentProducts.product', 'treatmentProducts.product.category', 'clienteMaster'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -323,16 +322,18 @@ export class TreatmentsService {
       if (treatmentProduct.costInReais) {
         custoProduto = Number(treatmentProduct.costInReais);
       } else {
-        // Senão, usar preço atual do produto (para compatibilidade)
+        // Senão, usar preço atual do produto com lógica correta
         const quantidadeUsada = Number(treatmentProduct.quantityUsed);
-        const quantidadeTotal = product.totalQuantity ? Number(product.totalQuantity) : null;
         const custoTotalProduto = Number(product.unitCost);
 
-        if (quantidadeTotal && quantidadeTotal > 0) {
-          // Calcular proporcionalmente
-          custoProduto = (quantidadeUsada / quantidadeTotal) * custoTotalProduto;
+        if (product.totalQuantity && product.totalQuantity > 0) {
+          // Produto com quantidade (ex: 200g, 100ml)
+          custoProduto = (quantidadeUsada / product.totalQuantity) * custoTotalProduto;
+        } else if (product.stockQuantity && product.stockQuantity > 0) {
+          // Produto unitário com stock (ex: 30 pacotes)
+          custoProduto = (quantidadeUsada / product.stockQuantity) * custoTotalProduto;
         } else {
-          // Usar custo direto (para produtos unitários)
+          // Produto unitário sem stock definido
           custoProduto = custoTotalProduto * quantidadeUsada;
         }
       }
@@ -393,12 +394,16 @@ export class TreatmentsService {
       if (treatmentProduct.costInReais) {
         cost = Number(treatmentProduct.costInReais);
       } else {
-        const quantidadeTotal = product.totalQuantity ? Number(product.totalQuantity) : null;
         const custoTotalProduto = Number(product.unitCost);
 
-        if (quantidadeTotal && quantidadeTotal > 0) {
-          cost = (quantidadeUsada / quantidadeTotal) * custoTotalProduto;
+        if (product.totalQuantity && product.totalQuantity > 0) {
+          // Produto com quantidade (ex: 200g, 100ml)
+          cost = (quantidadeUsada / product.totalQuantity) * custoTotalProduto;
+        } else if (product.stockQuantity && product.stockQuantity > 0) {
+          // Produto unitário com stock (ex: 30 pacotes)
+          cost = (quantidadeUsada / product.stockQuantity) * custoTotalProduto;
         } else {
+          // Produto unitário sem stock definido
           cost = custoTotalProduto * quantidadeUsada;
         }
       }
@@ -436,6 +441,52 @@ export class TreatmentsService {
   }
 
   /**
+   * Atualiza os custos de um tratamento (produtos + mão de obra)
+   * Chamado quando um produto é alterado
+   */
+  private async recalcularCustoProdutos(treatmentId: string): Promise<void> {
+    const treatment = await this.treatmentRepository.findOne({
+      where: { id: treatmentId },
+      relations: ['treatmentProducts', 'clienteMaster'],
+    });
+
+    if (!treatment) {
+      return;
+    }
+
+    let custoTotalProdutos = 0;
+
+    // Somar os custos dos produtos
+    for (const treatmentProduct of treatment.treatmentProducts) {
+      if (treatmentProduct.costInReais) {
+        custoTotalProdutos += Number(treatmentProduct.costInReais);
+      }
+    }
+
+    // Adicionar custo de mão de obra (valor hora × tempo em horas)
+    let custoMaoDeObra = 0;
+    if (treatment.clienteMaster && treatment.clienteMaster.valorHora) {
+      const tempoEmHoras = Number(treatment.averageDurationMinutes) / 60;
+      custoMaoDeObra = Number(treatment.clienteMaster.valorHora) * tempoEmHoras;
+    }
+
+    // Custo total = produtos + mão de obra
+    const custoTotal = custoTotalProdutos + custoMaoDeObra;
+    
+    // Atualizar tratamento
+    treatment.custo = Number(custoTotal.toFixed(2));
+    
+    // Recalcular lucro
+    if (treatment.price) {
+      treatment.lucro = Number((Number(treatment.price) - treatment.custo).toFixed(2));
+    }
+
+    await this.treatmentRepository.save(treatment);
+    
+    console.log(`  💰 Custo final: produtos R$${custoTotalProdutos.toFixed(2)} + mão de obra R$${custoMaoDeObra.toFixed(2)} = R$${custoTotal.toFixed(2)}`);
+  }
+
+  /**
    * Atualiza todos os custos de tratamentos que usam um produto específico
    * Chamado quando o preço de um produto é alterado
    */
@@ -448,7 +499,7 @@ export class TreatmentsService {
       custoNovo: number;
     }>;
   }> {
-    // Buscar o produto para obter o novo preço
+    // Buscar o produto para obter o novo preço e quantidade
     const produto = await this.productRepository.findOne({
       where: { id: productId },
     });
@@ -473,33 +524,44 @@ export class TreatmentsService {
       }>,
     };
 
+    console.log(`🔄 Produto ${productId}: preço=${produto.unitCost}, quantidade=${produto.totalQuantity}, tipo=${produto.unitType}`);
+
     for (const treatmentProduct of treatmentProducts) {
       const treatment = treatmentProduct.treatment;
       if (!treatment) continue;
 
       const custoAnterior = Number(treatment.custo);
       
-      // Atualizar o costInReais com base no novo preço do produto
+      // Calcular NOVO costInReais baseado no NOVO preço e tipo do produto
       const quantidadeUsada = Number(treatmentProduct.quantityUsed);
-      const quantidadeTotal = produto.totalQuantity ? Number(produto.totalQuantity) : null;
       const custoTotalProduto = Number(produto.unitCost);
 
       let novoCostInReais: number;
 
-      if (quantidadeTotal && quantidadeTotal > 0) {
-        // Calcular proporcionalmente
-        novoCostInReais = (quantidadeUsada / quantidadeTotal) * custoTotalProduto;
+      if (produto.totalQuantity && produto.totalQuantity > 0) {
+        // Produto com quantidade (ex: 200g, 100ml)
+        // Lógica: (quantidadeUsada / quantidadeTotal) * custoTotalProduto
+        novoCostInReais = (quantidadeUsada / produto.totalQuantity) * custoTotalProduto;
+        console.log(`  📊 Tratamento ${treatment.name}: ${quantidadeUsada}/${produto.totalQuantity} * R$${custoTotalProduto} = R$${novoCostInReais}`);
+      } else if (produto.stockQuantity && produto.stockQuantity > 0) {
+        // Produto unitário com stock (ex: 30 pacotes, 100 unidades)
+        // Lógica: (quantidadeUsada / stockQuantity) * custoTotalProduto
+        // Ex: 1 unidade / 30 pacotes * R$ 100 = R$ 3.33
+        novoCostInReais = (quantidadeUsada / produto.stockQuantity) * custoTotalProduto;
+        console.log(`  📊 Tratamento ${treatment.name}: ${quantidadeUsada}/${produto.stockQuantity} * R$${custoTotalProduto} = R$${novoCostInReais}`);
       } else {
-        // Usar custo direto (para produtos unitários)
+        // Produto unitário sem stock definido
+        // Lógica: custoTotalProduto * quantidadeUsada
         novoCostInReais = custoTotalProduto * quantidadeUsada;
+        console.log(`  📊 Tratamento ${treatment.name}: ${quantidadeUsada} * R$${custoTotalProduto} = R$${novoCostInReais}`);
       }
 
       // Atualizar o TreatmentProduct com o novo costInReais
       treatmentProduct.costInReais = Number(novoCostInReais.toFixed(2));
       await this.treatmentProductRepository.save(treatmentProduct);
       
-      // Recalcular custo total do tratamento
-      await this.recalcularCustoELucro(treatment.id);
+      // Recalcular APENAS os custos dos produtos (sem valor hora)
+      await this.recalcularCustoProdutos(treatment.id);
       
       // Buscar tratamento atualizado
       const treatmentAtualizado = await this.treatmentRepository.findOne({
@@ -515,6 +577,7 @@ export class TreatmentsService {
           custoAnterior,
           custoNovo,
         });
+        console.log(`  ✅ Tratamento ${treatment.name}: R$${custoAnterior} → R$${custoNovo}`);
       }
     }
 
