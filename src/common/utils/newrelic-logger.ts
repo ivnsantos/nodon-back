@@ -1,100 +1,113 @@
-/**
- * Helper para enviar logs customizados ao New Relic
- * 
- * Uso:
- *   import { newRelicLog } from './common/utils/newrelic-logger';
- *   newRelicLog('info', 'Mensagem importante', { userId: '123', action: 'login' });
- */
+import * as winston from 'winston';
 
-let newrelic: any = null;
-
-try {
-  newrelic = require('newrelic');
-} catch (error) {
-  // New Relic não está disponível (desenvolvimento sem .env, etc)
-}
+// Configuração do Winston - apenas console
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.colorize(),
+    winston.format.simple(),
+    winston.format.printf(({ timestamp, level, message, ...meta }) => {
+      return `${timestamp} [${level}]: ${message} ${Object.keys(meta).length ? JSON.stringify(meta, null, 2) : ''}`;
+    })
+  ),
+  transports: [
+    // Apenas console
+    new winston.transports.Console()
+  ]
+});
 
 export function newRelicLog(
   level: 'info' | 'warn' | 'error' | 'debug',
   message: string,
   attributes?: Record<string, any>,
 ) {
-  // Sempre logar no console também
-  const timestamp = new Date().toISOString();
-  const logMessage = `[${timestamp}] [${level.toUpperCase()}] ${message}`;
-  
+  const logData = {
+    message,
+    timestamp: new Date().toISOString(),
+    ...attributes
+  };
+
   switch (level) {
     case 'error':
-      console.error(logMessage, attributes || '');
+      logger.error(logData);
       break;
     case 'warn':
-      console.warn(logMessage, attributes || '');
+      logger.warn(logData);
       break;
     case 'debug':
-      console.debug(logMessage, attributes || '');
+      logger.debug(logData);
       break;
     default:
-      console.log(logMessage, attributes || '');
+      logger.info(logData);
   }
+}
 
-  // Enviar para New Relic se disponível
-  if (newrelic) {
-    try {
-      // Adicionar atributos customizados à transação atual
-      if (attributes) {
-        Object.keys(attributes).forEach((key) => {
-          newrelic.addCustomAttribute(key, attributes[key]);
-        });
-      }
+/**
+ * Logger específico para eventos de negócio
+ */
+export function logBusiness(event: string, attributes?: Record<string, any>) {
+  logger.info({
+    event,
+    type: 'business',
+    timestamp: new Date().toISOString(),
+    ...attributes
+  });
+}
 
-      // Registrar evento customizado
-      newrelic.recordCustomEvent('CustomLog', {
-        level,
-        message,
-        timestamp,
-        ...attributes,
-      });
+/**
+ * Logger específico para erros
+ */
+export function logError(error: Error, context?: string, attributes?: Record<string, any>) {
+  logger.error({
+    message: error.message,
+    stack: error.stack,
+    context,
+    type: 'error',
+    timestamp: new Date().toISOString(),
+    ...attributes
+  });
+}
 
-      // Para erros, também registrar como erro
-      if (level === 'error') {
-        newrelic.noticeError(new Error(message), {
-          ...attributes,
-          customLevel: level,
-        });
-      }
-    } catch (error: any) {
-      // Se falhar ao enviar para New Relic, apenas logar no console
-      console.warn('⚠️ Erro ao enviar log para New Relic:', error.message);
-    }
-  }
+/**
+ * Logger específico para eventos de autenticação
+ */
+export function logAuth(event: string, email?: string, attributes?: Record<string, any>) {
+  logger.info({
+    event,
+    email,
+    type: 'auth',
+    timestamp: new Date().toISOString(),
+    ...attributes
+  });
 }
 
 /**
  * Registrar métrica customizada
  */
 export function newRelicMetric(name: string, value: number, unit?: string) {
-  if (newrelic) {
-    try {
-      newrelic.recordMetric(name, value);
-      if (unit) {
-        newrelic.addCustomAttribute(`${name}_unit`, unit);
-      }
-    } catch (error: any) {
-      console.warn('⚠️ Erro ao registrar métrica no New Relic:', error.message);
-    }
-  }
+  logger.info({
+    metric: name,
+    value,
+    unit,
+    type: 'metric',
+    timestamp: new Date().toISOString()
+  });
 }
 
 /**
- * Adicionar atributo customizado à transação atual
+ * Adicionar atributo customizado
  */
 export function newRelicAttribute(key: string, value: any) {
-  if (newrelic) {
-    try {
-      newrelic.addCustomAttribute(key, value);
-    } catch (error: any) {
-      console.warn('⚠️ Erro ao adicionar atributo no New Relic:', error.message);
-    }
-  }
+  logger.info({
+    attribute: key,
+    value,
+    type: 'attribute',
+    timestamp: new Date().toISOString()
+  });
 }
+
+// Exportar o logger para uso direto se necessário
+export { logger };
 
