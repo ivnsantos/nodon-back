@@ -11,6 +11,7 @@ import { IsMasterGuard } from '../auth/guards/is-master.guard';
 import { ValidateResourceAccessGuard } from '../auth/guards/validate-resource-access.guard';
 import { ClientesMasterService } from '../users/clientes-master.service';
 import { UserComumService } from '../users/services/user-comum.service';
+import { newRelicLog } from 'src/common/utils/newrelic-logger';
 
 @Controller('assinaturas')
 export class AssinaturasController {
@@ -198,10 +199,11 @@ export class AssinaturasController {
    */
   @Post('cron/processar-recorrencias')
   async processarRecorrencias(@Headers('x-cron-secret') cronSecret: string) {
+    try {
     const timestamp = new Date().toISOString();
-    console.log(`\n${'#'.repeat(80)}`);
-    console.log(`🚀 [${timestamp}] CRON ENDPOINT CHAMADO`);
-    console.log(`${'#'.repeat(80)}`);
+
+    newRelicLog('info', `🚀 [${timestamp}] CRON ENDPOINT CHAMADO`, { timestamp });
+    newRelicLog('info', `${'#'.repeat(80)}`, { timestamp });
 
     // Validar chave secreta
     const expectedSecret = this.configService.get<string>('CRON_SECRET_KEY');
@@ -239,5 +241,9 @@ export class AssinaturasController {
       message: 'Processamento de recorrências concluído',
       data: resultado,
     };
+     } catch (e) {
+       newRelicLog('error', 'Processar recorrências error', { error: e });
+       throw e;
+    }
   }
 }

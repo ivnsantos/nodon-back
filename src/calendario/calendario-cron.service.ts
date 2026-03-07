@@ -28,10 +28,6 @@ export class CalendarioCronService {
   })
   async handleCronEnviarSmsConfirmacao() {
     const dataExecucao = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-    console.log(`\n${'#'.repeat(80)}`);
-    console.log(`⏰ [${dataExecucao}] Executando CRON agendado às 7h da manhã - Enviar SMS de confirmação`);
-    console.log(`${'#'.repeat(80)}\n`);
-    
     // Log customizado para New Relic
     newRelicLog('info', 'CRON: Iniciando envio de SMS de confirmação', {
       cronName: 'enviar-sms-confirmacao-consultas',
@@ -43,7 +39,6 @@ export class CalendarioCronService {
       await this.enviarSmsConfirmacaoConsultasAmanha();
     } catch (error: any) {
       console.error(`❌ Erro no CRON automático:`, error.message);
-      console.error(`   Stack:`, error.stack);
       
       // Log customizado para New Relic
       newRelicLog('error', 'CRON: Erro ao enviar SMS de confirmação', {

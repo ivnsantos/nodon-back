@@ -41,10 +41,12 @@ export class QueueWorkerService implements OnModuleInit, OnModuleDestroy {
       retryStrategy: (times: number) => {
         const delay = Math.min(times * 100, 5000); // Máximo 5 segundos entre tentativas
         if (times <= 10 || times % 10 === 0) {
+          newRelicLog('info', `Worker: Tentando reconectar ao Redis (tentativa ${times})`);
           console.log(`🔄 Worker: Tentando reconectar ao Redis (tentativa ${times})...`);
         }
         // Limitar tentativas - após 100 tentativas, parar por 30 segundos
         if (times > 100) {
+          newRelicLog('error', `Worker: Muitas tentativas de reconexão (${times}). Verifique se o Redis está acessível.`);
           console.error(`❌ Worker: Muitas tentativas de reconexão (${times}). Verifique se o Redis está acessível.`);
           return 30000; // Esperar 30 segundos antes de tentar novamente
         }
@@ -178,7 +180,7 @@ export class QueueWorkerService implements OnModuleInit, OnModuleDestroy {
    */
   private async processarJobRecorrencia(job: Job): Promise<void> {
     const { recorrenciaId, assinaturaId } = job.data;
-
+    newRelicLog('info', `Processando job ${job.id}: Processar recorrência ${recorrenciaId} para assinatura ${assinaturaId}`);
     console.log(`🔄 Processando job ${job.id}: Processar recorrência ${recorrenciaId} para assinatura ${assinaturaId}`);
 
     try {
@@ -191,7 +193,10 @@ export class QueueWorkerService implements OnModuleInit, OnModuleDestroy {
       console.log(`✅ Recorrência ${recorrenciaId} processada com sucesso`);
     } catch (error: any) {
       console.error(`❌ Erro ao processar job ${job.id}:`, error.message);
-      
+      newRelicLog('error', `Erro ao processar job ${job.id}: ${error.message}`, {
+        error: error.message,
+        stack: error.stack,
+      });
       // Re-throw para que o BullMQ possa fazer retry
       throw error;
     }

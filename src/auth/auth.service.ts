@@ -9,6 +9,8 @@ import { AssinaturasService } from '../assinaturas/assinaturas.service';
 import { PlanosService } from '../planos/planos.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { ClienteMaster } from '../users/entities/cliente-master.entity';
+import { tryCatch } from 'bullmq';
+import { newRelicLog } from 'src/common/utils/newrelic-logger';
 
 export interface ClienteMasterInfo {
   id: string;
@@ -113,6 +115,8 @@ export class AuthService {
   }
 
   async login(email: string, password: string) {
+    try{
+
     const user = await this.validateUser(email, password);
     if (!user) {
       throw new UnauthorizedException('Credenciais inválidas');
@@ -193,6 +197,10 @@ export class AuthService {
           : null,
       },
     };
+     }catch(e){
+      newRelicLog('error', 'Login error', { error: e });
+      throw new UnauthorizedException('Credenciais inválidas');
+    }
   }
 
   async registerClienteMaster(data: {

@@ -2043,6 +2043,7 @@ export class AssinaturasService {
     console.log(`🔄 Processando recorrência individual ID: ${recorrenciaId}`);
     console.log(`   Assinatura ID: ${assinaturaId}`);
 
+    newRelicLog('info', `Processando recorrência individual ID: ${recorrenciaId} - Assinatura: ${assinaturaId}`);
     // Buscar recorrência e assinatura
     const recorrencia = await this.recorrenciaRepository.findOne({
       where: { id: recorrenciaId },
@@ -2128,7 +2129,30 @@ export class AssinaturasService {
       const orderCode = `rec_${recorrencia.id}_${Date.now()}`;
 
       const billingAddress = await this.buildBillingAddressFromAssinatura(assinatura);
-
+      newRelicLog('info', 'Criando order no Pagar.me', {
+        orderCode,
+        customer_id: assinatura.pagarMeCustomerId,
+        items: [
+          {
+            amount: amountCentavos,
+            description: `Recorrência assinatura - NODON`,
+            quantity: 1,
+            code: orderCode,
+          },
+        ],
+        payments: [
+          {
+            payment_method: 'credit_card',
+            credit_card: {
+              card_id: assinatura.pagarMeCardId,
+              installments: 1,
+              operation_type: 'auth_and_capture',
+              statement_descriptor: 'NODON',
+            },
+          },
+        ],
+        billing: billingAddress,
+      });
       const orderResult = await this.pagarMeService.createOrder({
         code: orderCode,
         customer_id: assinatura.pagarMeCustomerId,
@@ -2152,6 +2176,9 @@ export class AssinaturasService {
             },
           },
         ],
+      });
+      newRelicLog('info', 'Order criada no Pagar.me', {
+        orderResult,
       });
 
       await this.registrarCobranca({
@@ -2194,6 +2221,10 @@ export class AssinaturasService {
             proximaCobranca: proximoMes,
           });
         }
+        newRelicLog('info', 'Cobrança confirmada para assinatura', {
+          assinaturaId: assinatura.id,
+          proximaCobranca: proximoMes,
+        });
         console.log(`✅ SUCESSO: Cobrança confirmada para assinatura ${assinatura.id}. Próxima: ${proximoMes}`);
       } else {
         console.log(`❌ Pagamento não aprovado. Status: ${orderResult.status}`);

@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
+import { newRelicLog } from 'src/common/utils/newrelic-logger';
 
 @Injectable()
 export class QueueService implements OnModuleInit, OnModuleDestroy {
@@ -143,6 +144,10 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
 
       console.log(`📋 Job adicionado à fila: confirmacao-agendamento (Consulta: ${consultaId})`);
     } catch (error: any) {
+      newRelicLog('error', 'Erro ao adicionar job de confirmação', {
+        error: error.message,
+        stack: error.stack,
+      });
       console.error(`❌ Erro ao adicionar job de confirmação: ${error.message}`);
       throw error;
     }

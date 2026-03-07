@@ -12,6 +12,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RequestPasswordResetPhoneDto } from './dto/request-password-reset-phone.dto';
 import { ValidatePasswordResetCodeDto } from './dto/validate-password-reset-code.dto';
 import { ResetPasswordWithCodeDto } from './dto/reset-password-with-code.dto';
+import { newRelicLog } from 'src/common/utils/newrelic-logger';
 
 @Controller('auth')
 export class AuthController {
@@ -30,6 +31,7 @@ export class AuthController {
 
   @Post('login')
   async login(@Body() loginDto: { email: string; password: string }) {
+    newRelicLog('info', 'Login attempt', { email: loginDto.email });
     return this.authService.login(loginDto.email, loginDto.password);
   }
 
