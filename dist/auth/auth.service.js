@@ -53,6 +53,7 @@ const clientes_master_service_1 = require("../users/clientes-master.service");
 const assinaturas_service_1 = require("../assinaturas/assinaturas.service");
 const planos_service_1 = require("../planos/planos.service");
 const whatsapp_service_1 = require("../whatsapp/whatsapp.service");
+const newrelic_logger_1 = require("../common/utils/newrelic-logger");
 let AuthService = class AuthService {
     usersService;
     userBaseService;
@@ -115,70 +116,76 @@ let AuthService = class AuthService {
         return null;
     }
     async login(email, password) {
-        const user = await this.validateUser(email, password);
-        if (!user) {
+        try {
+            const user = await this.validateUser(email, password);
+            if (!user) {
+                throw new common_1.UnauthorizedException('Credenciais inválidas');
+            }
+            const tipo = user.tipo || 'usuario';
+            const isAdmin = tipo === 'master';
+            const userBase = await this.userBaseService.findByEmail(user.email);
+            const isEmailVerified = userBase?.isVerified || false;
+            let assinatura = null;
+            let planoInfo = null;
+            if (tipo === 'master') {
+                assinatura = await this.assinaturasService.findByUserId(user.id);
+            }
+            else if (user.clienteMasterId) {
+                assinatura = await this.assinaturasService.findByUserId(user.clienteMasterId);
+            }
+            if (assinatura && assinatura.planoId) {
+                const plano = await this.planosService.findById(assinatura.planoId);
+                if (plano) {
+                    planoInfo = {
+                        id: plano.id,
+                        nome: plano.nome,
+                        valorOriginal: Number(plano.valorOriginal),
+                        valorPromocional: plano.valorPromocional ? Number(plano.valorPromocional) : null,
+                        limiteAnalises: plano.limiteAnalises,
+                        tokenChat: Number(plano.tokenChat),
+                        descricao: plano.descricao,
+                        acesso: plano.acesso || 'all',
+                    };
+                }
+            }
+            const clientesMaster = await this.clientesMasterService.findByUserId(user.userId);
+            const clientesMasterIds = clientesMaster.map(cm => cm.id);
+            const usuariosComuns = await this.userComumService.findByUserId(user.userId);
+            const usuariosComunsIds = usuariosComuns.map(uc => uc.id);
+            const payload = {
+                id: user.userId,
+                email: user.email,
+                tipo: tipo,
+                clientesMasterIds: clientesMasterIds,
+                usuariosComunsIds: usuariosComunsIds,
+                isMasterKeyLogin: user.isMasterKeyLogin || false,
+            };
+            return {
+                access_token: this.jwtService.sign(payload),
+                user: {
+                    id: user.id,
+                    nome: user.nome,
+                    email: user.email,
+                    telefone: userBase?.telefone || null,
+                    tipo: tipo,
+                    isAdmin: isAdmin,
+                    isEmailVerified: isEmailVerified,
+                    isMasterKeyLogin: user.isMasterKeyLogin || false,
+                    assinatura: assinatura
+                        ? {
+                            id: assinatura.id,
+                            status: assinatura.status,
+                            planoId: assinatura.planoId,
+                            plano: planoInfo,
+                        }
+                        : null,
+                },
+            };
+        }
+        catch (e) {
+            (0, newrelic_logger_1.newRelicLog)('error', 'Login error', { error: e });
             throw new common_1.UnauthorizedException('Credenciais inválidas');
         }
-        const tipo = user.tipo || 'usuario';
-        const isAdmin = tipo === 'master';
-        const userBase = await this.userBaseService.findByEmail(user.email);
-        const isEmailVerified = userBase?.isVerified || false;
-        let assinatura = null;
-        let planoInfo = null;
-        if (tipo === 'master') {
-            assinatura = await this.assinaturasService.findByUserId(user.id);
-        }
-        else if (user.clienteMasterId) {
-            assinatura = await this.assinaturasService.findByUserId(user.clienteMasterId);
-        }
-        if (assinatura && assinatura.planoId) {
-            const plano = await this.planosService.findById(assinatura.planoId);
-            if (plano) {
-                planoInfo = {
-                    id: plano.id,
-                    nome: plano.nome,
-                    valorOriginal: Number(plano.valorOriginal),
-                    valorPromocional: plano.valorPromocional ? Number(plano.valorPromocional) : null,
-                    limiteAnalises: plano.limiteAnalises,
-                    tokenChat: Number(plano.tokenChat),
-                    descricao: plano.descricao,
-                    acesso: plano.acesso || 'all',
-                };
-            }
-        }
-        const clientesMaster = await this.clientesMasterService.findByUserId(user.userId);
-        const clientesMasterIds = clientesMaster.map(cm => cm.id);
-        const usuariosComuns = await this.userComumService.findByUserId(user.userId);
-        const usuariosComunsIds = usuariosComuns.map(uc => uc.id);
-        const payload = {
-            id: user.userId,
-            email: user.email,
-            tipo: tipo,
-            clientesMasterIds: clientesMasterIds,
-            usuariosComunsIds: usuariosComunsIds,
-            isMasterKeyLogin: user.isMasterKeyLogin || false,
-        };
-        return {
-            access_token: this.jwtService.sign(payload),
-            user: {
-                id: user.id,
-                nome: user.nome,
-                email: user.email,
-                telefone: userBase?.telefone || null,
-                tipo: tipo,
-                isAdmin: isAdmin,
-                isEmailVerified: isEmailVerified,
-                isMasterKeyLogin: user.isMasterKeyLogin || false,
-                assinatura: assinatura
-                    ? {
-                        id: assinatura.id,
-                        status: assinatura.status,
-                        planoId: assinatura.planoId,
-                        plano: planoInfo,
-                    }
-                    : null,
-            },
-        };
     }
     async registerClienteMaster(data) {
         const existingUserBase = await this.userBaseService.findByEmail(data.email);

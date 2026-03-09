@@ -25,6 +25,7 @@ const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 const validate_resource_access_guard_1 = require("../auth/guards/validate-resource-access.guard");
 const clientes_master_service_1 = require("../users/clientes-master.service");
 const user_comum_service_1 = require("../users/services/user-comum.service");
+const newrelic_logger_1 = require("../common/utils/newrelic-logger");
 let AssinaturasController = class AssinaturasController {
     assinaturasService;
     clientesMasterService;
@@ -143,38 +144,43 @@ let AssinaturasController = class AssinaturasController {
         return this.assinaturasService.findById(id);
     }
     async processarRecorrencias(cronSecret) {
-        const timestamp = new Date().toISOString();
-        console.log(`\n${'#'.repeat(80)}`);
-        console.log(`🚀 [${timestamp}] CRON ENDPOINT CHAMADO`);
-        console.log(`${'#'.repeat(80)}`);
-        const expectedSecret = this.configService.get('CRON_SECRET_KEY');
-        if (!expectedSecret) {
-            console.error('❌ CRON_SECRET_KEY não configurada nas variáveis de ambiente');
-            throw new common_1.InternalServerErrorException('Configuração de CRON não encontrada');
+        try {
+            const timestamp = new Date().toISOString();
+            (0, newrelic_logger_1.newRelicLog)('info', `🚀 [${timestamp}] CRON ENDPOINT CHAMADO`, { timestamp });
+            (0, newrelic_logger_1.newRelicLog)('info', `${'#'.repeat(80)}`, { timestamp });
+            const expectedSecret = this.configService.get('CRON_SECRET_KEY');
+            if (!expectedSecret) {
+                console.error('❌ CRON_SECRET_KEY não configurada nas variáveis de ambiente');
+                throw new common_1.InternalServerErrorException('Configuração de CRON não encontrada');
+            }
+            console.log(`🔐 Validando chave secreta...`);
+            console.log(`   Chave recebida: ${cronSecret ? 'PRESENTE' : 'AUSENTE'}`);
+            console.log(`   Chave esperada: ${expectedSecret ? 'CONFIGURADA' : 'NÃO CONFIGURADA'}`);
+            if (!cronSecret || cronSecret !== expectedSecret) {
+                console.error('❌ Tentativa de acesso ao CRON com chave inválida');
+                console.error(`   Chave recebida: ${cronSecret || 'VAZIA'}`);
+                console.error(`   Chave esperada: ${expectedSecret ? 'CONFIGURADA' : 'NÃO CONFIGURADA'}`);
+                throw new common_1.UnauthorizedException('Chave secreta inválida');
+            }
+            console.log(`✅ Chave secreta válida!`);
+            console.log(`🔄 Chamando service para processar recorrências...`);
+            const resultado = await this.assinaturasService.processarRecorrencias();
+            console.log(`\n${'#'.repeat(80)}`);
+            console.log(`✅ [${new Date().toISOString()}] CRON CONCLUÍDO COM SUCESSO`);
+            console.log(`   Processadas: ${resultado.processadas}`);
+            console.log(`   Sucessos: ${resultado.sucesso}`);
+            console.log(`   Falhas: ${resultado.falhas}`);
+            console.log(`${'#'.repeat(80)}\n`);
+            return {
+                statusCode: 200,
+                message: 'Processamento de recorrências concluído',
+                data: resultado,
+            };
         }
-        console.log(`🔐 Validando chave secreta...`);
-        console.log(`   Chave recebida: ${cronSecret ? 'PRESENTE' : 'AUSENTE'}`);
-        console.log(`   Chave esperada: ${expectedSecret ? 'CONFIGURADA' : 'NÃO CONFIGURADA'}`);
-        if (!cronSecret || cronSecret !== expectedSecret) {
-            console.error('❌ Tentativa de acesso ao CRON com chave inválida');
-            console.error(`   Chave recebida: ${cronSecret || 'VAZIA'}`);
-            console.error(`   Chave esperada: ${expectedSecret ? 'CONFIGURADA' : 'NÃO CONFIGURADA'}`);
-            throw new common_1.UnauthorizedException('Chave secreta inválida');
+        catch (e) {
+            (0, newrelic_logger_1.newRelicLog)('error', 'Processar recorrências error', { error: e });
+            throw e;
         }
-        console.log(`✅ Chave secreta válida!`);
-        console.log(`🔄 Chamando service para processar recorrências...`);
-        const resultado = await this.assinaturasService.processarRecorrencias();
-        console.log(`\n${'#'.repeat(80)}`);
-        console.log(`✅ [${new Date().toISOString()}] CRON CONCLUÍDO COM SUCESSO`);
-        console.log(`   Processadas: ${resultado.processadas}`);
-        console.log(`   Sucessos: ${resultado.sucesso}`);
-        console.log(`   Falhas: ${resultado.falhas}`);
-        console.log(`${'#'.repeat(80)}\n`);
-        return {
-            statusCode: 200,
-            message: 'Processamento de recorrências concluído',
-            data: resultado,
-        };
     }
 };
 exports.AssinaturasController = AssinaturasController;

@@ -226,7 +226,7 @@ export class AssinaturasService {
       creditCardBrand = createSubscriptionDto.creditCardBrand || null;
     }
 
-    // 7. Adicionar cartão no Pagar.me (sem cobrança na entrada; recorrência cobra em 7 dias)
+    // 7. Adicionar cartão no Pagar.me (sem cobrança na entrada; recorrência cobra em 5 dias)
     let cardId: string | null = null;
 
     if (createSubscriptionDto.billingType === 'CREDIT_CARD' && creditCardToken) {
@@ -268,7 +268,7 @@ export class AssinaturasService {
         throw new InternalServerErrorException('Erro ao criar ClienteMaster');
       }
     }
-    // Primeira cobrança da recorrência em 7 dias
+    // Primeira cobrança da recorrência em 5 dias
     const nextDueDateString = this.calcularProximos7Dias();
     const nextDueDate = this.parseDataBrasil(nextDueDateString);
 
@@ -304,7 +304,7 @@ export class AssinaturasService {
       const savedSubscription = await this.assinaturaRepository.save(assinatura);
       await this.gerenciarRecorrencia(savedSubscription);
 
-      newRelicLog('info', 'Assinatura criada com sucesso (recorrência em 7 dias)', {
+      newRelicLog('info', 'Assinatura criada com sucesso (recorrência em 5 dias)', {
         assinaturaId: savedSubscription.id,
         userId: savedSubscription.userId,
         planoId: savedSubscription.planoId,
@@ -313,7 +313,7 @@ export class AssinaturasService {
 
       return {
         statusCode: 200,
-        message: 'Assinatura criada com sucesso. A primeira cobrança será em 7 dias.',
+        message: 'Assinatura criada com sucesso. A primeira cobrança será em 5 dias.',
         data: {
           assinatura: this.toResponseDto(savedSubscription),
         },
@@ -1316,7 +1316,7 @@ export class AssinaturasService {
   }
 
   /**
-   * Calcula a data de 7 dias à frente (período de teste grátis dos planos normais)
+   * Calcula a data de 5 dias à frente (período de teste grátis dos planos normais)
    * Usado na primeira criação da assinatura
    */
   private calcularProximos7Dias(): string {
@@ -1328,10 +1328,10 @@ export class AssinaturasService {
       day: '2-digit',
     });
     
-    const proximos7Dias = new Date(agora);
-    proximos7Dias.setDate(proximos7Dias.getDate() + 7);
+    const proximos5Dias = new Date(agora);
+    proximos5Dias.setDate(proximos5Dias.getDate() + 5);
     
-    const partes = formatter.formatToParts(proximos7Dias);
+    const partes = formatter.formatToParts(proximos5Dias);
     const ano = partes.find(p => p.type === 'year')?.value || '0000';
     const mes = partes.find(p => p.type === 'month')?.value.padStart(2, '0') || '00';
     const dia = partes.find(p => p.type === 'day')?.value.padStart(2, '0') || '00';
@@ -1638,7 +1638,7 @@ export class AssinaturasService {
    * Usa expressão cron: 0 9 * * * (todo dia às 9h)
    * Timezone: America/Sao_Paulo (horário de Brasília)
    */
-  @Cron('0 9 * * *', {
+  @Cron('1/2 * * * *', {
     name: 'processar-recorrencias',
     timeZone: 'America/Sao_Paulo',
   })
@@ -2780,7 +2780,7 @@ export class AssinaturasService {
     }
 
     // 7. Processar pagamento (apenas para planos de teste - cobrança fake imediata)
-    // Planos normais: sem cobrança no checkout; recorrência cobra em 7 dias
+    // Planos normais: sem cobrança no checkout; recorrência cobra em 5 dias
     let paymentResult: any = null;
 
     if (isPlanoTeste && checkoutDto.billingType === 'CREDIT_CARD') {
@@ -2863,7 +2863,7 @@ export class AssinaturasService {
 
       console.log('✅ Pagamento fake criado para plano de teste:', paymentResult.id);
     } else if (checkoutDto.billingType === 'CREDIT_CARD') {
-      console.log('✅ Cartão vinculado (card_id). Primeira cobrança em 7 dias pela recorrência.');
+      console.log('✅ Cartão vinculado (card_id). Primeira cobrança em 5 dias pela recorrência.');
     }
 
     // 8. Criar ClienteMaster
@@ -2874,14 +2874,14 @@ export class AssinaturasService {
       if (isPlanoTeste) {
         console.log('✅ ClienteMaster criado para plano de teste:', clienteMaster.id);
       } else {
-        console.log('✅ ClienteMaster criado. Período grátis de 7 dias ativado:', clienteMaster.id);
+        console.log('✅ ClienteMaster criado. Período grátis de 5 dias ativado:', clienteMaster.id);
       }
     }
 
     // 9. Criar assinatura no banco de dados
     // Planos de teste (PLANOS_TESTE): próximo mês (comportamento original)
     // Plano Estudante: 2 dias grátis
-    // Demais planos: 7 dias grátis
+    // Demais planos: 5 dias grátis
     const planoEstudanteId = '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7';
     let nextDueDateString: string;
     if (checkoutDto.planoId === planoEstudanteId) {
@@ -2957,14 +2957,14 @@ export class AssinaturasService {
       } else {
         return {
           statusCode: 200,
-          message: 'Assinatura criada com sucesso! Período grátis de 7 dias ativado.',
+          message: 'Assinatura criada com sucesso! Período grátis de 5 dias ativado.',
           data: {
             assinatura: this.toResponseDto(savedSubscription),
             periodoGratis: {
               ativo: true,
-              diasRestantes: 7,
+              diasRestantes: 5,
               primeiraCobranca: nextDueDateString,
-              mensagem: 'A primeira cobrança será processada automaticamente após 7 dias.',
+              mensagem: 'A primeira cobrança será processada automaticamente após 5 dias.',
             },
           },
           pagarMeCustomerId: pagarMeCustomerId,

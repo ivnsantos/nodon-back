@@ -26,6 +26,7 @@ const reset_password_dto_1 = require("./dto/reset-password.dto");
 const request_password_reset_phone_dto_1 = require("./dto/request-password-reset-phone.dto");
 const validate_password_reset_code_dto_1 = require("./dto/validate-password-reset-code.dto");
 const reset_password_with_code_dto_1 = require("./dto/reset-password-with-code.dto");
+const newrelic_logger_1 = require("../common/utils/newrelic-logger");
 let AuthController = class AuthController {
     authService;
     clientesMasterService;
@@ -42,6 +43,7 @@ let AuthController = class AuthController {
             : this.configService.get('FRONTEND_URL', 'http://localhost:3000');
     }
     async login(loginDto) {
+        (0, newrelic_logger_1.newRelicLog)('info', 'Login attempt', { email: loginDto.email });
         return this.authService.login(loginDto.email, loginDto.password);
     }
     async registerMaster(registerDto) {

@@ -279,7 +279,7 @@ let AssinaturasService = class AssinaturasService {
         try {
             const savedSubscription = await this.assinaturaRepository.save(assinatura);
             await this.gerenciarRecorrencia(savedSubscription);
-            (0, newrelic_logger_1.newRelicLog)('info', 'Assinatura criada com sucesso (recorrência em 7 dias)', {
+            (0, newrelic_logger_1.newRelicLog)('info', 'Assinatura criada com sucesso (recorrência em 5 dias)', {
                 assinaturaId: savedSubscription.id,
                 userId: savedSubscription.userId,
                 planoId: savedSubscription.planoId,
@@ -287,7 +287,7 @@ let AssinaturasService = class AssinaturasService {
             });
             return {
                 statusCode: 200,
-                message: 'Assinatura criada com sucesso. A primeira cobrança será em 7 dias.',
+                message: 'Assinatura criada com sucesso. A primeira cobrança será em 5 dias.',
                 data: {
                     assinatura: this.toResponseDto(savedSubscription),
                 },
@@ -1029,9 +1029,9 @@ let AssinaturasService = class AssinaturasService {
             month: '2-digit',
             day: '2-digit',
         });
-        const proximos7Dias = new Date(agora);
-        proximos7Dias.setDate(proximos7Dias.getDate() + 7);
-        const partes = formatter.formatToParts(proximos7Dias);
+        const proximos5Dias = new Date(agora);
+        proximos5Dias.setDate(proximos5Dias.getDate() + 5);
+        const partes = formatter.formatToParts(proximos5Dias);
         const ano = partes.find(p => p.type === 'year')?.value || '0000';
         const mes = partes.find(p => p.type === 'month')?.value.padStart(2, '0') || '00';
         const dia = partes.find(p => p.type === 'day')?.value.padStart(2, '0') || '00';
@@ -1510,6 +1510,7 @@ let AssinaturasService = class AssinaturasService {
         console.log(`\n${'-'.repeat(80)}`);
         console.log(`🔄 Processando recorrência individual ID: ${recorrenciaId}`);
         console.log(`   Assinatura ID: ${assinaturaId}`);
+        (0, newrelic_logger_1.newRelicLog)('info', `Processando recorrência individual ID: ${recorrenciaId} - Assinatura: ${assinaturaId}`);
         const recorrencia = await this.recorrenciaRepository.findOne({
             where: { id: recorrenciaId },
             relations: ['assinatura'],
@@ -1574,6 +1575,30 @@ let AssinaturasService = class AssinaturasService {
             const amountCentavos = Math.round(Number(recorrencia.valor) * 100);
             const orderCode = `rec_${recorrencia.id}_${Date.now()}`;
             const billingAddress = await this.buildBillingAddressFromAssinatura(assinatura);
+            (0, newrelic_logger_1.newRelicLog)('info', 'Criando order no Pagar.me', {
+                orderCode,
+                customer_id: assinatura.pagarMeCustomerId,
+                items: [
+                    {
+                        amount: amountCentavos,
+                        description: `Recorrência assinatura - NODON`,
+                        quantity: 1,
+                        code: orderCode,
+                    },
+                ],
+                payments: [
+                    {
+                        payment_method: 'credit_card',
+                        credit_card: {
+                            card_id: assinatura.pagarMeCardId,
+                            installments: 1,
+                            operation_type: 'auth_and_capture',
+                            statement_descriptor: 'NODON',
+                        },
+                    },
+                ],
+                billing: billingAddress,
+            });
             const orderResult = await this.pagarMeService.createOrder({
                 code: orderCode,
                 customer_id: assinatura.pagarMeCustomerId,
@@ -1597,6 +1622,9 @@ let AssinaturasService = class AssinaturasService {
                         },
                     },
                 ],
+            });
+            (0, newrelic_logger_1.newRelicLog)('info', 'Order criada no Pagar.me', {
+                orderResult,
             });
             await this.registrarCobranca({
                 userId: assinatura.userId,
@@ -1636,6 +1664,10 @@ let AssinaturasService = class AssinaturasService {
                         proximaCobranca: proximoMes,
                     });
                 }
+                (0, newrelic_logger_1.newRelicLog)('info', 'Cobrança confirmada para assinatura', {
+                    assinaturaId: assinatura.id,
+                    proximaCobranca: proximoMes,
+                });
                 console.log(`✅ SUCESSO: Cobrança confirmada para assinatura ${assinatura.id}. Próxima: ${proximoMes}`);
             }
             else {
@@ -2076,7 +2108,7 @@ let AssinaturasService = class AssinaturasService {
             console.log('✅ Pagamento fake criado para plano de teste:', paymentResult.id);
         }
         else if (checkoutDto.billingType === 'CREDIT_CARD') {
-            console.log('✅ Cartão vinculado (card_id). Primeira cobrança em 7 dias pela recorrência.');
+            console.log('✅ Cartão vinculado (card_id). Primeira cobrança em 5 dias pela recorrência.');
         }
         if (!clienteMaster) {
             clienteMaster = await this.clientesMasterService.create({
@@ -2086,7 +2118,7 @@ let AssinaturasService = class AssinaturasService {
                 console.log('✅ ClienteMaster criado para plano de teste:', clienteMaster.id);
             }
             else {
-                console.log('✅ ClienteMaster criado. Período grátis de 7 dias ativado:', clienteMaster.id);
+                console.log('✅ ClienteMaster criado. Período grátis de 5 dias ativado:', clienteMaster.id);
             }
         }
         const planoEstudanteId = '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7';
@@ -2163,14 +2195,14 @@ let AssinaturasService = class AssinaturasService {
             else {
                 return {
                     statusCode: 200,
-                    message: 'Assinatura criada com sucesso! Período grátis de 7 dias ativado.',
+                    message: 'Assinatura criada com sucesso! Período grátis de 5 dias ativado.',
                     data: {
                         assinatura: this.toResponseDto(savedSubscription),
                         periodoGratis: {
                             ativo: true,
-                            diasRestantes: 7,
+                            diasRestantes: 5,
                             primeiraCobranca: nextDueDateString,
-                            mensagem: 'A primeira cobrança será processada automaticamente após 7 dias.',
+                            mensagem: 'A primeira cobrança será processada automaticamente após 5 dias.',
                         },
                     },
                     pagarMeCustomerId: pagarMeCustomerId,
@@ -2211,7 +2243,7 @@ let AssinaturasService = class AssinaturasService {
 };
 exports.AssinaturasService = AssinaturasService;
 __decorate([
-    (0, schedule_1.Cron)('0 9 * * *', {
+    (0, schedule_1.Cron)('1/2 * * * *', {
         name: 'processar-recorrencias',
         timeZone: 'America/Sao_Paulo',
     }),
