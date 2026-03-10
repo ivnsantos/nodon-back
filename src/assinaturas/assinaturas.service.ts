@@ -1638,7 +1638,7 @@ export class AssinaturasService {
    * Usa expressão cron: 0 9 * * * (todo dia às 9h)
    * Timezone: America/Sao_Paulo (horário de Brasília)
    */
-  @Cron('1/2 * * * *', {
+  @Cron('0 9 * * *', {
     name: 'processar-recorrencias',
     timeZone: 'America/Sao_Paulo',
   })
@@ -2779,11 +2779,87 @@ export class AssinaturasService {
       throw new BadRequestException('Não foi possível vincular o cartão ao cliente.');
     }
 
-    // 7. Processar pagamento (apenas para planos de teste - cobrança fake imediata)
+    // 7. Processar pagamento
+    // Planos de teste: cobrança fake imediata
+    // Plano Estudante: cobrança real imediata
     // Planos normais: sem cobrança no checkout; recorrência cobra em 5 dias
+    const planoEstudanteId = '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7';
+    const isPlanoEstudante = checkoutDto.planoId === planoEstudanteId;
     let paymentResult: any = null;
 
-    if (isPlanoTeste && checkoutDto.billingType === 'CREDIT_CARD') {
+    if (isPlanoEstudante && checkoutDto.billingType === 'CREDIT_CARD') {
+      // Plano Estudante: processar cobrança REAL imediata
+      console.log('🎓 Plano Estudante: Processando cobrança imediata');
+      
+      if (!cardId) {
+        throw new BadRequestException('Cartão não foi vinculado corretamente para o Plano Estudante.');
+      }
+      
+      try {
+        const orderCode = `estudante_${Date.now()}`;
+        
+        const orderResult = await this.pagarMeService.createOrder({
+          code: orderCode,
+          customer_id: pagarMeCustomerId,
+          items: [
+            {
+              amount: valorFinal,
+              description: `Plano Estudante - ${plano.nome}`,
+              quantity: 1,
+              code: orderCode,
+            },
+          ],
+          payments: [
+            {
+              payment_method: 'credit_card',
+              credit_card: {
+                card_id: cardId,
+                installments: 1,
+                operation_type: 'auth_and_capture',
+                statement_descriptor: 'NODON',
+              },
+            },
+          ],
+        });
+
+        paymentResult = {
+          id: orderResult.id,
+          status: orderResult.status,
+          customer: pagarMeCustomerId,
+          value: valorFinal,
+          dueDate: this.getDataAtualBrasil(),
+          paymentDate: orderResult.status === 'paid' ? this.getDataAtualBrasil() : null,
+        };
+
+        await this.registrarCobranca({
+          userId: null,
+          pagarMeOrderId: orderResult.id,
+          pagarMeCustomerId: pagarMeCustomerId,
+          value: valorFinal,
+          billingType: 'CREDIT_CARD',
+          status: orderResult.status === 'paid' ? 'paid' : 'pending',
+          dueDate: new Date(),
+          paymentDate: orderResult.status === 'paid' ? new Date() : null,
+          pagarMeResponse: JSON.stringify(orderResult),
+          assinaturaId: null,
+          planoId: checkoutDto.planoId,
+          couponId: couponId || null,
+          dadosAssinatura: JSON.stringify({
+            name: userBase.nome,
+            email: userBase.email,
+            cpf: userBase.cpf || '',
+            phone: userBase.telefone || '',
+            billingType: checkoutDto.billingType,
+            userBaseId: userBase.id,
+          }),
+        });
+
+        console.log('✅ Cobrança imediata processada para Plano Estudante:', orderResult.id);
+      } catch (error: any) {
+        console.error('❌ Erro ao processar cobrança do Plano Estudante:', error.message);
+        throw new BadRequestException(`Erro ao processar pagamento: ${error.message}`);
+      }
+    } else if (isPlanoTeste && checkoutDto.billingType === 'CREDIT_CARD') {
       // Planos de teste: processar cobrança fake imediata (comportamento original)
       console.log('🧪 Modo TESTE: Criando pagamento e assinatura fake para plano de teste');
       const dueDateString = this.getDataAtualBrasil();
@@ -2862,7 +2938,7 @@ export class AssinaturasService {
       });
 
       console.log('✅ Pagamento fake criado para plano de teste:', paymentResult.id);
-    } else if (checkoutDto.billingType === 'CREDIT_CARD') {
+    } else if (checkoutDto.billingType === 'CREDIT_CARD' && !isPlanoEstudante) {
       console.log('✅ Cartão vinculado (card_id). Primeira cobrança em 5 dias pela recorrência.');
     }
 
@@ -2873,6 +2949,8 @@ export class AssinaturasService {
       });
       if (isPlanoTeste) {
         console.log('✅ ClienteMaster criado para plano de teste:', clienteMaster.id);
+      } else if (isPlanoEstudante) {
+        console.log('✅ ClienteMaster criado para Plano Estudante (cobrança imediata):', clienteMaster.id);
       } else {
         console.log('✅ ClienteMaster criado. Período grátis de 5 dias ativado:', clienteMaster.id);
       }
@@ -2880,13 +2958,10 @@ export class AssinaturasService {
 
     // 9. Criar assinatura no banco de dados
     // Planos de teste (PLANOS_TESTE): próximo mês (comportamento original)
-    // Plano Estudante: 2 dias grátis
+    // Plano Estudante: próximo mês (já cobrado imediatamente)
     // Demais planos: 5 dias grátis
-    const planoEstudanteId = '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7';
     let nextDueDateString: string;
-    if (checkoutDto.planoId === planoEstudanteId) {
-      nextDueDateString = this.calcularProximos2Dias();
-    } else if (isPlanoTeste) {
+    if (isPlanoEstudante || isPlanoTeste) {
       nextDueDateString = this.calcularProximoMes();
     } else {
       nextDueDateString = this.calcularProximos7Dias();
