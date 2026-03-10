@@ -676,10 +676,10 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
       const response = await axios.post(
         this.openAiApiUrl,
         {
-          model: 'o4-mini',
+          model: 'gpt-4o',
           messages: messages,
           temperature: 0.7,
-          max_tokens: 2000,
+          max_completion_tokens: 2000,
         },
         {
           headers: {
