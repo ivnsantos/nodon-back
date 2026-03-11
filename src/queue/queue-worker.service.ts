@@ -71,6 +71,14 @@ export class QueueWorkerService implements OnModuleInit, OnModuleDestroy {
     );
 
     // Event listeners para worker de confirmação
+    this.confirmacaoWorker.on('ready', () => {
+      console.log('🟢 Worker de confirmação CONECTADO e PRONTO para processar jobs');
+    });
+
+    this.confirmacaoWorker.on('active', (job: Job) => {
+      console.log(`🔵 Worker ATIVOU job ${job.id} - Consulta: ${job.data.consultaId}`);
+    });
+
     this.confirmacaoWorker.on('completed', (job: Job) => {
       console.log(`✅ Job ${job.id} concluído: ${job.name}`);
       newRelicLog('info', 'Job de confirmação de agendamento concluído', {

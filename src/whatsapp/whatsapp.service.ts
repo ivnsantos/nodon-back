@@ -8,11 +8,16 @@ export class WhatsAppService {
 
   constructor(private configService: ConfigService) {
     // URL da API de WhatsApp (pode ser configurada via env)
-    this.whatsappApiUrl = this.configService.get<string>('WHATSAPP_API_URL') || 'http://localhost:3000';
+    this.whatsappApiUrl = this.configService.get<string>('WHATSAPP_API_URL') || 'http://localhost:8080';
   }
 
   async sendMessage(phoneNumber: string, message: string): Promise<void> {
+    // Modo de simulação: se WHATSAPP_SIMULATION_MODE=true, apenas loga sem enviar
+    const simulationMode = this.configService.get<string>('WHATSAPP_SIMULATION_MODE') === 'true';
+    
+
     try {
+      console.log('Enviando mensagem para:', phoneNumber);
       const response = await axios.post(
         `${this.whatsappApiUrl}/api/whatsapp/send-cod`,
         {
@@ -23,11 +28,11 @@ export class WhatsAppService {
           headers: {
             'Content-Type': 'application/json',
           },
-          validateStatus: (status) => status >= 200 && status < 300, // Aceitar qualquer status 2xx como sucesso
+          validateStatus: (status) => status >= 200 && status < 300,
+          timeout: 10000, // 10 segundos de timeout
         },
       );
 
-      // Se chegou aqui, a requisição foi bem-sucedida (status 2xx)
       console.log(`✅ Mensagem WhatsApp enviada para ${phoneNumber}`, {
         status: response.status,
         data: response.data,
@@ -36,9 +41,10 @@ export class WhatsAppService {
       console.error('❌ Erro ao enviar mensagem WhatsApp:', {
         phoneNumber,
         error: error?.response?.data || error?.message,
+        url: `${this.whatsappApiUrl}/api/whatsapp/send-cod`,
       });
       throw new HttpException(
-        `Erro ao enviar mensagem via WhatsApp: ${error?.response?.data?.message || error?.message}`,
+        `Erro ao enviar mensagem via WhatsApp: ${error?.response?.data?.message || error?.message || 'Erro ao enviar SMS (COD)'}`,
         error?.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
@@ -46,6 +52,7 @@ export class WhatsAppService {
 
   async sendVerificationCode(phoneNumber: string, code: string, nome: string): Promise<void> {
     const message = `Olá ${nome}! Seu código de verificação é: ${code}. Este código expira em 15 minutos.`;
+    console.log('message', message);
     await this.sendMessage(phoneNumber, message);
   }
 

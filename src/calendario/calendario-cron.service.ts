@@ -18,11 +18,11 @@ export class CalendarioCronService {
   ) {}
 
   /**
-   * CRON job que roda a cada 2 minutos (para testes)
-   * Usa expressão cron: a cada 2 minutos
+   * CRON job que roda a cada 6 horas (para testes)
+   * Usa expressão cron: a cada 6 horas
    * TODO: Alterar para '0 7 * * *' em produção (todo dia às 7h)
    */
-  @Cron('0 7 * * *', {
+  @Cron('0 */6 * * *', {
     name: 'enviar-sms-confirmacao-consultas',
     timeZone: 'America/Sao_Paulo',
   })

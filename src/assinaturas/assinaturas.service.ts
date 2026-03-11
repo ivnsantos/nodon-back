@@ -2798,12 +2798,26 @@ export class AssinaturasService {
       try {
         const orderCode = `estudante_${Date.now()}`;
         
+        // Construir billing address a partir do userBase
+        const line1 = [userBase.address, userBase.addressNumber].filter(Boolean).join(', ').trim() || '';
+        const billingAddress: PagarMeBillingAddress = {
+          line_1: line1,
+          zip_code: (userBase.postalCode || '').replace(/\D/g, '') || '',
+          city: userBase.city || '',
+          state: userBase.state || '',
+          country: 'BR',
+          line_2: userBase.complement || undefined,
+        };
+        
+        // Converter valor de reais para centavos (inteiro)
+        const valorFinalCentavos = Math.round(valorFinal * 100);
+        
         const orderResult = await this.pagarMeService.createOrder({
           code: orderCode,
           customer_id: pagarMeCustomerId,
           items: [
             {
-              amount: valorFinal,
+              amount: valorFinalCentavos,
               description: `Plano Estudante - ${plano.nome}`,
               quantity: 1,
               code: orderCode,
@@ -2817,6 +2831,7 @@ export class AssinaturasService {
                 installments: 1,
                 operation_type: 'auth_and_capture',
                 statement_descriptor: 'NODON',
+                card: { billing_address: billingAddress },
               },
             },
           ],
