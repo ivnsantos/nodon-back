@@ -1716,6 +1716,11 @@ let AssinaturasService = class AssinaturasService {
         }
     }
     async createCustomer(createCustomerDto) {
+        (0, newrelic_logger_1.newRelicLog)('info', 'Iniciando criação de customer', {
+            email: createCustomerDto.email,
+            phone: createCustomerDto.phone,
+            name: createCustomerDto.name,
+        });
         try {
             const telefoneNormalizado = createCustomerDto.phone.replace(/\D/g, '');
             const existingUserBaseByEmail = await this.userBaseService.findByEmail(createCustomerDto.email);
@@ -1729,6 +1734,11 @@ let AssinaturasService = class AssinaturasService {
                 if (clienteMaster) {
                     const hasSubscription = await this.hasActiveSubscription(clienteMaster.id);
                     if (hasSubscription) {
+                        (0, newrelic_logger_1.newRelicLog)('error', 'Customer já existe com assinatura ativa - Não pode cadastrar novamente', {
+                            email: createCustomerDto.email,
+                            phone: createCustomerDto.phone,
+                            userId: userBase.id,
+                        });
                         throw new common_1.BadRequestException('Já existe uma assinatura ativa ou pendente para este email e telefone. Não é possível cadastrar novamente.');
                     }
                 }
@@ -1770,8 +1780,17 @@ let AssinaturasService = class AssinaturasService {
                         userId: userBase.id,
                     };
                 }
+                (0, newrelic_logger_1.newRelicLog)('info', 'Criando customer no Pagar.me - Cliente existente', {
+                    email: createCustomerDto.email,
+                    userBaseId: userBase.id,
+                });
                 const customerRes = await this.pagarMeService.createCustomer(this.preparePagarMeCustomerData(createCustomerDto.name, createCustomerDto.email, createCustomerDto.cpf, createCustomerDto.phone, createCustomerDto.postalCode, createCustomerDto.address, createCustomerDto.addressNumber, createCustomerDto.complement, createCustomerDto.province, createCustomerDto.city, createCustomerDto.state, userBase.id, createCustomerDto.birthdate));
                 pagarMeCustomerId = customerRes.id;
+                (0, newrelic_logger_1.newRelicLog)('info', 'Customer criado no Pagar.me com sucesso', {
+                    pagarMeCustomerId,
+                    userBaseId: userBase.id,
+                    email: createCustomerDto.email,
+                });
                 await this.userBaseService.update(userBase.id, { pagarMeCustomerId });
                 return { pagarMeCustomerId, userId: userBase.id };
             }
@@ -1780,8 +1799,16 @@ let AssinaturasService = class AssinaturasService {
                 const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
                 const tokenExpiresAt = new Date();
                 tokenExpiresAt.setMinutes(tokenExpiresAt.getMinutes() + 15);
+                (0, newrelic_logger_1.newRelicLog)('info', 'Criando customer no Pagar.me - Novo usuário', {
+                    email: createCustomerDto.email,
+                    name: createCustomerDto.name,
+                });
                 const customerRes = await this.pagarMeService.createCustomer(this.preparePagarMeCustomerData(createCustomerDto.name, createCustomerDto.email, createCustomerDto.cpf, createCustomerDto.phone, createCustomerDto.postalCode, createCustomerDto.address, createCustomerDto.addressNumber, createCustomerDto.complement, createCustomerDto.province, createCustomerDto.city, createCustomerDto.state, undefined, createCustomerDto.birthdate));
                 pagarMeCustomerId = customerRes.id;
+                (0, newrelic_logger_1.newRelicLog)('info', 'Customer criado no Pagar.me com sucesso - Novo usuário', {
+                    pagarMeCustomerId,
+                    email: createCustomerDto.email,
+                });
                 userBase = await this.userBaseService.create({
                     nome: createCustomerDto.name,
                     email: createCustomerDto.email,
@@ -1805,8 +1832,17 @@ let AssinaturasService = class AssinaturasService {
         }
         catch (error) {
             if (error instanceof common_1.ConflictException || error instanceof common_1.BadRequestException || error instanceof common_1.InternalServerErrorException) {
+                (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao criar customer - Validação falhou', {
+                    error: error.message,
+                    email: createCustomerDto.email,
+                });
                 throw error;
             }
+            (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao criar customer - Erro inesperado', {
+                error: error.message,
+                stack: error.stack,
+                email: createCustomerDto.email,
+            });
             throw new common_1.BadRequestException(`Erro ao criar customer: ${error.message || 'Erro desconhecido'}`);
         }
     }
@@ -1938,10 +1974,18 @@ let AssinaturasService = class AssinaturasService {
         return { pagarMeCustomerId, userId: userBase.id };
     }
     async checkoutComplete(checkoutDto) {
+        (0, newrelic_logger_1.newRelicLog)('info', 'Checkout iniciado', {
+            userId: checkoutDto.userId,
+            planoId: checkoutDto.planoId,
+            billingType: checkoutDto.billingType,
+            couponName: checkoutDto.couponName || null,
+        });
         const userBase = await this.userBaseService.findById(checkoutDto.userId);
         if (!userBase) {
+            (0, newrelic_logger_1.newRelicLog)('error', 'Checkout falhou - UserBase não encontrado', { userId: checkoutDto.userId });
             throw new common_1.NotFoundException('Usuário não encontrado');
         }
+        (0, newrelic_logger_1.newRelicLog)('info', 'UserBase encontrado', { userId: userBase.id, email: userBase.email });
         let clientesMaster = await this.clientesMasterService.findByUserId(userBase.id);
         let clienteMaster = clientesMaster && clientesMaster.length > 0 ? clientesMaster[0] : null;
         if (clienteMaster) {
@@ -1972,8 +2016,10 @@ let AssinaturasService = class AssinaturasService {
         }
         const plano = await this.planosService.findById(checkoutDto.planoId);
         if (!plano) {
+            (0, newrelic_logger_1.newRelicLog)('error', 'Checkout falhou - Plano não encontrado', { planoId: checkoutDto.planoId });
             throw new common_1.NotFoundException('Plano não encontrado');
         }
+        (0, newrelic_logger_1.newRelicLog)('info', 'Plano encontrado', { planoId: plano.id, nome: plano.nome, valor: plano.valorPromocional || plano.valorOriginal });
         const valorBasePlano = plano.valorPromocional ?? plano.valorOriginal ?? null;
         if (!valorBasePlano || valorBasePlano === null || Number(valorBasePlano) <= 0) {
             throw new common_1.BadRequestException(`O plano "${plano.nome}" não possui valor configurado. Configure valorOriginal ou valorPromocional no plano antes de criar assinaturas.`);
@@ -1989,6 +2035,12 @@ let AssinaturasService = class AssinaturasService {
                 if (valorFinal < 0)
                     valorFinal = 0;
                 couponId = coupon.id;
+                (0, newrelic_logger_1.newRelicLog)('info', 'Cupom aplicado', {
+                    couponName: coupon.name,
+                    discountValue: coupon.discountValue,
+                    valorAntes: Number(valorBasePlano),
+                    valorDepois: valorFinal,
+                });
             }
         }
         if (!valorFinal || valorFinal <= 0) {
@@ -2020,6 +2072,11 @@ let AssinaturasService = class AssinaturasService {
                     if (!cardId) {
                         throw new common_1.BadRequestException('Cartão nao encontrado');
                     }
+                    (0, newrelic_logger_1.newRelicLog)('info', 'Cartão vinculado ao cliente', {
+                        customerId: pagarMeCustomerId,
+                        cardId: cardId,
+                        brand: creditCardBrand,
+                    });
                 }
                 catch (error) {
                     (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao vincular cartão no checkoutComplete', { error: error.message, customerId: pagarMeCustomerId });
@@ -2109,6 +2166,12 @@ let AssinaturasService = class AssinaturasService {
                             userBaseId: userBase.id,
                         }),
                     });
+                    (0, newrelic_logger_1.newRelicLog)('error', 'Plano Estudante - Pagamento recusado', {
+                        orderId: orderResult.id,
+                        status: orderResult.status,
+                        valor: valorFinal,
+                        customerId: pagarMeCustomerId,
+                    });
                     throw new common_1.BadRequestException(`Pagamento não aprovado. Status: ${orderResult.status}. Verifique os dados do cartão e tente novamente.`);
                 }
                 await this.registrarCobranca({
@@ -2134,9 +2197,21 @@ let AssinaturasService = class AssinaturasService {
                     }),
                 });
                 console.log('✅ Pagamento aprovado e cobrança registrada para Plano Estudante:', orderResult.id);
+                (0, newrelic_logger_1.newRelicLog)('info', 'Plano Estudante - Pagamento aprovado', {
+                    orderId: orderResult.id,
+                    status: orderResult.status,
+                    valor: valorFinal,
+                    customerId: pagarMeCustomerId,
+                });
             }
             catch (error) {
                 console.error('❌ Erro ao processar cobrança do Plano Estudante:', error.message);
+                (0, newrelic_logger_1.newRelicLog)('error', 'Plano Estudante - Erro ao processar pagamento', {
+                    error: error.message,
+                    stack: error.stack,
+                    planoId: checkoutDto.planoId,
+                    userId: checkoutDto.userId,
+                });
                 throw new common_1.BadRequestException(`Erro ao processar pagamento: ${error.message}`);
             }
         }
@@ -2269,6 +2344,14 @@ let AssinaturasService = class AssinaturasService {
         const assinatura = this.assinaturaRepository.create(assinaturaData);
         try {
             const savedSubscription = await this.assinaturaRepository.save(assinatura);
+            (0, newrelic_logger_1.newRelicLog)('info', 'Assinatura criada no banco', {
+                assinaturaId: savedSubscription.id,
+                userId: savedSubscription.userId,
+                planoId: savedSubscription.planoId,
+                status: savedSubscription.status,
+                valor: savedSubscription.value,
+                nextDueDate: savedSubscription.nextDueDate,
+            });
             await this.gerenciarRecorrencia(savedSubscription);
             if (isPlanoTeste && paymentResult && paymentResult.status === 'paid') {
                 const cobranca = await this.cobrancaRepository.findOne({
@@ -2283,6 +2366,11 @@ let AssinaturasService = class AssinaturasService {
             }
             if (isPlanoTeste) {
                 console.log('✅ Assinatura de teste criada com sucesso:', savedSubscription.id);
+                (0, newrelic_logger_1.newRelicLog)('info', 'Checkout concluído com sucesso - Plano Teste', {
+                    assinaturaId: savedSubscription.id,
+                    userId: savedSubscription.userId,
+                    planoId: savedSubscription.planoId,
+                });
                 return {
                     statusCode: 200,
                     message: 'Pagamento aprovado e assinatura criada com sucesso (plano de teste)',
@@ -2301,6 +2389,12 @@ let AssinaturasService = class AssinaturasService {
                 };
             }
             else {
+                (0, newrelic_logger_1.newRelicLog)('info', 'Checkout concluído com sucesso', {
+                    assinaturaId: savedSubscription.id,
+                    userId: savedSubscription.userId,
+                    planoId: savedSubscription.planoId,
+                    isPlanoEstudante,
+                });
                 return {
                     statusCode: 200,
                     message: 'Assinatura criada com sucesso! Período grátis de 5 dias ativado.',
@@ -2318,6 +2412,12 @@ let AssinaturasService = class AssinaturasService {
             }
         }
         catch (error) {
+            (0, newrelic_logger_1.newRelicLog)('error', 'Checkout falhou - Erro ao salvar assinatura', {
+                error: error.message,
+                stack: error.stack,
+                userId: checkoutDto.userId,
+                planoId: checkoutDto.planoId,
+            });
             throw new common_1.InternalServerErrorException(`Erro ao salvar assinatura no banco de dados: ${error.message || 'Erro desconhecido'}`);
         }
     }
