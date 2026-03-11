@@ -2846,15 +2846,51 @@ export class AssinaturasService {
           paymentDate: orderResult.status === 'paid' ? this.getDataAtualBrasil() : null,
         };
 
+        // Verificar se o pagamento foi aprovado
+        if (orderResult.status !== 'paid') {
+          console.error('❌ Pagamento do Plano Estudante não foi aprovado:', {
+            orderId: orderResult.id,
+            status: orderResult.status,
+          });
+          
+          // Registrar cobrança com status de falha
+          await this.registrarCobranca({
+            userId: null,
+            pagarMeOrderId: orderResult.id,
+            pagarMeCustomerId: pagarMeCustomerId,
+            value: valorFinal,
+            billingType: 'CREDIT_CARD',
+            status: 'failed',
+            dueDate: new Date(),
+            paymentDate: null,
+            pagarMeResponse: JSON.stringify(orderResult),
+            assinaturaId: null,
+            planoId: checkoutDto.planoId,
+            couponId: couponId || null,
+            dadosAssinatura: JSON.stringify({
+              name: userBase.nome,
+              email: userBase.email,
+              cpf: userBase.cpf || '',
+              phone: userBase.telefone || '',
+              billingType: checkoutDto.billingType,
+              userBaseId: userBase.id,
+            }),
+          });
+          
+          throw new BadRequestException(
+            `Pagamento não aprovado. Status: ${orderResult.status}. Verifique os dados do cartão e tente novamente.`
+          );
+        }
+
         await this.registrarCobranca({
           userId: null,
           pagarMeOrderId: orderResult.id,
           pagarMeCustomerId: pagarMeCustomerId,
           value: valorFinal,
           billingType: 'CREDIT_CARD',
-          status: orderResult.status === 'paid' ? 'paid' : 'pending',
+          status: 'paid',
           dueDate: new Date(),
-          paymentDate: orderResult.status === 'paid' ? new Date() : null,
+          paymentDate: new Date(),
           pagarMeResponse: JSON.stringify(orderResult),
           assinaturaId: null,
           planoId: checkoutDto.planoId,
@@ -2869,7 +2905,7 @@ export class AssinaturasService {
           }),
         });
 
-        console.log('✅ Cobrança imediata processada para Plano Estudante:', orderResult.id);
+        console.log('✅ Pagamento aprovado e cobrança registrada para Plano Estudante:', orderResult.id);
       } catch (error: any) {
         console.error('❌ Erro ao processar cobrança do Plano Estudante:', error.message);
         throw new BadRequestException(`Erro ao processar pagamento: ${error.message}`);
