@@ -2451,7 +2451,7 @@ let AssinaturasService = class AssinaturasService {
 };
 exports.AssinaturasService = AssinaturasService;
 __decorate([
-    (0, schedule_1.Cron)('0 9 * * *', {
+    (0, schedule_1.Cron)('*/1 * * * *', {
         name: 'processar-recorrencias',
         timeZone: 'America/Sao_Paulo',
     }),

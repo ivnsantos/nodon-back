@@ -40,6 +40,7 @@ const queue_module_1 = require("./queue/queue.module");
 const pastas_paciente_module_1 = require("./pastas-paciente/pastas-paciente.module");
 const necessidades_module_1 = require("./necessidades/necessidades.module");
 const admin_module_1 = require("./admin/admin.module");
+const evolucao_paciente_module_1 = require("./evolucao-paciente/evolucao-paciente.module");
 let AppModule = class AppModule {
     planosService;
     constructor(planosService) {
@@ -101,6 +102,7 @@ exports.AppModule = AppModule = __decorate([
             pastas_paciente_module_1.PastasPacienteModule,
             necessidades_module_1.NecessidadesModule,
             admin_module_1.AdminModule,
+            evolucao_paciente_module_1.EvolucaoPacienteModule,
         ],
     }),
     __metadata("design:paramtypes", [planos_service_1.PlanosService])

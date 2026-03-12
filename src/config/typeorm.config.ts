@@ -36,7 +36,7 @@ if (existsSync(envLocalPath)) {
   config({ path: envLocalPath });
   console.log('✅ Carregado .env.local');
 }
-config(); // Carrega .env (se existir)
+config(); 
 
 @Injectable()
 export class TypeOrmConfigService implements TypeOrmOptionsFactory {
