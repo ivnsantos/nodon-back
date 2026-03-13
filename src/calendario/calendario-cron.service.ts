@@ -22,7 +22,7 @@ export class CalendarioCronService {
    * Usa expressão cron: a cada 6 horas
    * TODO: Alterar para '0 7 * * *' em produção (todo dia às 7h)
    */
-  @Cron('0 */6 * * *', {
+  @Cron('0 6 * * *', {
     name: 'enviar-sms-confirmacao-consultas',
     timeZone: 'America/Sao_Paulo',
   })
@@ -80,6 +80,11 @@ export class CalendarioCronService {
 
     console.log(`📊 Encontradas ${consultas.length} consultas para processar`);
 
+    newRelicLog('info', 'CRON: Encontradas consultas para processar', {
+      cronName: 'enviar-sms-confirmacao-consultas',
+      consultasEncontradas: consultas.length,
+    });
+    
     if (consultas.length === 0) {
       console.log('ℹ️ Nenhuma consulta encontrada para processar');
       return;
@@ -109,6 +114,13 @@ export class CalendarioCronService {
           jobsPulados++;
           continue;
         }
+
+        newRelicLog('info', 'CRON: Adicionando job à fila', {
+          cronName: 'enviar-sms-confirmacao-consultas',
+          consultaId: consulta.id,
+          pacienteId: consulta.pacienteId,
+          clienteMasterId: consulta.clienteMasterId,
+        });
 
         // Adicionar job na fila (processamento assíncrono)
         await this.queueService.adicionarJobConfirmacaoAgendamento(
