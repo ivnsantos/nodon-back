@@ -9,18 +9,14 @@ export class CreateEvolucaoPacienteDto {
   @IsOptional()
   consultaId?: string;
 
-  @IsUUID()
-  @IsNotEmpty()
-  profissionalId: string;
-
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
   titulo: string;
 
   @IsString()
-  @IsNotEmpty()
-  observacao: string;
+  @IsOptional()
+  observacao?: string;
 
   @IsString()
   @IsOptional()

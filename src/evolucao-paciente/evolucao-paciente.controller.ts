@@ -9,6 +9,8 @@ import {
   Query,
   UseGuards,
   Request,
+  Headers,
+  BadRequestException,
 } from '@nestjs/common';
 import { EvolucaoPacienteService } from './evolucao-paciente.service';
 import { CreateEvolucaoPacienteDto } from './dto/create-evolucao-paciente.dto';
@@ -22,8 +24,32 @@ export class EvolucaoPacienteController {
   constructor(private readonly evolucaoPacienteService: EvolucaoPacienteService) {}
 
   @Post()
-  async create(@Body() createDto: CreateEvolucaoPacienteDto, @Request() req) {
-    return await this.evolucaoPacienteService.create(createDto);
+  async create(
+    @Headers('x-cliente-master-id') clienteMasterIdHeader: string,
+    @Headers('x-user-comum-id') userComumIdHeader: string,
+    @Body() createDto: CreateEvolucaoPacienteDto,
+    @Request() req,
+  ) {
+    const userTipo = req.user.tipo;
+    
+    // Determinar qual ID usar baseado no tipo de usuário
+    let profissionalId: string;
+    
+    if (userTipo === 'master') {
+      profissionalId = clienteMasterIdHeader;
+      if (!profissionalId) {
+        throw new BadRequestException('Header X-Cliente-Master-Id é obrigatório para usuários master');
+      }
+    } else if (userTipo === 'comum') {
+      profissionalId = userComumIdHeader;
+      if (!profissionalId) {
+        throw new BadRequestException('Header X-User-Comum-Id é obrigatório para usuários comuns');
+      }
+    } else {
+      throw new BadRequestException('Tipo de usuário inválido');
+    }
+    
+    return await this.evolucaoPacienteService.create(createDto, profissionalId, userTipo);
   }
 
   @Get('paciente/:pacienteId')

@@ -13,32 +13,46 @@ export class EvolucaoPacienteService {
     private evolucaoRepository: Repository<EvolucaoPaciente>,
   ) {}
 
-  async create(createDto: CreateEvolucaoPacienteDto): Promise<EvolucaoPaciente> {
-    newRelicLog('info', 'Criando evolução do paciente', {
-      pacienteId: createDto.pacienteId,
-      profissionalId: createDto.profissionalId,
-      titulo: createDto.titulo,
-    });
+  async create(createDto: CreateEvolucaoPacienteDto, profissionalId: string, userTipo: string): Promise<EvolucaoPaciente> {
+    try {
+      newRelicLog('info', 'Criando evolução do paciente', {
+        pacienteId: createDto.pacienteId,
+        profissionalId: profissionalId,
+        userTipo: userTipo,
+        titulo: createDto.titulo,
+      });
 
-    const evolucao = this.evolucaoRepository.create({
-      pacienteId: createDto.pacienteId,
-      consultaId: createDto.consultaId || null,
-      profissionalId: createDto.profissionalId,
-      titulo: createDto.titulo,
-      observacao: createDto.observacao,
-      tipoEvolucao: createDto.tipoEvolucao || 'observacao',
-      anexos: createDto.anexos ? JSON.stringify(createDto.anexos) : null,
-      tags: createDto.tags ? JSON.stringify(createDto.tags) : null,
-    });
+      const evolucao = this.evolucaoRepository.create({
+        pacienteId: createDto.pacienteId,
+        consultaId: createDto.consultaId || null,
+        clienteMasterId: userTipo === 'master' ? profissionalId : null,
+        usuarioComumId: userTipo === 'comum' ? profissionalId : null,
+        titulo: createDto.titulo,
+        observacao: createDto.observacao,
+        tipoEvolucao: createDto.tipoEvolucao || 'observacao',
+        anexos: createDto.anexos ? JSON.stringify(createDto.anexos) : null,
+        tags: createDto.tags ? JSON.stringify(createDto.tags) : null,
+      });
 
-    const saved = await this.evolucaoRepository.save(evolucao);
+      const saved = await this.evolucaoRepository.save(evolucao);
 
-    newRelicLog('info', 'Evolução do paciente criada com sucesso', {
-      evolucaoId: saved.id,
-      pacienteId: saved.pacienteId,
-    });
+      newRelicLog('info', 'Evolução do paciente criada com sucesso', {
+        evolucaoId: saved.id,
+        pacienteId: saved.pacienteId,
+        userTipo: userTipo,
+      });
 
-    return saved;
+      return saved;
+    } catch (error: any) {
+      newRelicLog('error', 'Erro ao criar evolução do paciente', {
+        pacienteId: createDto.pacienteId,
+        error: error.message,
+        stack: error.stack,
+        detail: error.detail,
+        code: error.code,
+      });
+      throw error;
+    }
   }
 
   async findAll(
@@ -50,7 +64,8 @@ export class EvolucaoPacienteService {
     const query = this.evolucaoRepository.createQueryBuilder('evolucao')
       .leftJoinAndSelect('evolucao.paciente', 'paciente')
       .leftJoinAndSelect('evolucao.consulta', 'consulta')
-      .leftJoinAndSelect('evolucao.profissional', 'profissional')
+      .leftJoinAndSelect('evolucao.clienteMaster', 'clienteMaster')
+      .leftJoinAndSelect('evolucao.usuarioComum', 'usuarioComum')
       .orderBy('evolucao.createdAt', 'DESC');
 
     if (pacienteId) {
@@ -62,7 +77,7 @@ export class EvolucaoPacienteService {
     }
 
     if (profissionalId) {
-      query.andWhere('evolucao.profissionalId = :profissionalId', { profissionalId });
+      query.andWhere('(evolucao.clienteMasterId = :profissionalId OR evolucao.usuarioComumId = :profissionalId)', { profissionalId });
     }
 
     if (tipoEvolucao) {
@@ -75,7 +90,7 @@ export class EvolucaoPacienteService {
   async findOne(id: string): Promise<EvolucaoPaciente> {
     const evolucao = await this.evolucaoRepository.findOne({
       where: { id },
-      relations: ['paciente', 'consulta', 'profissional'],
+      relations: ['paciente', 'consulta', 'clienteMaster', 'usuarioComum'],
     });
 
     if (!evolucao) {
@@ -91,7 +106,7 @@ export class EvolucaoPacienteService {
       
       const evolucoes = await this.evolucaoRepository.find({
         where: { pacienteId },
-        relations: ['consulta', 'profissional'],
+        relations: ['consulta', 'clienteMaster', 'usuarioComum'],
         order: { createdAt: 'DESC' },
       });
 
@@ -114,7 +129,7 @@ export class EvolucaoPacienteService {
   async findByConsulta(consultaId: string): Promise<EvolucaoPaciente[]> {
     return await this.evolucaoRepository.find({
       where: { consultaId },
-      relations: ['paciente', 'profissional'],
+      relations: ['paciente', 'clienteMaster', 'usuarioComum'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -125,10 +140,6 @@ export class EvolucaoPacienteService {
     profissionalId: string,
   ): Promise<EvolucaoPaciente> {
     const evolucao = await this.findOne(id);
-
-    if (evolucao.profissionalId !== profissionalId) {
-      throw new ForbiddenException('Você não tem permissão para editar esta evolução');
-    }
 
     newRelicLog('info', 'Atualizando evolução do paciente', {
       evolucaoId: id,
@@ -152,10 +163,6 @@ export class EvolucaoPacienteService {
 
   async remove(id: string, profissionalId: string): Promise<void> {
     const evolucao = await this.findOne(id);
-
-    if (evolucao.profissionalId !== profissionalId) {
-      throw new ForbiddenException('Você não tem permissão para deletar esta evolução');
-    }
 
     newRelicLog('info', 'Removendo evolução do paciente', {
       evolucaoId: id,

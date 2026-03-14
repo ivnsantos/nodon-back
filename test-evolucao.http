@@ -1,0 +1,17 @@
+### Test Evolucao Paciente - POST
+POST http://localhost:5000/api/evolucao-paciente
+Content-Type: application/json
+Authorization: Bearer SEU_TOKEN_AQUI
+x-cliente-master-id: 34106e22-8a15-4731-81fa-6a525fef98e5
+
+{
+    "pacienteId": "f4cfbf08-8df2-475f-b0aa-2ed1e16062bc",
+    "titulo": "teste",
+    "observacao": "teste",
+    "tipoEvolucao": "retorno",
+    "tags": ["teste"],
+    "consultaId": "df56687b-670f-49dc-a83f-d5fe8487bd25"
+}
+
+### IMPORTANTE: NÃO INCLUA profissionalId no JSON acima
+### O profissionalId é automaticamente extraído do token JWT
