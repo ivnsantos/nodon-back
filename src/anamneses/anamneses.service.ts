@@ -146,23 +146,78 @@ export class AnamnesesService {
 
     // Atualizar perguntas se fornecidas
     if (updateAnamneseDto.perguntas !== undefined) {
-      // Deletar perguntas antigas
-      await this.perguntaRepository.delete({ anamneseId: id });
+      // Buscar perguntas existentes
+      const perguntasExistentes = await this.perguntaRepository.find({ 
+        where: { anamneseId: id },
+        order: { ordem: 'ASC' }
+      });
 
-      // Criar novas perguntas
-      if (updateAnamneseDto.perguntas.length > 0) {
-        const perguntas = updateAnamneseDto.perguntas.map((p, index) => {
-          const pergunta = new PerguntaAnamnese();
-          pergunta.anamneseId = id;
-          pergunta.texto = p.texto;
-          pergunta.tipoResposta = p.tipoResposta || TipoResposta.TEXTO;
-          pergunta.opcoes = p.opcoes || null;
-          pergunta.obrigatoria = p.obrigatoria !== undefined ? p.obrigatoria : false;
-          pergunta.ordem = p.ordem !== undefined ? p.ordem : index;
-          return pergunta;
+      // Verificar se existem respostas vinculadas a alguma pergunta
+      const perguntasComRespostas = new Set<string>();
+      for (const pergunta of perguntasExistentes) {
+        const temRespostas = await this.respostaPerguntaRepository.count({ 
+          where: { perguntaId: pergunta.id } 
         });
+        if (temRespostas > 0) {
+          perguntasComRespostas.add(pergunta.id);
+        }
+      }
 
-        await this.perguntaRepository.save(perguntas);
+      // Se há respostas vinculadas, apenas atualizar as perguntas existentes
+      if (perguntasComRespostas.size > 0) {
+        // Atualizar perguntas existentes com os novos dados
+        for (let i = 0; i < updateAnamneseDto.perguntas.length; i++) {
+          const novaPergunta = updateAnamneseDto.perguntas[i];
+          
+          if (i < perguntasExistentes.length) {
+            // Atualizar pergunta existente
+            const perguntaExistente = perguntasExistentes[i];
+            perguntaExistente.texto = novaPergunta.texto;
+            perguntaExistente.tipoResposta = novaPergunta.tipoResposta || TipoResposta.TEXTO;
+            perguntaExistente.opcoes = novaPergunta.opcoes || null;
+            perguntaExistente.obrigatoria = novaPergunta.obrigatoria !== undefined ? novaPergunta.obrigatoria : false;
+            perguntaExistente.ordem = novaPergunta.ordem !== undefined ? novaPergunta.ordem : i;
+            await this.perguntaRepository.save(perguntaExistente);
+          } else {
+            // Adicionar nova pergunta
+            const pergunta = new PerguntaAnamnese();
+            pergunta.anamneseId = id;
+            pergunta.texto = novaPergunta.texto;
+            pergunta.tipoResposta = novaPergunta.tipoResposta || TipoResposta.TEXTO;
+            pergunta.opcoes = novaPergunta.opcoes || null;
+            pergunta.obrigatoria = novaPergunta.obrigatoria !== undefined ? novaPergunta.obrigatoria : false;
+            pergunta.ordem = novaPergunta.ordem !== undefined ? novaPergunta.ordem : i;
+            await this.perguntaRepository.save(pergunta);
+          }
+        }
+
+        // Deletar perguntas excedentes que NÃO têm respostas
+        if (updateAnamneseDto.perguntas.length < perguntasExistentes.length) {
+          for (let i = updateAnamneseDto.perguntas.length; i < perguntasExistentes.length; i++) {
+            const perguntaParaDeletar = perguntasExistentes[i];
+            if (!perguntasComRespostas.has(perguntaParaDeletar.id)) {
+              await this.perguntaRepository.delete(perguntaParaDeletar.id);
+            }
+          }
+        }
+      } else {
+        // Não há respostas vinculadas, pode deletar e recriar tudo
+        await this.perguntaRepository.delete({ anamneseId: id });
+
+        if (updateAnamneseDto.perguntas.length > 0) {
+          const perguntas = updateAnamneseDto.perguntas.map((p, index) => {
+            const pergunta = new PerguntaAnamnese();
+            pergunta.anamneseId = id;
+            pergunta.texto = p.texto;
+            pergunta.tipoResposta = p.tipoResposta || TipoResposta.TEXTO;
+            pergunta.opcoes = p.opcoes || null;
+            pergunta.obrigatoria = p.obrigatoria !== undefined ? p.obrigatoria : false;
+            pergunta.ordem = p.ordem !== undefined ? p.ordem : index;
+            return pergunta;
+          });
+
+          await this.perguntaRepository.save(perguntas);
+        }
       }
     }
 
