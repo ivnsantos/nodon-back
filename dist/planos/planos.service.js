@@ -23,6 +23,9 @@ let PlanosService = class PlanosService {
         this.planoRepository = planoRepository;
     }
     async create(data) {
+        if (typeof data.isStudentPlan !== 'boolean') {
+            throw new common_1.BadRequestException('isStudentPlan é obrigatório e deve ser boolean');
+        }
         const { acesso, ...planoData } = data;
         const plano = this.planoRepository.create(planoData);
         const saved = await this.planoRepository.save(plano);
@@ -41,6 +44,7 @@ let PlanosService = class PlanosService {
                 'plano.tokenChat',
                 'plano.ativo',
                 'plano.descricao',
+                'plano.isStudentPlan',
                 'plano.createdAt',
                 'plano.updatedAt',
             ])
@@ -84,6 +88,7 @@ let PlanosService = class PlanosService {
                 limiteAnalises: 12,
                 tokenChat: 1500000,
                 descricao: 'Até 12 análises por mês',
+                isStudentPlan: false,
             },
             {
                 nome: 'Plano Básico',
@@ -92,6 +97,7 @@ let PlanosService = class PlanosService {
                 limiteAnalises: 30,
                 tokenChat: 1500000,
                 descricao: 'Até 30 análises por mês',
+                isStudentPlan: false,
             },
             {
                 nome: 'Plano Premium',
@@ -100,6 +106,7 @@ let PlanosService = class PlanosService {
                 limiteAnalises: 50,
                 tokenChat: 1500000,
                 descricao: 'Até 50 análises por mês',
+                isStudentPlan: false,
             },
             {
                 nome: 'Plano Essencial',
@@ -108,6 +115,7 @@ let PlanosService = class PlanosService {
                 limiteAnalises: 120,
                 tokenChat: 1500000,
                 descricao: 'Até 120 análises por mês',
+                isStudentPlan: false,
             },
             {
                 nome: 'Plano Enterprise',
@@ -116,6 +124,7 @@ let PlanosService = class PlanosService {
                 limiteAnalises: 200,
                 tokenChat: 1500000,
                 descricao: 'Até 200 análises por mês',
+                isStudentPlan: false,
             },
         ];
         for (const planoData of planos) {

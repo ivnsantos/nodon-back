@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Plano } from './entities/plano.entity';
@@ -17,8 +17,12 @@ export class PlanosService {
     limiteAnalises: number;
     tokenChat?: number;
     descricao?: string;
+    isStudentPlan: boolean;
     acesso?: string; // 'all' ou 'calendario,chat' (separado por vírgula)
   }): Promise<Plano> {
+    if (typeof data.isStudentPlan !== 'boolean') {
+      throw new BadRequestException('isStudentPlan é obrigatório e deve ser boolean');
+    }
     // Remover acesso temporariamente até a coluna ser criada no banco
     const { acesso, ...planoData } = data;
     const plano = this.planoRepository.create(planoData);
@@ -41,6 +45,7 @@ export class PlanosService {
           'plano.tokenChat',
           'plano.ativo',
           'plano.descricao',
+          'plano.isStudentPlan',
           // 'plano.acesso', // Comentado temporariamente até a coluna ser criada
           'plano.createdAt',
           'plano.updatedAt',
@@ -90,6 +95,7 @@ export class PlanosService {
         limiteAnalises: 12,
         tokenChat: 1500000,
         descricao: 'Até 12 análises por mês',
+        isStudentPlan: false,
       },
       {
         nome: 'Plano Básico',
@@ -98,6 +104,7 @@ export class PlanosService {
         limiteAnalises: 30,
         tokenChat: 1500000,
         descricao: 'Até 30 análises por mês',
+        isStudentPlan: false,
       },
       {
         nome: 'Plano Premium',
@@ -106,6 +113,7 @@ export class PlanosService {
         limiteAnalises: 50,
         tokenChat: 1500000,
         descricao: 'Até 50 análises por mês',
+        isStudentPlan: false,
       },
       {
         nome: 'Plano Essencial',
@@ -114,6 +122,7 @@ export class PlanosService {
         limiteAnalises: 120,
         tokenChat: 1500000,
         descricao: 'Até 120 análises por mês',
+        isStudentPlan: false,
       },
       {
         nome: 'Plano Enterprise',
@@ -122,6 +131,7 @@ export class PlanosService {
         limiteAnalises: 200,
         tokenChat: 1500000,
         descricao: 'Até 200 análises por mês',
+        isStudentPlan: false,
       },
     ];
 
