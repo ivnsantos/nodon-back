@@ -20,6 +20,7 @@ let Plano = class Plano {
     tokenChat;
     ativo;
     descricao;
+    isStudentPlan;
     acesso;
     createdAt;
     updatedAt;
@@ -57,6 +58,10 @@ __decorate([
     (0, typeorm_1.Column)({ name: 'descricao', type: 'varchar', nullable: true }),
     __metadata("design:type", String)
 ], Plano.prototype, "descricao", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'is_student_plan', type: 'boolean', nullable: false, default: false }),
+    __metadata("design:type", Boolean)
+], Plano.prototype, "isStudentPlan", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at' }),
     __metadata("design:type", Date)

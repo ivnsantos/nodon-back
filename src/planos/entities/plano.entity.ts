@@ -32,6 +32,9 @@ export class Plano {
   @Column({ name: 'descricao', type: 'varchar', nullable: true })
   descricao: string;
 
+  @Column({ name: 'is_student_plan', type: 'boolean', nullable: false, default: false })
+  isStudentPlan: boolean;
+
   // Temporariamente comentado até a coluna ser criada no banco
   // @Column({ name: 'acesso', type: 'varchar', nullable: true, default: 'all' })
   // acesso: string; // 'all' ou 'calendario,chat' (separado por vírgula)

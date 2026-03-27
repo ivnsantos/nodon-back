@@ -2088,7 +2088,9 @@ let AssinaturasService = class AssinaturasService {
             throw new common_1.BadRequestException('Não foi possível vincular o cartão ao cliente.');
         }
         const planoEstudanteId = '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7';
-        const isPlanoEstudante = checkoutDto.planoId === planoEstudanteId;
+        const isPlanoEstudante = plano?.isStudentPlan === true ||
+            checkoutDto.planoId === planoEstudanteId ||
+            Boolean(plano?.nome?.toLowerCase().includes('estudante'));
         let paymentResult = null;
         if (isPlanoEstudante && checkoutDto.billingType === 'CREDIT_CARD') {
             console.log('🎓 Plano Estudante: Processando cobrança imediata');

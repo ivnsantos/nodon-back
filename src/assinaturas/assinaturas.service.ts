@@ -2843,7 +2843,10 @@ export class AssinaturasService {
     // Plano Estudante: cobrança real imediata
     // Planos normais: sem cobrança no checkout; recorrência cobra em 5 dias
     const planoEstudanteId = '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7';
-    const isPlanoEstudante = checkoutDto.planoId === planoEstudanteId;
+    const isPlanoEstudante =
+      plano?.isStudentPlan === true ||
+      checkoutDto.planoId === planoEstudanteId ||
+      Boolean(plano?.nome?.toLowerCase().includes('estudante'));
     let paymentResult: any = null;
 
     if (isPlanoEstudante && checkoutDto.billingType === 'CREDIT_CARD') {
