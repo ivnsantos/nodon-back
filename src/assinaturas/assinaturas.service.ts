@@ -2842,8 +2842,11 @@ export class AssinaturasService {
     // Planos de teste: cobrança fake imediata
     // Plano Estudante: cobrança real imediata
     // Planos normais: sem cobrança no checkout; recorrência cobra em 5 dias
-    const planoEstudanteId = '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7';
-    const isPlanoEstudante = checkoutDto.planoId === planoEstudanteId;
+    const planosEstudanteIds = [
+      '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7', // Plano Estudante
+      '1503826a-ee30-4fa9-9955-c77d11fe44ed', // Plano Estudante PRO
+    ];
+    const isPlanoEstudante = planosEstudanteIds.includes(checkoutDto.planoId);
     let paymentResult: any = null;
 
     if (isPlanoEstudante && checkoutDto.billingType === 'CREDIT_CARD') {
