@@ -861,14 +861,19 @@ export class CalendarioService {
     const baseUrl = this.configService.get<string>('FRONTEND_URL');
     const linkConfirmacao = `${baseUrl}/confirmar-agendamento/${consultaId}`;
 
-    // Formatar data para exibição
+    // Formatar data para exibição (formato DD/MM/YYYY)
     const dataFormatada = this.formatarDataConsulta(consulta.dataConsulta);
     const horaFormatada = consulta.horaConsulta;
 
-    // Enviar mensagem de confirmação via WhatsApp
-    const mensagemSms = `Olá ${nomePaciente}! Por favor, confirme sua consulta ${dataFormatada} às ${horaFormatada}. Clique no link para confirmar: ${linkConfirmacao}`;
-    console.log('Mensagem SMS:', mensagemSms);
-    await this.whatsappService.sendMessage(telefoneParaEnvio, mensagemSms);
+    // Enviar mensagem de confirmação via WhatsApp usando o novo template
+    console.log(`📱 Enviando confirmação de agendamento para ${nomePaciente} (${telefoneParaEnvio})`);
+    await this.whatsappService.sendConfirmacaoAgendamentoParaCliente(
+      telefoneParaEnvio,
+      nomePaciente,
+      dataFormatada,
+      horaFormatada,
+      linkConfirmacao,
+    );
 
     return {
       linkConfirmacao,

@@ -2087,8 +2087,11 @@ let AssinaturasService = class AssinaturasService {
         if (checkoutDto.billingType === 'CREDIT_CARD' && !isPlanoTeste && !cardId) {
             throw new common_1.BadRequestException('Não foi possível vincular o cartão ao cliente.');
         }
-        const planoEstudanteId = '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7';
-        const isPlanoEstudante = checkoutDto.planoId === planoEstudanteId;
+        const planosEstudanteIds = [
+            '3aa6ec3e-be03-41f4-a0e6-46b52e4f1da7',
+            '1503826a-ee30-4fa9-9955-c77d11fe44ed',
+        ];
+        const isPlanoEstudante = planosEstudanteIds.includes(checkoutDto.planoId);
         let paymentResult = null;
         if (isPlanoEstudante && checkoutDto.billingType === 'CREDIT_CARD') {
             console.log('🎓 Plano Estudante: Processando cobrança imediata');

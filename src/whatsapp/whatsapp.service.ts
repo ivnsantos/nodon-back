@@ -130,6 +130,69 @@ export class WhatsAppService {
   }
 
   /**
+   * Envia mensagem de solicitação de confirmação de agendamento para o cliente via WhatsApp.
+   * Template: "Olá, {{1}}! Passando para confirmar sua consulta agendada para o dia {{2}} às {{3}}."
+   * contentVariables: {"1": Nome do Cliente, "2": Data, "3": Hora, "4": Link de confirmação}
+   */
+  async sendConfirmacaoAgendamentoParaCliente(
+    phoneNumber: string,
+    nomeCliente: string,
+    dataConsulta: string,
+    horaConsulta: string,
+    linkConfirmacao: string,
+  ): Promise<void> {
+    try {
+      const contentVariables = JSON.stringify({
+        '1': nomeCliente,
+        '2': dataConsulta,
+        '3': horaConsulta,
+        '4': linkConfirmacao,
+      });
+
+      const response = await axios.post(
+        `${this.whatsappApiUrl}/api/whatsapp/send-confirma-client`,
+        {
+          phoneNumber,
+          contentVariables,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          validateStatus: (status) => status >= 200 && status < 300,
+          timeout: 10000,
+        },
+      );
+
+      console.log(`✅ Solicitação de confirmação de agendamento enviada via WhatsApp para ${phoneNumber}`, {
+        status: response.status,
+        data: response.data,
+      });
+    } catch (error) {
+      // Log detalhado do erro
+      const errorDetails = {
+        phoneNumber,
+        url: `${this.whatsappApiUrl}/api/whatsapp/send-confirma-client`,
+        requestData: {
+          phoneNumber,
+          contentVariables: error?.config?.data ? JSON.parse(error.config.data).contentVariables : 'N/A',
+        },
+        responseStatus: error?.response?.status,
+        responseData: error?.response?.data,
+        errorMessage: error?.message,
+        errorStack: error?.stack,
+      };
+      
+      console.error('❌ Erro ao enviar solicitação de confirmação de agendamento via WhatsApp:', errorDetails);
+      
+      throw new HttpException(
+        `Erro ao enviar solicitação de confirmação via WhatsApp: ${JSON.stringify(error?.response?.data) || error?.message}`,
+        error?.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /**
    * Envia mensagem de confirmação de consulta via WhatsApp (template send-confirmado).
    * contentVariables: {"1": nomePaciente, "2": dataConsulta, "3": horaConsulta}
    */
