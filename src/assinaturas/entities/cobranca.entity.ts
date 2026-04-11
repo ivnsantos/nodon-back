@@ -6,10 +6,12 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { ClienteMaster } from '../../users/entities/cliente-master.entity';
 
 @Entity('cobrancas')
+@Index('idx_unique_assinatura_due_date', ['assinaturaId', 'dueDate'], { unique: true })
 export class Cobranca {
   @PrimaryGeneratedColumn('uuid')
   id: string;

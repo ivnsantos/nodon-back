@@ -2082,35 +2082,56 @@ export class AssinaturasService {
     const hoje = this.getDataAtualBrasil(); // Formato: YYYY-MM-DD
     const hojeDate = this.parseDataBrasil(hoje);
 
-    // ⚠️ VALIDAÇÃO ANTI-DUPLICAÇÃO: Verificar se já existe cobrança para esta assinatura na data de hoje
-    console.log(`🔍 Verificando se já existe cobrança para esta assinatura na data de hoje...`);
-    const cobrancaExistente = await this.cobrancaRepository
-      .createQueryBuilder('cobranca')
-      .where('cobranca.assinatura_id = :assinaturaId', { assinaturaId: assinatura.id })
-      .andWhere('cobranca.due_date = :hoje', { hoje: hojeDate })
-      .getOne();
+    // ⚠️ VALIDAÇÃO ANTI-DUPLICAÇÃO COM LOCK: Usar transação com lock pessimista
+    // Isso previne race condition quando múltiplos workers processam a mesma recorrência simultaneamente
+    console.log(`🔍 Verificando se já existe cobrança para esta assinatura na data de hoje (com lock)...`);
+    
+    const queryRunner = this.cobrancaRepository.manager.connection.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    if (cobrancaExistente) {
-      console.log(`⚠️ JÁ EXISTE cobrança para assinatura ${assinatura.id} na data ${hoje}`);
-      console.log(`   Cobrança ID: ${cobrancaExistente.id}`);
-      console.log(`   Status: ${cobrancaExistente.status}`);
-      console.log(`   Pagar.me Order ID: ${cobrancaExistente.pagarMeOrderId}`);
-      console.log(`   ⏭️ Pulando esta recorrência para evitar cobrança duplicada`);
+    try {
+      // Lock pessimista: bloqueia a linha da assinatura até o fim da transação
+      const cobrancaExistente = await queryRunner.manager
+        .createQueryBuilder(Cobranca, 'cobranca')
+        .setLock('pessimistic_write')
+        .where('cobranca.assinatura_id = :assinaturaId', { assinaturaId: assinatura.id })
+        .andWhere('cobranca.due_date = :hoje', { hoje: hojeDate })
+        .getOne();
+
+      if (cobrancaExistente) {
+        await queryRunner.rollbackTransaction();
+        await queryRunner.release();
+        
+        console.log(`⚠️ JÁ EXISTE cobrança para assinatura ${assinatura.id} na data ${hoje}`);
+        console.log(`   Cobrança ID: ${cobrancaExistente.id}`);
+        console.log(`   Status: ${cobrancaExistente.status}`);
+        console.log(`   Pagar.me Order ID: ${cobrancaExistente.pagarMeOrderId}`);
+        console.log(`   ⏭️ Pulando esta recorrência para evitar cobrança duplicada`);
+        
+        // Log customizado para New Relic
+        newRelicLog('warn', 'Recorrência pulada - cobrança já existe', {
+          assinaturaId: assinatura.id,
+          recorrenciaId: recorrencia.id,
+          cobrancaExistenteId: cobrancaExistente.id,
+          cobrancaStatus: cobrancaExistente.status,
+          data: hoje,
+          motivo: 'Cobrança duplicada evitada (com lock)',
+        });
+        
+        throw new Error(`Cobrança já existe para esta data. Status: ${cobrancaExistente.status}`);
+      }
+
+      console.log(`✅ Nenhuma cobrança encontrada para esta data. Prosseguindo com lock ativo...`);
       
-      // Log customizado para New Relic
-      newRelicLog('warn', 'Recorrência pulada - cobrança já existe', {
-        assinaturaId: assinatura.id,
-        recorrenciaId: recorrencia.id,
-        cobrancaExistenteId: cobrancaExistente.id,
-        cobrancaStatus: cobrancaExistente.status,
-        data: hoje,
-        motivo: 'Cobrança duplicada evitada',
-      });
-      
-      throw new Error(`Cobrança já existe para esta data. Status: ${cobrancaExistente.status}`);
+      // Commit da transação será feito após criar a cobrança
+      await queryRunner.commitTransaction();
+      await queryRunner.release();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      await queryRunner.release();
+      throw error;
     }
-
-    console.log(`✅ Nenhuma cobrança encontrada para esta data. Prosseguindo...`);
 
     try {
       // Pagar.me exige pelo menos um telefone no customer para criar pedido
