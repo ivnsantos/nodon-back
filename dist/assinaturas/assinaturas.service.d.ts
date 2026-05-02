@@ -160,6 +160,7 @@ export declare class AssinaturasService {
     private parseDataBrasil;
     private adicionarRecorrencia;
     private removerRecorrencia;
+    private resetarTokensUsuario;
     private registrarCobranca;
     private gerenciarRecorrencia;
     private parseNextDueDate;

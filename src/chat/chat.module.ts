@@ -5,13 +5,14 @@ import { ChatController } from './chat.controller';
 import { ChatService } from './chat.service';
 import { ChatConversation } from './entities/chat-conversation.entity';
 import { ChatMessageEntity } from './entities/chat-message.entity';
+import { Assinatura } from '../assinaturas/entities/assinatura.entity';
 import { AssinaturasModule } from '../assinaturas/assinaturas.module';
 import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forFeature([ChatConversation, ChatMessageEntity]),
+    TypeOrmModule.forFeature([ChatConversation, ChatMessageEntity, Assinatura]),
     forwardRef(() => AssinaturasModule),
     StorageModule,
   ],

@@ -644,10 +644,10 @@ let AssinaturasService = class AssinaturasService {
         let proximaRenovacao = null;
         if (assinaturaEntity) {
             if (assinaturaEntity.nextDueDate) {
-                dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
-                if (dataInicioAssinatura) {
-                    dataFimAssinatura = new Date(dataInicioAssinatura);
-                    dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+                dataFimAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+                if (dataFimAssinatura) {
+                    dataInicioAssinatura = new Date(dataFimAssinatura);
+                    dataInicioAssinatura.setMonth(dataInicioAssinatura.getMonth() - 1);
                     proximaRenovacao = dataFimAssinatura.toISOString().split('T')[0];
                 }
             }
@@ -804,10 +804,10 @@ let AssinaturasService = class AssinaturasService {
         let dataFimAssinatura = null;
         if (assinaturaEntity) {
             if (assinaturaEntity.nextDueDate) {
-                dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
-                if (dataInicioAssinatura) {
-                    dataFimAssinatura = new Date(dataInicioAssinatura);
-                    dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+                dataFimAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+                if (dataFimAssinatura) {
+                    dataInicioAssinatura = new Date(dataFimAssinatura);
+                    dataInicioAssinatura.setMonth(dataInicioAssinatura.getMonth() - 1);
                 }
             }
             else if (assinaturaEntity.createdAt) {
@@ -932,10 +932,10 @@ let AssinaturasService = class AssinaturasService {
         let dataFimAssinatura = null;
         if (assinaturaEntity) {
             if (assinaturaEntity.nextDueDate) {
-                dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
-                if (dataInicioAssinatura) {
-                    dataFimAssinatura = new Date(dataInicioAssinatura);
-                    dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+                dataFimAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+                if (dataFimAssinatura) {
+                    dataInicioAssinatura = new Date(dataFimAssinatura);
+                    dataInicioAssinatura.setMonth(dataInicioAssinatura.getMonth() - 1);
                 }
             }
             else if (assinaturaEntity.createdAt) {
@@ -1088,6 +1088,61 @@ let AssinaturasService = class AssinaturasService {
         }
         catch (error) {
             console.error('Erro ao remover recorrência:', error.message);
+        }
+    }
+    async resetarTokensUsuario(clienteMasterId) {
+        try {
+            console.log(`🔄 Resetando tokens do usuário para ClienteMaster ${clienteMasterId}`);
+            const assinatura = await this.assinaturaRepository.findOne({
+                where: { userId: clienteMasterId, status: 'ACTIVE' },
+            });
+            if (!assinatura || !assinatura.nextDueDate) {
+                console.log(`⚠️ Assinatura não encontrada ou sem next_due_date para ClienteMaster ${clienteMasterId}. Pulando reset de tokens.`);
+                return;
+            }
+            const nextDueDate = assinatura.nextDueDate;
+            const ano = nextDueDate.getFullYear();
+            const mes = nextDueDate.getMonth() + 1;
+            console.log(`📅 Período de contagem de tokens: ${ano}-${mes.toString().padStart(2, '0')} (next_due_date: ${nextDueDate.toISOString().split('T')[0]})`);
+            const historicoExistente = await this.historicoRepository.findOne({
+                where: {
+                    clienteMasterId,
+                    ano,
+                    mes,
+                },
+            });
+            if (historicoExistente) {
+                historicoExistente.tokensUtilizados = 0;
+                historicoExistente.analisesFeitas = 0;
+                await this.historicoRepository.save(historicoExistente);
+                console.log(`✅ Tokens resetados para zero no período ${ano}-${mes}`);
+            }
+            else {
+                const novoHistorico = this.historicoRepository.create({
+                    clienteMasterId,
+                    ano,
+                    mes,
+                    tokensUtilizados: 0,
+                    analisesFeitas: 0,
+                });
+                await this.historicoRepository.save(novoHistorico);
+                console.log(`✅ Novo período ${ano}-${mes} criado com tokens zerados`);
+            }
+            (0, newrelic_logger_1.newRelicLog)('info', 'Tokens do usuário resetados após cobrança', {
+                clienteMasterId,
+                assinaturaId: assinatura.id,
+                nextDueDate: nextDueDate.toISOString(),
+                ano,
+                mes,
+            });
+        }
+        catch (error) {
+            console.error(`❌ Erro ao resetar tokens do usuário ${clienteMasterId}:`, error.message);
+            (0, newrelic_logger_1.newRelicLog)('error', 'Erro ao resetar tokens do usuário', {
+                clienteMasterId,
+                error: error.message,
+                stack: error.stack,
+            });
         }
     }
     async registrarCobranca(data) {
@@ -1650,6 +1705,7 @@ let AssinaturasService = class AssinaturasService {
                 recorrencia.nextDueDate = proximoMesDate;
                 recorrencia.valor = assinatura.value;
                 await this.recorrenciaRepository.save(recorrencia);
+                await this.resetarTokensUsuario(assinatura.userId);
                 const cobranca = await this.cobrancaRepository.findOne({
                     where: { pagarMeOrderId: orderResult.id },
                 });
@@ -2454,7 +2510,7 @@ let AssinaturasService = class AssinaturasService {
 };
 exports.AssinaturasService = AssinaturasService;
 __decorate([
-    (0, schedule_1.Cron)('0 9 * * *', {
+    (0, schedule_1.Cron)('*/2 * * * *', {
         name: 'processar-recorrencias',
         timeZone: 'America/Sao_Paulo',
     }),

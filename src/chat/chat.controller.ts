@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Res, Get, Query, Request, Param, Inject, forwardRef, ForbiddenException } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Res, Get, Query, Request, Param, Inject, forwardRef, ForbiddenException, Headers } from '@nestjs/common';
 import type { Response } from 'express';
 import { ChatService } from './chat.service';
 import { ChatMessageDto, ChatResponseDto } from './dto/chat-message.dto';
@@ -90,51 +90,15 @@ export class ChatController {
     };
   }
 
-  @Get('conversations')
+  @Get('conversations/periodo')
   @UseGuards(JwtAuthGuard)
-  async getConversations(@Request() req, @Query('clienteMasterId') clienteMasterId?: string) {
+  async getConversacoesPeriodo(@Request() req) {
     const userId = req.user.id;
-    
-    // Buscar total de tokens de todas as conversas (histórico completo)
-    const totalUsedTokens = await this.chatService.getTotalTokensByUser(userId);
-    
-    // Calcular período da assinatura usando nextDueDate
-    // nextDueDate define o INÍCIO, o FIM é 1 mês depois
-    let dataInicioAssinatura: Date | null = null;
-    let dataFimAssinatura: Date | null = null;
+    const clienteMasterId = req.user.clientesMasterIds?.[0] || null;
 
-    if (clienteMasterId) {
-      try {
-        const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
-        if (assinatura && assinatura.nextDueDate) {
-          // nextDueDate é o INÍCIO da assinatura
-          dataInicioAssinatura = new Date(assinatura.nextDueDate);
-          
-          // FIM é 1 mês depois do início
-          dataFimAssinatura = new Date(dataInicioAssinatura);
-          dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
-        }
-      } catch (error) {
-        console.warn('⚠️ Não foi possível obter info de assinatura:', error.message);
-      }
-    }
+    const { conversations, totalTokens, totalTokensPeriodo, dataInicio, dataFim } =
+      await this.chatService.getConversationsForUser(userId, clienteMasterId);
 
-    // Buscar conversas do período da assinatura ou todas se não tiver assinatura
-    let conversations;
-    let totalUsedTokensPeriodo = 0;
-
-    if (dataInicioAssinatura) {
-      conversations = await this.chatService.getConversationsByUserInPeriod(userId, dataInicioAssinatura);
-      totalUsedTokensPeriodo = await this.chatService.getTotalTokensByUserInPeriod(
-        userId, 
-        dataInicioAssinatura,
-        dataFimAssinatura || undefined
-      );
-    } else {
-      conversations = await this.chatService.getConversationsByUser(userId);
-      totalUsedTokensPeriodo = totalUsedTokens;
-    }
-    
     const result = conversations.map((c) => ({
       id: c.id,
       title: c.title,
@@ -142,26 +106,53 @@ export class ChatController {
       updatedAt: c.updatedAt,
       createdAt: c.createdAt,
     }));
-    
+
+    return {
+      statusCode: 200,
+      message: 'Success',
+      data: {
+        periodo: {
+          inicio: dataInicio ? dataInicio.toISOString().split('T')[0] : null,
+          fim: dataFim ? dataFim.toISOString().split('T')[0] : null,
+        },
+        conversations: result,
+        totalUsedTokens: totalTokens,
+        totalUsedTokensPeriodo: totalTokensPeriodo,
+      },
+    };
+  }
+
+  @Get('conversations')
+  @UseGuards(JwtAuthGuard)
+  async getConversations(@Request() req, @Headers('x-cliente-master-id') clienteMasterIdHeader?: string) {
+    const userId = req.user.id;
+    const clienteMasterId = clienteMasterIdHeader || req.user.clientesMasterIds?.[0] || null;
+
+    // Usar o service para buscar conversas filtradas pelo período da assinatura
+    const { conversations, totalTokens, totalTokensPeriodo } = await this.chatService.getConversationsForUser(
+      userId,
+      clienteMasterId,
+    );
+
+    const result = conversations.map((c) => ({
+      id: c.id,
+      title: c.title,
+      totalTokens: c.totalTokens || 0,
+      updatedAt: c.updatedAt,
+      createdAt: c.createdAt,
+    }));
+
     return {
       statusCode: 200,
       message: 'Success',
       data: {
         conversations: result,
-        totalUsedTokens,
-        totalUsedTokensPeriodo,
+        totalUsedTokens: totalTokens,
+        totalUsedTokensPeriodo: totalTokensPeriodo,
       },
     };
   }
 
-  @Post('conversation')
-  @UseGuards(JwtAuthGuard)
-  async createConversation(@Request() req, @Query('clienteMasterId') clienteMasterId?: string) {
-    const conversation = await this.chatService.createConversation(req.user.id, clienteMasterId);
-    return {
-      conversationId: conversation.id,
-    };
-  }
 
   @Post('stream')
   @UseGuards(JwtAuthGuard)
@@ -189,15 +180,15 @@ export class ChatController {
           const limitePlano = dashboardInfo?.tokensChat?.limitePlano || 0;
           
           if (limitePlano > 0) {
-            // Busca a assinatura para obter o nextDueDate (início da assinatura)
+            // Busca a assinatura para obter o nextDueDate (fim do período)
             const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
             if (assinatura && assinatura.nextDueDate) {
-              // nextDueDate é o INÍCIO da assinatura
-              const dataInicioAssinatura = new Date(assinatura.nextDueDate);
+              // nextDueDate é o FIM do período da assinatura
+              const dataFimAssinatura = new Date(assinatura.nextDueDate);
               
-              // FIM é 1 mês depois do início
-              const dataFimAssinatura = new Date(dataInicioAssinatura);
-              dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+              // INÍCIO é 1 mês antes do nextDueDate
+              const dataInicioAssinatura = new Date(dataFimAssinatura);
+              dataInicioAssinatura.setMonth(dataInicioAssinatura.getMonth() - 1);
               
               const tokensUsadosPeriodo = await this.chatService.getTotalTokensByUserInPeriod(
                 req.user.id,
@@ -348,15 +339,15 @@ export class ChatController {
         const limitePlano = dashboardInfo?.tokensChat?.limitePlano || 0;
         
         if (limitePlano > 0) {
-          // Busca a assinatura para obter o nextDueDate (início da assinatura)
+          // Busca a assinatura para obter o nextDueDate (fim do período)
           const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
           if (assinatura && assinatura.nextDueDate) {
-            // nextDueDate é o INÍCIO da assinatura
-            const dataInicioAssinatura = new Date(assinatura.nextDueDate);
+            // nextDueDate é o FIM do período da assinatura
+            const dataFimAssinatura = new Date(assinatura.nextDueDate);
             
-            // FIM é 1 mês depois do início
-            const dataFimAssinatura = new Date(dataInicioAssinatura);
-            dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+            // INÍCIO é 1 mês antes do nextDueDate
+            const dataInicioAssinatura = new Date(dataFimAssinatura);
+            dataInicioAssinatura.setMonth(dataInicioAssinatura.getMonth() - 1);
             
             const tokensUsadosPeriodo = await this.chatService.getTotalTokensByUserInPeriod(
               req.user.id, 

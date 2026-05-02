@@ -771,28 +771,25 @@ export class AssinaturasService {
       quantidadeUsuarios = usuarios.length;
     }
 
-    // Calcula o período da assinatura usando nextDueDate da ASAAS
-    // nextDueDate define o INÍCIO da assinatura, o FIM é 1 mês depois
+    // nextDueDate é a data da PRÓXIMA cobrança = FIM do período atual
+    // INÍCIO do período = nextDueDate - 1 mês
     const agora = new Date();
     let dataInicioAssinatura: Date | null = null;
     let dataFimAssinatura: Date | null = null;
     let proximaRenovacao: string | null = null;
 
     if (assinaturaEntity) {
-      // Se tem nextDueDate da ASAAS, usa ele como data de INÍCIO do período
       if (assinaturaEntity.nextDueDate) {
-        // Usa parseNextDueDate para garantir conversão correta (pode vir como string ou Date)
-        dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+        dataFimAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
         
-        if (dataInicioAssinatura) {
-          // Data de fim é 1 mês após o início (nextDueDate)
-          dataFimAssinatura = new Date(dataInicioAssinatura);
-          dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+        if (dataFimAssinatura) {
+          dataInicioAssinatura = new Date(dataFimAssinatura);
+          dataInicioAssinatura.setMonth(dataInicioAssinatura.getMonth() - 1);
           
           proximaRenovacao = dataFimAssinatura.toISOString().split('T')[0];
         }
       } else if (assinaturaEntity.createdAt) {
-        // Fallback: se não tem nextDueDate, calcula baseado em createdAt (comportamento antigo)
+        // Fallback: se não tem nextDueDate, calcula baseado em createdAt
         dataInicioAssinatura = new Date(assinaturaEntity.createdAt);
         const diaFaturamento = dataInicioAssinatura.getDate();
         
@@ -1007,22 +1004,19 @@ export class AssinaturasService {
       },
     });
 
-    // Calcula o período da assinatura usando nextDueDate da ASAAS
-    // nextDueDate define o INÍCIO da assinatura, o FIM é 1 mês depois
+    // nextDueDate é a data da PRÓXIMA cobrança = FIM do período atual
+    // INÍCIO do período = nextDueDate - 1 mês
     const agoraPeriodo = new Date();
     let dataInicioAssinatura: Date | null = null;
     let dataFimAssinatura: Date | null = null;
 
     if (assinaturaEntity) {
-      // Se tem nextDueDate da ASAAS, usa ele como data de INÍCIO do período
       if (assinaturaEntity.nextDueDate) {
-        // Usa parseNextDueDate para garantir conversão correta (pode vir como string ou Date)
-        dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+        dataFimAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
         
-        if (dataInicioAssinatura) {
-          // Data de fim é 1 mês após o início (nextDueDate)
-          dataFimAssinatura = new Date(dataInicioAssinatura);
-          dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+        if (dataFimAssinatura) {
+          dataInicioAssinatura = new Date(dataFimAssinatura);
+          dataInicioAssinatura.setMonth(dataInicioAssinatura.getMonth() - 1);
         }
       } else if (assinaturaEntity.createdAt) {
         // Fallback: se não tem nextDueDate, calcula baseado em createdAt
@@ -1193,10 +1187,10 @@ export class AssinaturasService {
 
     if (assinaturaEntity) {
       if (assinaturaEntity.nextDueDate) {
-        dataInicioAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
-        if (dataInicioAssinatura) {
-          dataFimAssinatura = new Date(dataInicioAssinatura);
-          dataFimAssinatura.setMonth(dataFimAssinatura.getMonth() + 1);
+        dataFimAssinatura = this.parseNextDueDate(assinaturaEntity.nextDueDate);
+        if (dataFimAssinatura) {
+          dataInicioAssinatura = new Date(dataFimAssinatura);
+          dataInicioAssinatura.setMonth(dataInicioAssinatura.getMonth() - 1);
         }
       } else if (assinaturaEntity.createdAt) {
         // Fallback
@@ -1415,6 +1409,78 @@ export class AssinaturasService {
     } catch (error: any) {
       console.error('Erro ao remover recorrência:', error.message);
       // Não lança erro para não bloquear o fluxo principal
+    }
+  }
+
+  /**
+   * Reseta os tokens do usuário para zero após cobrança bem-sucedida da recorrência
+   * O período de contagem de tokens é baseado no next_due_date da assinatura
+   */
+  private async resetarTokensUsuario(clienteMasterId: string): Promise<void> {
+    try {
+      console.log(`🔄 Resetando tokens do usuário para ClienteMaster ${clienteMasterId}`);
+
+      // Buscar a assinatura atual do ClienteMaster para obter o next_due_date
+      const assinatura = await this.assinaturaRepository.findOne({
+        where: { userId: clienteMasterId, status: 'ACTIVE' },
+      });
+
+      if (!assinatura || !assinatura.nextDueDate) {
+        console.log(`⚠️ Assinatura não encontrada ou sem next_due_date para ClienteMaster ${clienteMasterId}. Pulando reset de tokens.`);
+        return;
+      }
+
+      // Calcular o período baseado no next_due_date
+      // O período atual é do início da assinatura até o next_due_date
+      const nextDueDate = assinatura.nextDueDate;
+      const ano = nextDueDate.getFullYear();
+      const mes = nextDueDate.getMonth() + 1; // getMonth() retorna 0-11
+
+      console.log(`📅 Período de contagem de tokens: ${ano}-${mes.toString().padStart(2, '0')} (next_due_date: ${nextDueDate.toISOString().split('T')[0]})`);
+
+      // Buscar ou criar o histórico mensal para o novo período
+      const historicoExistente = await this.historicoRepository.findOne({
+        where: {
+          clienteMasterId,
+          ano,
+          mes,
+        },
+      });
+
+      if (historicoExistente) {
+        // Resetar tokens para zero no período atual
+        historicoExistente.tokensUtilizados = 0;
+        historicoExistente.analisesFeitas = 0;
+        await this.historicoRepository.save(historicoExistente);
+        console.log(`✅ Tokens resetados para zero no período ${ano}-${mes}`);
+      } else {
+        // Criar novo registro com tokens zerados
+        const novoHistorico = this.historicoRepository.create({
+          clienteMasterId,
+          ano,
+          mes,
+          tokensUtilizados: 0,
+          analisesFeitas: 0,
+        });
+        await this.historicoRepository.save(novoHistorico);
+        console.log(`✅ Novo período ${ano}-${mes} criado com tokens zerados`);
+      }
+
+      newRelicLog('info', 'Tokens do usuário resetados após cobrança', {
+        clienteMasterId,
+        assinaturaId: assinatura.id,
+        nextDueDate: nextDueDate.toISOString(),
+        ano,
+        mes,
+      });
+    } catch (error: any) {
+      console.error(`❌ Erro ao resetar tokens do usuário ${clienteMasterId}:`, error.message);
+      // Não lança erro para não bloquear o fluxo principal
+      newRelicLog('error', 'Erro ao resetar tokens do usuário', {
+        clienteMasterId,
+        error: error.message,
+        stack: error.stack,
+      });
     }
   }
 
@@ -1638,10 +1704,13 @@ export class AssinaturasService {
    * Usa expressão cron: 0 9 * * * (todo dia às 9h)
    * Timezone: America/Sao_Paulo (horário de Brasília)
    */
-  @Cron('0 9 * * *', {
-    name: 'processar-recorrencias',
-    timeZone: 'America/Sao_Paulo',
-  })
+  // faça cron rodar a cada 2 min
+
+  //  @Cron('0 9 * * *', {
+    @Cron('*/2 * * * *', {
+      name: 'processar-recorrencias',
+      timeZone: 'America/Sao_Paulo',
+    })
   async handleCronProcessarRecorrencias() {
     const dataExecucao = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     console.log(`\n${'#'.repeat(80)}`);
@@ -2082,56 +2151,35 @@ export class AssinaturasService {
     const hoje = this.getDataAtualBrasil(); // Formato: YYYY-MM-DD
     const hojeDate = this.parseDataBrasil(hoje);
 
-    // ⚠️ VALIDAÇÃO ANTI-DUPLICAÇÃO COM LOCK: Usar transação com lock pessimista
-    // Isso previne race condition quando múltiplos workers processam a mesma recorrência simultaneamente
-    console.log(`🔍 Verificando se já existe cobrança para esta assinatura na data de hoje (com lock)...`);
-    
-    const queryRunner = this.cobrancaRepository.manager.connection.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    // ⚠️ VALIDAÇÃO ANTI-DUPLICAÇÃO: Verificar se já existe cobrança para esta assinatura na data de hoje
+    console.log(`🔍 Verificando se já existe cobrança para esta assinatura na data de hoje...`);
+    const cobrancaExistente = await this.cobrancaRepository
+      .createQueryBuilder('cobranca')
+      .where('cobranca.assinatura_id = :assinaturaId', { assinaturaId: assinatura.id })
+      .andWhere('cobranca.due_date = :hoje', { hoje: hojeDate })
+      .getOne();
 
-    try {
-      // Lock pessimista: bloqueia a linha da assinatura até o fim da transação
-      const cobrancaExistente = await queryRunner.manager
-        .createQueryBuilder(Cobranca, 'cobranca')
-        .setLock('pessimistic_write')
-        .where('cobranca.assinatura_id = :assinaturaId', { assinaturaId: assinatura.id })
-        .andWhere('cobranca.due_date = :hoje', { hoje: hojeDate })
-        .getOne();
-
-      if (cobrancaExistente) {
-        await queryRunner.rollbackTransaction();
-        await queryRunner.release();
-        
-        console.log(`⚠️ JÁ EXISTE cobrança para assinatura ${assinatura.id} na data ${hoje}`);
-        console.log(`   Cobrança ID: ${cobrancaExistente.id}`);
-        console.log(`   Status: ${cobrancaExistente.status}`);
-        console.log(`   Pagar.me Order ID: ${cobrancaExistente.pagarMeOrderId}`);
-        console.log(`   ⏭️ Pulando esta recorrência para evitar cobrança duplicada`);
-        
-        // Log customizado para New Relic
-        newRelicLog('warn', 'Recorrência pulada - cobrança já existe', {
-          assinaturaId: assinatura.id,
-          recorrenciaId: recorrencia.id,
-          cobrancaExistenteId: cobrancaExistente.id,
-          cobrancaStatus: cobrancaExistente.status,
-          data: hoje,
-          motivo: 'Cobrança duplicada evitada (com lock)',
-        });
-        
-        throw new Error(`Cobrança já existe para esta data. Status: ${cobrancaExistente.status}`);
-      }
-
-      console.log(`✅ Nenhuma cobrança encontrada para esta data. Prosseguindo com lock ativo...`);
+    if (cobrancaExistente) {
+      console.log(`⚠️ JÁ EXISTE cobrança para assinatura ${assinatura.id} na data ${hoje}`);
+      console.log(`   Cobrança ID: ${cobrancaExistente.id}`);
+      console.log(`   Status: ${cobrancaExistente.status}`);
+      console.log(`   Pagar.me Order ID: ${cobrancaExistente.pagarMeOrderId}`);
+      console.log(`   ⏭️ Pulando esta recorrência para evitar cobrança duplicada`);
       
-      // Commit da transação será feito após criar a cobrança
-      await queryRunner.commitTransaction();
-      await queryRunner.release();
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      await queryRunner.release();
-      throw error;
+      // Log customizado para New Relic
+      newRelicLog('warn', 'Recorrência pulada - cobrança já existe', {
+        assinaturaId: assinatura.id,
+        recorrenciaId: recorrencia.id,
+        cobrancaExistenteId: cobrancaExistente.id,
+        cobrancaStatus: cobrancaExistente.status,
+        data: hoje,
+        motivo: 'Cobrança duplicada evitada',
+      });
+      
+      throw new Error(`Cobrança já existe para esta data. Status: ${cobrancaExistente.status}`);
     }
+
+    console.log(`✅ Nenhuma cobrança encontrada para esta data. Prosseguindo...`);
 
     try {
       // Pagar.me exige pelo menos um telefone no customer para criar pedido
@@ -2227,6 +2275,9 @@ export class AssinaturasService {
         recorrencia.nextDueDate = proximoMesDate;
         recorrencia.valor = assinatura.value;
         await this.recorrenciaRepository.save(recorrencia);
+
+        // Resetar tokens do usuário para zero após cobrança bem-sucedida
+        await this.resetarTokensUsuario(assinatura.userId);
 
         const cobranca = await this.cobrancaRepository.findOne({
           where: { pagarMeOrderId: orderResult.id },

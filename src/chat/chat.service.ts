@@ -9,6 +9,7 @@ import { ChatMessageDto, ChatResponseDto } from './dto/chat-message.dto';
 import { ChatConversation } from './entities/chat-conversation.entity';
 import { ChatMessageEntity } from './entities/chat-message.entity';
 import { StorageService } from '../storage/storage.service';
+import { Assinatura } from '../assinaturas/entities/assinatura.entity';
 
 @Injectable()
 export class ChatService {
@@ -160,6 +161,8 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     private conversationRepository: Repository<ChatConversation>,
     @InjectRepository(ChatMessageEntity)
     private messageRepository: Repository<ChatMessageEntity>,
+    @InjectRepository(Assinatura)
+    private assinaturaRepository: Repository<Assinatura>,
     private storageService: StorageService,
   ) {
     this.apiKey = this.configService.get<string>('DEEPSEEK_API_KEY') || '';
@@ -216,14 +219,99 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
     return conversations;
   }
 
-  async getConversationsByUserInPeriod(userId: string, dataInicio: Date): Promise<ChatConversation[]> {
-    const conversations = await this.conversationRepository
+  async getConversationsByUserInPeriod(userId: string, dataInicio: Date, dataFim?: Date): Promise<ChatConversation[]> {
+    const queryBuilder = this.conversationRepository
       .createQueryBuilder('c')
       .where('c.user_id = :userId', { userId })
-      .andWhere('c.created_at >= :dataInicio', { dataInicio })
-      .orderBy('c.updated_at', 'DESC')
-      .getMany();
+      .andWhere('c.created_at >= :dataInicio', { dataInicio });
+    
+    if (dataFim) {
+      queryBuilder.andWhere('c.created_at <= :dataFim', { dataFim });
+    }
+    
+    const conversations = await queryBuilder.orderBy('c.updated_at', 'DESC').getMany();
     return conversations;
+  }
+
+  /**
+   * Busca conversas de um usuário filtradas pelo período da assinatura.
+   * Se clienteMasterId for informado, busca o nextDueDate da assinatura e filtra por período.
+   * Retorna apenas conversas criadas no período da assinatura (1 mês antes do nextDueDate).
+   */
+  async getConversationsForUser(
+    userId: string,
+    clienteMasterId?: string | null,
+  ): Promise<{ conversations: ChatConversation[]; totalTokens: number; totalTokensPeriodo: number; dataInicio: Date | null; dataFim: Date | null }> {
+    let dataInicio: Date | null = null;
+    let dataFim: Date | null = null;
+
+    // Se tem clienteMasterId, buscar assinatura para obter período
+    if (clienteMasterId) {
+      const assinatura = await this.assinaturaRepository.findOne({
+        where: {
+          userId: clienteMasterId,
+          status: 'ACTIVE',
+        },
+      });
+
+      if (assinatura?.nextDueDate) {
+        // nextDueDate é o FIM do período
+        dataFim = new Date(assinatura.nextDueDate);
+        // INÍCIO é 1 mês ANTES do nextDueDate (não 30 dias fixos)
+        dataInicio = new Date(dataFim);
+        dataInicio.setMonth(dataInicio.getMonth() - 1);
+      }
+    }
+
+    let conversations: ChatConversation[];
+    let totalTokens: number;
+    let totalTokensPeriodo: number;
+
+    if (dataInicio && dataFim) {
+      // Buscar conversas pelo período da assinatura
+      const whereClause = clienteMasterId
+        ? '(c.cliente_master_id = :clienteMasterId OR (c.cliente_master_id IS NULL AND c.user_id = :userId))'
+        : 'c.user_id = :userId';
+      const params = clienteMasterId
+        ? { clienteMasterId, userId, dataInicio, dataFim }
+        : { userId, dataInicio, dataFim };
+
+      conversations = await this.conversationRepository
+        .createQueryBuilder('c')
+        .where(whereClause, params)
+        .andWhere('c.created_at >= :dataInicio', { dataInicio })
+        .andWhere('c.created_at <= :dataFim', { dataFim })
+        .orderBy('c.updated_at', 'DESC')
+        .getMany();
+
+      // Tokens do período
+      if (clienteMasterId) {
+        totalTokensPeriodo = await this.getTotalTokensForDashboardInPeriod(clienteMasterId, userId, dataInicio, dataFim);
+        totalTokens = await this.getTotalTokensForDashboard(clienteMasterId, userId);
+      } else {
+        totalTokensPeriodo = await this.getTotalTokensByUserInPeriod(userId, dataInicio, dataFim);
+        totalTokens = await this.getTotalTokensByUser(userId);
+      }
+    } else {
+      // Sem período definido, retornar todas as conversas
+      if (clienteMasterId) {
+        conversations = await this.conversationRepository
+          .createQueryBuilder('c')
+          .where('(c.cliente_master_id = :clienteMasterId OR (c.cliente_master_id IS NULL AND c.user_id = :userId))', {
+            clienteMasterId,
+            userId,
+          })
+          .orderBy('c.updated_at', 'DESC')
+          .getMany();
+        totalTokens = await this.getTotalTokensForDashboard(clienteMasterId, userId);
+      } else {
+        conversations = await this.getConversationsByUser(userId);
+        totalTokens = await this.getTotalTokensByUser(userId);
+      }
+      totalTokensPeriodo = totalTokens;
+    }
+
+    return { conversations, totalTokens, totalTokensPeriodo, dataInicio, dataFim };
   }
 
   async getTotalTokensByUser(userId: string): Promise<number> {
