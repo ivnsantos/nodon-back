@@ -241,7 +241,7 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
   async getConversationsForUser(
     userId: string,
     clienteMasterId?: string | null,
-  ): Promise<{ conversations: ChatConversation[]; totalTokens: number; totalTokensPeriodo: number; dataInicio: Date | null; dataFim: Date | null }> {
+  ): Promise<{ conversations: ChatConversation[]; totalTokens: number; totalTokensPeriodo: number; assinaturaVencida: boolean; dataInicio: Date | null; dataFim: Date | null }> {
     let dataInicio: Date | null = null;
     let dataFim: Date | null = null;
 
@@ -311,7 +311,9 @@ Responda sempre em português brasileiro, de forma clara, organizada e profissio
       totalTokensPeriodo = totalTokens;
     }
 
-    return { conversations, totalTokens, totalTokensPeriodo, dataInicio, dataFim };
+    const assinaturaVencida = dataFim ? dataFim < new Date() : false;
+
+    return { conversations, totalTokens, totalTokensPeriodo, assinaturaVencida, dataInicio, dataFim };
   }
 
   async getTotalTokensByUser(userId: string): Promise<number> {
