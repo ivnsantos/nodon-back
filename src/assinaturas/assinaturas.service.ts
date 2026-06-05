@@ -1840,13 +1840,10 @@ export class AssinaturasService {
    * Usa expressão cron: 0 9 * * * (todo dia às 9h)
    * Timezone: America/Sao_Paulo (horário de Brasília)
    */
-  // faça cron rodar a cada 2 min
-
-  //  @Cron('0 9 * * *', {
-    @Cron('*0 9 * * *', {
-      name: 'processar-recorrencias',
-      timeZone: 'America/Sao_Paulo',
-    })
+  @Cron('0 9 * * *', {
+    name: 'processar-recorrencias',
+    timeZone: 'America/Sao_Paulo',
+  })
   async handleCronProcessarRecorrencias() {
     const dataExecucao = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
     console.log(`\n${'#'.repeat(80)}`);
