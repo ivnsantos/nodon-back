@@ -96,7 +96,7 @@ export class ChatController {
     const userId = req.user.id;
     const clienteMasterId = req.user.clientesMasterIds?.[0] || null;
 
-    const { conversations, totalTokens, totalTokensPeriodo, assinaturaVencida, dataInicio, dataFim } =
+    const { conversations, totalTokens, totalTokensPeriodo, dataInicio, dataFim } =
       await this.chatService.getConversationsForUser(userId, clienteMasterId);
 
     const result = conversations.map((c) => ({
@@ -115,10 +115,6 @@ export class ChatController {
           inicio: dataInicio ? dataInicio.toISOString().split('T')[0] : null,
           fim: dataFim ? dataFim.toISOString().split('T')[0] : null,
         },
-        assinatura: {
-          vencida: assinaturaVencida,
-          aviso: assinaturaVencida ? 'Assinatura vencida. Renove para continuar usando o serviço.' : null,
-        },
         conversations: result,
         totalUsedTokens: totalTokens,
         totalUsedTokensPeriodo: totalTokensPeriodo,
@@ -133,7 +129,7 @@ export class ChatController {
     const clienteMasterId = clienteMasterIdHeader || req.user.clientesMasterIds?.[0] || null;
 
     // Usar o service para buscar conversas filtradas pelo período da assinatura
-    const { conversations, totalTokens, totalTokensPeriodo, assinaturaVencida } = await this.chatService.getConversationsForUser(
+    const { conversations, totalTokens, totalTokensPeriodo } = await this.chatService.getConversationsForUser(
       userId,
       clienteMasterId,
     );
@@ -150,10 +146,6 @@ export class ChatController {
       statusCode: 200,
       message: 'Success',
       data: {
-        assinatura: {
-          vencida: assinaturaVencida,
-          aviso: assinaturaVencida ? 'Assinatura vencida. Renove para continuar usando o serviço.' : null,
-        },
         conversations: result,
         totalUsedTokens: totalTokens,
         totalUsedTokensPeriodo: totalTokensPeriodo,
@@ -181,25 +173,19 @@ export class ChatController {
         return;
       }
 
-      // Verificar assinatura e limite de tokens
+      // Verificar limite de tokens do mês
       if (clienteMasterId) {
         try {
-          const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
-          if (assinatura && assinatura.nextDueDate) {
-            const dataFimAssinatura = new Date(assinatura.nextDueDate);
-
-            // Verificar se assinatura está vencida
-            if (dataFimAssinatura < new Date()) {
-              res.write(`data: ${JSON.stringify({ type: 'error', message: 'Assinatura vencida. Renove para continuar enviando mensagens.' })}\n\n`);
-              res.end();
-              return;
-            }
-
-            // Verificar limite de tokens do período
-            const dashboardInfo = await this.assinaturasService.getDashboardInfo(clienteMasterId, req.user.tipo);
-            const limitePlano = dashboardInfo?.tokensChat?.limitePlano || 0;
-
-            if (limitePlano > 0) {
+          const dashboardInfo = await this.assinaturasService.getDashboardInfo(clienteMasterId, req.user.tipo);
+          const limitePlano = dashboardInfo?.tokensChat?.limitePlano || 0;
+          
+          if (limitePlano > 0) {
+            // Busca a assinatura para obter o nextDueDate (fim do período)
+            const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
+            if (assinatura && assinatura.nextDueDate) {
+              // nextDueDate é o FIM do período da assinatura
+              const dataFimAssinatura = new Date(assinatura.nextDueDate);
+              
               // INÍCIO é 1 mês antes do nextDueDate
               const dataInicioAssinatura = new Date(dataFimAssinatura);
               dataInicioAssinatura.setMonth(dataInicioAssinatura.getMonth() - 1);
@@ -349,20 +335,17 @@ export class ChatController {
     // Verificar limite de tokens do mês
     if (clienteMasterId) {
       try {
-        const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
-        if (assinatura && assinatura.nextDueDate) {
-          const dataFimAssinatura = new Date(assinatura.nextDueDate);
-
-          // Verificar se assinatura está vencida
-          if (dataFimAssinatura < new Date()) {
-            throw new ForbiddenException('Assinatura vencida. Renove para continuar enviando mensagens.');
-          }
-
-          // Verificar limite de tokens do período
-          const dashboardInfo = await this.assinaturasService.getDashboardInfo(clienteMasterId, req.user.tipo);
-          const limitePlano = dashboardInfo?.tokensChat?.limitePlano || 0;
-          
-          if (limitePlano > 0) {
+        const dashboardInfo = await this.assinaturasService.getDashboardInfo(clienteMasterId, req.user.tipo);
+        const limitePlano = dashboardInfo?.tokensChat?.limitePlano || 0;
+        
+        if (limitePlano > 0) {
+          // Busca a assinatura para obter o nextDueDate (fim do período)
+          const assinatura = await this.assinaturasService.findByUserId(clienteMasterId);
+          if (assinatura && assinatura.nextDueDate) {
+            // nextDueDate é o FIM do período da assinatura
+            const dataFimAssinatura = new Date(assinatura.nextDueDate);
+            
+            // INÍCIO é 1 mês antes do nextDueDate
             const dataInicioAssinatura = new Date(dataFimAssinatura);
             dataInicioAssinatura.setMonth(dataInicioAssinatura.getMonth() - 1);
             

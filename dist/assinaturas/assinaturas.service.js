@@ -442,7 +442,8 @@ let AssinaturasService = class AssinaturasService {
             if (subscription.status !== 'ACTIVE') {
                 subscription.status = 'ACTIVE';
                 if (!subscription.nextDueDate) {
-                    subscription.nextDueDate = this.parseDataBrasil(this.calcularProximoMes());
+                    const proximaStr = await this.calcularProximoVencimentoPorPlano(subscription.planoId);
+                    subscription.nextDueDate = this.parseDataBrasil(proximaStr);
                 }
                 await this.assinaturaRepository.save(subscription);
                 await this.gerenciarRecorrencia(subscription);
@@ -1037,34 +1038,121 @@ let AssinaturasService = class AssinaturasService {
         const dia = partes.find(p => p.type === 'day')?.value.padStart(2, '0') || '00';
         return `${ano}-${mes}-${dia}`;
     }
-    calcularProximoMes() {
-        const agora = new Date();
+    async getCicloMesesPlano(planoId) {
+        if (!planoId) {
+            return 1;
+        }
+        const plano = await this.planosService.findById(planoId);
+        const ciclo = Number(plano?.ciclo ?? 1);
+        return ciclo === 3 ? 3 : 1;
+    }
+    calcularProximoVencimentoAPartirDe(dataBase, cicloMeses) {
+        const meses = cicloMeses === 3 ? 3 : 1;
+        const proxima = new Date(dataBase);
+        proxima.setMonth(proxima.getMonth() + meses);
         const formatter = new Intl.DateTimeFormat('pt-BR', {
             timeZone: 'America/Sao_Paulo',
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
         });
-        const proximoMes = new Date(agora);
-        proximoMes.setMonth(proximoMes.getMonth() + 1);
-        const partes = formatter.formatToParts(proximoMes);
-        const ano = partes.find(p => p.type === 'year')?.value || '0000';
-        const mes = partes.find(p => p.type === 'month')?.value.padStart(2, '0') || '00';
-        const dia = partes.find(p => p.type === 'day')?.value.padStart(2, '0') || '00';
+        const partes = formatter.formatToParts(proxima);
+        const ano = partes.find((p) => p.type === 'year')?.value || '0000';
+        const mes = partes.find((p) => p.type === 'month')?.value.padStart(2, '0') || '00';
+        const dia = partes.find((p) => p.type === 'day')?.value.padStart(2, '0') || '00';
         return `${ano}-${mes}-${dia}`;
+    }
+    async calcularProximoVencimentoPorPlano(planoId, dataBase = new Date()) {
+        const ciclo = await this.getCicloMesesPlano(planoId);
+        return this.calcularProximoVencimentoAPartirDe(dataBase, ciclo);
+    }
+    calcularProximoMes() {
+        return this.calcularProximoVencimentoAPartirDe(new Date(), 1);
     }
     parseDataBrasil(dataString) {
         const [year, month, day] = dataString.split('-').map(Number);
         const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
         return date;
     }
+    formatDateOnly(data) {
+        if (typeof data === 'string') {
+            const s = data.split('T')[0];
+            return s.length >= 10 ? s.substring(0, 10) : s;
+        }
+        const y = data.getUTCFullYear();
+        const m = String(data.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(data.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+    normalizarDataVencimento(data) {
+        return this.parseDataBrasil(this.formatDateOnly(data));
+    }
+    async buscarRecorrenciasVencidasOuAtrasadas(hoje) {
+        const rows = await this.recorrenciaRepository.manager.query(`SELECT r.id
+       FROM recorrencias r
+       WHERE r.next_due_date IS NOT NULL
+         AND r.next_due_date::date <= $1::date
+       ORDER BY r.next_due_date ASC`, [hoje]);
+        if (rows.length === 0) {
+            const [diag] = await this.recorrenciaRepository.manager.query(`SELECT
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE next_due_date::date <= $1::date)::int AS vencidas_ou_hoje,
+           MIN(next_due_date::text) AS menor_vencimento,
+           MAX(next_due_date::text) AS maior_vencimento
+         FROM recorrencias`, [hoje]);
+            console.log(`📊 Diagnóstico tabela recorrencias (hoje=${hoje}):`, diag);
+            return [];
+        }
+        const ids = rows.map((r) => r.id);
+        return this.recorrenciaRepository.find({
+            where: { id: (0, typeorm_2.In)(ids) },
+            relations: ['assinatura'],
+            order: { nextDueDate: 'ASC' },
+        });
+    }
+    async cobrancaJaPagaParaVencimento(assinaturaId, userId, vencimentoStr) {
+        return this.cobrancaRepository
+            .createQueryBuilder('cobranca')
+            .where('(cobranca.assinatura_id = :assinaturaId OR cobranca.user_id = :userId)', {
+            assinaturaId,
+            userId,
+        })
+            .andWhere('cobranca.due_date::date = CAST(:vencimento AS date)', { vencimento: vencimentoStr })
+            .andWhere("LOWER(TRIM(cobranca.status)) IN ('paid', 'confirmed', 'received')")
+            .getOne();
+    }
+    async cobrancaPagaNoPeriodoAtraso(assinaturaId, userId, vencimentoStr, hoje) {
+        const rows = await this.cobrancaRepository.manager.query(`SELECT c.id, c.due_date::text AS due_date
+       FROM cobrancas c
+       WHERE (c.assinatura_id = $1 OR c.user_id = $2)
+         AND LOWER(TRIM(c.status)) IN ('paid', 'confirmed', 'received')
+         AND c.due_date::date >= $3::date
+         AND c.due_date::date <= $4::date
+       ORDER BY c.created_at DESC
+       LIMIT 1`, [assinaturaId, userId, vencimentoStr, hoje]);
+        return rows[0] ?? null;
+    }
+    async avancarVencimentoRecorrencia(recorrencia, assinatura, vencimentoDate) {
+        const ciclo = await this.getCicloMesesPlano(assinatura.planoId);
+        const proximaDataStr = this.calcularProximoVencimentoAPartirDe(vencimentoDate, ciclo);
+        const proximaData = this.parseDataBrasil(proximaDataStr);
+        recorrencia.nextDueDate = proximaData;
+        recorrencia.valor = assinatura.value;
+        await this.recorrenciaRepository.save(recorrencia);
+        assinatura.nextDueDate = proximaData;
+        await this.assinaturaRepository.save(assinatura);
+        console.log(`📅 Próximo vencimento (ciclo ${ciclo} mês(es)): ${proximaDataStr}`);
+        return proximaDataStr;
+    }
     async adicionarRecorrencia(assinatura) {
         try {
+            const ciclo = await this.getCicloMesesPlano(assinatura.planoId);
+            const fallbackVencimento = this.parseDataBrasil(this.calcularProximoVencimentoAPartirDe(new Date(), ciclo));
             const recorrenciaExistente = await this.recorrenciaRepository.findOne({
                 where: { assinaturaId: assinatura.id },
             });
             if (recorrenciaExistente) {
-                recorrenciaExistente.nextDueDate = assinatura.nextDueDate || this.parseDataBrasil(this.calcularProximoMes());
+                recorrenciaExistente.nextDueDate = assinatura.nextDueDate || fallbackVencimento;
                 recorrenciaExistente.valor = assinatura.value;
                 await this.recorrenciaRepository.save(recorrenciaExistente);
             }
@@ -1072,7 +1160,7 @@ let AssinaturasService = class AssinaturasService {
                 const recorrencia = this.recorrenciaRepository.create({
                     assinaturaId: assinatura.id,
                     userId: assinatura.userId,
-                    nextDueDate: assinatura.nextDueDate || this.parseDataBrasil(this.calcularProximoMes()),
+                    nextDueDate: assinatura.nextDueDate || fallbackVencimento,
                     valor: assinatura.value,
                 });
                 await this.recorrenciaRepository.save(recorrencia);
@@ -1404,17 +1492,19 @@ let AssinaturasService = class AssinaturasService {
                 });
                 if (orderResult.status === 'paid') {
                     console.log(`✅ SUCESSO: Cobrança confirmada para assinatura ${assinatura.id}`);
-                    const proximaData = new Date();
-                    proximaData.setDate(proximaData.getDate() + 30);
+                    const ciclo = await this.getCicloMesesPlano(assinatura.planoId);
+                    const proximaDataStr = this.calcularProximoVencimentoAPartirDe(new Date(), ciclo);
+                    const proximaData = this.parseDataBrasil(proximaDataStr);
                     assinatura.status = 'ACTIVE';
                     assinatura.nextDueDate = proximaData;
                     await this.assinaturaRepository.save(assinatura);
                     const novaRecorrencia = new recorrencia_entity_1.Recorrencia();
                     novaRecorrencia.assinaturaId = assinatura.id;
+                    novaRecorrencia.userId = assinatura.userId;
                     novaRecorrencia.nextDueDate = proximaData;
                     novaRecorrencia.valor = assinatura.value;
                     await this.recorrenciaRepository.save(novaRecorrencia);
-                    console.log(`📅 Nova recorrência criada para ${proximaData.toISOString().split('T')[0]}`);
+                    console.log(`📅 Nova recorrência criada (ciclo ${ciclo} mês(es)): ${proximaDataStr}`);
                     sucesso++;
                 }
                 else {
@@ -1455,15 +1545,12 @@ let AssinaturasService = class AssinaturasService {
         console.log(`🔄 [${timestamp}] CRON: Iniciando processamento de recorrências`);
         console.log(`${'='.repeat(80)}`);
         const hoje = this.getDataAtualBrasil();
-        const hojeDate = this.parseDataBrasil(hoje);
         console.log(`📅 Data de hoje (Brasil): ${hoje}`);
-        console.log(`📅 Data de hoje (Date object): ${hojeDate}`);
-        console.log(`🔍 Buscando recorrências com next_due_date = ${hoje}...`);
-        const recorrencias = await this.recorrenciaRepository
-            .createQueryBuilder('recorrencia')
-            .leftJoinAndSelect('recorrencia.assinatura', 'assinatura')
-            .where('recorrencia.next_due_date = :hoje', { hoje: hojeDate })
-            .getMany();
+        console.log(`🔍 Buscando recorrências com next_due_date <= ${hoje} (hoje + atrasadas)...`);
+        const recorrencias = await this.buscarRecorrenciasVencidasOuAtrasadas(hoje);
+        const totalAtrasadas = recorrencias.filter((r) => this.formatDateOnly(r.nextDueDate) < hoje).length;
+        const totalHoje = recorrencias.length - totalAtrasadas;
+        console.log(`📊 Vencimento = hoje (${hoje}): ${totalHoje} | Atrasadas (< ${hoje}): ${totalAtrasadas}`);
         console.log(`📊 Total de recorrências encontradas: ${recorrencias.length}`);
         if (recorrencias.length > 0) {
             console.log(`📋 IDs das recorrências encontradas:`);
@@ -1482,6 +1569,9 @@ let AssinaturasService = class AssinaturasService {
         }
         let jobsAdicionados = 0;
         let jobsPulados = 0;
+        let sucesso = 0;
+        let falhas = 0;
+        const detalhes = [];
         for (let i = 0; i < recorrencias.length; i++) {
             const recorrencia = recorrencias[i];
             const assinatura = recorrencia.assinatura;
@@ -1510,55 +1600,100 @@ let AssinaturasService = class AssinaturasService {
                 jobsPulados++;
                 continue;
             }
-            console.log(`🔍 [${i + 1}/${recorrencias.length}] Verificando se já existe cobrança para esta assinatura na data de hoje...`);
-            const cobrancaExistente = await this.cobrancaRepository
-                .createQueryBuilder('cobranca')
-                .where('cobranca.assinatura_id = :assinaturaId', { assinaturaId: assinatura.id })
-                .andWhere('cobranca.due_date = :hoje', { hoje: hojeDate })
-                .getOne();
-            if (cobrancaExistente) {
-                console.log(`⚠️ [${i + 1}/${recorrencias.length}] JÁ EXISTE cobrança para assinatura ${assinatura.id} na data ${hoje}`);
-                console.log(`   Cobrança ID: ${cobrancaExistente.id}`);
-                console.log(`   Status: ${cobrancaExistente.status}`);
-                console.log(`   Pagar.me Order ID: ${cobrancaExistente.pagarMeOrderId}`);
-                console.log(`   ⏭️ Pulando esta recorrência para evitar cobrança duplicada`);
-                (0, newrelic_logger_1.newRelicLog)('warn', 'Recorrência pulada - cobrança já existe', {
-                    assinaturaId: assinatura.id,
-                    recorrenciaId: recorrencia.id,
-                    cobrancaExistenteId: cobrancaExistente.id,
-                    cobrancaStatus: cobrancaExistente.status,
-                    data: hoje,
-                    motivo: 'Cobrança duplicada evitada',
-                });
+            const vencimentoStr = this.formatDateOnly(recorrencia.nextDueDate);
+            const vencimentoDate = this.parseDataBrasil(vencimentoStr);
+            const isAtrasada = vencimentoStr < hoje;
+            console.log(`🔍 [${i + 1}/${recorrencias.length}] Verificando cobrança paga (vencimento ${vencimentoStr}${isAtrasada ? ' — ATRASADA' : ''})...`);
+            const cobrancaPaga = await this.cobrancaJaPagaParaVencimento(assinatura.id, recorrencia.userId, vencimentoStr);
+            const cobrancaPeriodo = cobrancaPaga
+                ? null
+                : await this.cobrancaPagaNoPeriodoAtraso(assinatura.id, recorrencia.userId, vencimentoStr, hoje);
+            if (cobrancaPaga || cobrancaPeriodo) {
+                const ref = cobrancaPaga ?? cobrancaPeriodo;
+                if (this.formatDateOnly(recorrencia.nextDueDate) <= hoje) {
+                    const proximoMes = await this.avancarVencimentoRecorrencia(recorrencia, assinatura, vencimentoDate);
+                    console.log(`✅ [${i + 1}/${recorrencias.length}] Já pago (cobrança ${ref.id}) — próximo vencimento: ${proximoMes}`);
+                    detalhes.push({
+                        assinaturaId: assinatura.id,
+                        status: 'ja_pago',
+                        mensagem: `Vencimento ${vencimentoStr} já coberto; próximo ${proximoMes}`,
+                    });
+                }
                 jobsPulados++;
                 continue;
             }
-            console.log(`✅ [${i + 1}/${recorrencias.length}] Nenhuma cobrança encontrada para esta data. Adicionando job à fila...`);
             try {
-                await this.queueService.adicionarJobProcessarRecorrencia(recorrencia.id, assinatura.id);
-                jobsAdicionados++;
-                console.log(`📋 Job adicionado à fila para recorrência ${recorrencia.id} - Assinatura: ${assinatura.id}`);
+                if (isAtrasada) {
+                    console.log(`💳 [${i + 1}/${recorrencias.length}] Atrasada ${vencimentoStr} — regularizando (síncrono, até 12 ciclos)...`);
+                    let ciclos = 0;
+                    const maxCiclos = 12;
+                    while (ciclos < maxCiclos) {
+                        const recAtual = await this.recorrenciaRepository.findOne({
+                            where: { id: recorrencia.id },
+                            relations: ['assinatura'],
+                        });
+                        if (!recAtual?.assinatura || recAtual.assinatura.status !== 'ACTIVE') {
+                            break;
+                        }
+                        const vencAtual = this.formatDateOnly(recAtual.nextDueDate);
+                        if (vencAtual >= hoje) {
+                            console.log(`   ✅ Vencimento em dia: ${vencAtual}`);
+                            break;
+                        }
+                        const pagaCiclo = await this.cobrancaJaPagaParaVencimento(recAtual.assinatura.id, recAtual.userId, vencAtual);
+                        const pagaPeriodo = pagaCiclo
+                            ? null
+                            : await this.cobrancaPagaNoPeriodoAtraso(recAtual.assinatura.id, recAtual.userId, vencAtual, hoje);
+                        if (pagaCiclo || pagaPeriodo) {
+                            await this.avancarVencimentoRecorrencia(recAtual, recAtual.assinatura, this.parseDataBrasil(vencAtual));
+                            ciclos++;
+                            continue;
+                        }
+                        await this.processarRecorrenciaIndividual(recAtual.id, recAtual.assinatura.id);
+                        ciclos++;
+                    }
+                    sucesso++;
+                    detalhes.push({
+                        assinaturaId: assinatura.id,
+                        status: 'sucesso',
+                        mensagem: `Atrasada regularizada (${ciclos} ciclo(s))`,
+                    });
+                }
+                else {
+                    console.log(`📋 [${i + 1}/${recorrencias.length}] Vence hoje — enfileirando...`);
+                    await this.queueService.adicionarJobProcessarRecorrencia(recorrencia.id, assinatura.id, vencimentoStr);
+                    jobsAdicionados++;
+                }
             }
             catch (error) {
-                jobsPulados++;
-                console.error(`❌ Erro ao adicionar job para recorrência ${recorrencia.id}: ${error.message}`);
-                if (error.stack) {
-                    console.error(`   Stack: ${error.stack}`);
+                if (isAtrasada) {
+                    falhas++;
                 }
+                else {
+                    jobsPulados++;
+                }
+                const msg = error?.message || String(error);
+                console.error(`❌ Erro recorrência ${recorrencia.id} (${vencimentoStr}): ${msg}`);
+                detalhes.push({
+                    assinaturaId: assinatura.id,
+                    status: 'falha',
+                    mensagem: msg,
+                });
             }
         }
         console.log(`\n${'='.repeat(80)}`);
         console.log(`📊 RESUMO DO PROCESSAMENTO:`);
         console.log(`   Total encontradas: ${recorrencias.length}`);
-        console.log(`   Jobs adicionados: ${jobsAdicionados}`);
-        console.log(`   Jobs pulados: ${jobsPulados}`);
-        console.log(`📊 Os jobs serão processados assincronamente pelo worker`);
+        console.log(`   Atrasadas cobradas (síncrono): ${sucesso}`);
+        console.log(`   Falhas ao cobrar atrasadas: ${falhas}`);
+        console.log(`   Jobs enfileirados (vence hoje): ${jobsAdicionados}`);
+        console.log(`   Puladas: ${jobsPulados}`);
         console.log(`${'='.repeat(80)}\n`);
         return {
             processadas: recorrencias.length,
-            sucesso: 0,
-            falhas: 0,
-            detalhes: [],
+            sucesso,
+            falhas,
+            detalhes,
         };
     }
     async processarRecorrenciaIndividual(recorrenciaId, assinaturaId) {
@@ -1591,31 +1726,13 @@ let AssinaturasService = class AssinaturasService {
         if (!assinatura.pagarMeCardId || !assinatura.pagarMeCustomerId) {
             throw new Error('Dados insuficientes para cobrança (falta pagarMeCardId ou pagarMeCustomerId)');
         }
-        const hoje = this.getDataAtualBrasil();
-        const hojeDate = this.parseDataBrasil(hoje);
-        console.log(`🔍 Verificando se já existe cobrança para esta assinatura na data de hoje...`);
-        const cobrancaExistente = await this.cobrancaRepository
-            .createQueryBuilder('cobranca')
-            .where('cobranca.assinatura_id = :assinaturaId', { assinaturaId: assinatura.id })
-            .andWhere('cobranca.due_date = :hoje', { hoje: hojeDate })
-            .getOne();
-        if (cobrancaExistente) {
-            console.log(`⚠️ JÁ EXISTE cobrança para assinatura ${assinatura.id} na data ${hoje}`);
-            console.log(`   Cobrança ID: ${cobrancaExistente.id}`);
-            console.log(`   Status: ${cobrancaExistente.status}`);
-            console.log(`   Pagar.me Order ID: ${cobrancaExistente.pagarMeOrderId}`);
-            console.log(`   ⏭️ Pulando esta recorrência para evitar cobrança duplicada`);
-            (0, newrelic_logger_1.newRelicLog)('warn', 'Recorrência pulada - cobrança já existe', {
-                assinaturaId: assinatura.id,
-                recorrenciaId: recorrencia.id,
-                cobrancaExistenteId: cobrancaExistente.id,
-                cobrancaStatus: cobrancaExistente.status,
-                data: hoje,
-                motivo: 'Cobrança duplicada evitada',
-            });
-            throw new Error(`Cobrança já existe para esta data. Status: ${cobrancaExistente.status}`);
+        const vencimentoStr = this.formatDateOnly(recorrencia.nextDueDate);
+        const vencimentoDate = this.parseDataBrasil(vencimentoStr);
+        const cobrancaPaga = await this.cobrancaJaPagaParaVencimento(assinatura.id, recorrencia.userId, vencimentoStr);
+        if (cobrancaPaga) {
+            throw new Error(`Vencimento ${vencimentoStr} já possui cobrança paga (id: ${cobrancaPaga.id}).`);
         }
-        console.log(`✅ Nenhuma cobrança encontrada para esta data. Prosseguindo...`);
+        console.log(`✅ Nenhuma cobrança paga para vencimento ${vencimentoStr}. Prosseguindo...`);
         try {
             let phoneForGateway = assinatura.phone || '';
             if (!phoneForGateway && assinatura.userId) {
@@ -1688,23 +1805,17 @@ let AssinaturasService = class AssinaturasService {
                 value: Number(recorrencia.valor),
                 billingType: assinatura.billingType || 'CREDIT_CARD',
                 status: orderResult.status,
-                dueDate: hojeDate,
+                dueDate: vencimentoDate,
                 paymentDate: orderResult.status === 'paid' && orderResult.charges?.[0]?.paid_at
                     ? this.parseDataBrasil(orderResult.charges[0].paid_at.split('T')[0])
                     : null,
                 pagarMeResponse: JSON.stringify(orderResult),
-                assinaturaId: null,
+                assinaturaId: assinatura.id,
                 planoId: assinatura.planoId || null,
                 couponId: assinatura.couponId || null,
             });
             if (orderResult.status === 'paid') {
-                const proximoMes = this.calcularProximoMes();
-                const proximoMesDate = this.parseDataBrasil(proximoMes);
-                assinatura.nextDueDate = proximoMesDate;
-                await this.assinaturaRepository.save(assinatura);
-                recorrencia.nextDueDate = proximoMesDate;
-                recorrencia.valor = assinatura.value;
-                await this.recorrenciaRepository.save(recorrencia);
+                const proximoMes = await this.avancarVencimentoRecorrencia(recorrencia, assinatura, vencimentoDate);
                 await this.resetarTokensUsuario(assinatura.userId);
                 const cobranca = await this.cobrancaRepository.findOne({
                     where: { pagarMeOrderId: orderResult.id },
@@ -2368,8 +2479,9 @@ let AssinaturasService = class AssinaturasService {
             }
         }
         let nextDueDateString;
+        const cicloPlano = plano.ciclo === 3 ? 3 : 1;
         if (isPlanoEstudante || isPlanoTeste) {
-            nextDueDateString = this.calcularProximoMes();
+            nextDueDateString = this.calcularProximoVencimentoAPartirDe(new Date(), cicloPlano);
         }
         else {
             nextDueDateString = this.calcularProximos7Dias();

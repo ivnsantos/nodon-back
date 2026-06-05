@@ -159,10 +159,24 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
   async adicionarJobProcessarRecorrencia(
     recorrenciaId: string,
     assinaturaId: string,
+    vencimentoStr: string,
   ): Promise<void> {
     try {
       if (!this.processarRecorrenciaQueue) {
         throw new Error('Fila de processamento de recorrências não está disponível');
+      }
+
+      // Um job por ciclo de vencimento (permite reprocessar atrasadas após falha)
+      const jobId = `recorrencia-${recorrenciaId}-${vencimentoStr}`;
+      const existente = await this.processarRecorrenciaQueue.getJob(jobId);
+      if (existente) {
+        const estado = await existente.getState();
+        if (estado === 'completed' || estado === 'failed') {
+          await existente.remove();
+        } else {
+          console.log(`📋 Job ${jobId} já existe (${estado}), não duplicar`);
+          return;
+        }
       }
 
       await this.processarRecorrenciaQueue.add(
@@ -170,14 +184,17 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
         {
           recorrenciaId,
           assinaturaId,
+          vencimentoStr,
         },
         {
-          jobId: `recorrencia-${recorrenciaId}`, // ID único para evitar duplicatas
+          jobId,
           removeOnComplete: true,
         },
       );
 
-      console.log(`📋 Job adicionado à fila: processar-recorrencia (Recorrência: ${recorrenciaId})`);
+      console.log(
+        `📋 Job adicionado à fila: ${jobId} (vencimento ${vencimentoStr})`,
+      );
     } catch (error: any) {
       console.error(`❌ Erro ao adicionar job de recorrência: ${error.message}`);
       throw error;

@@ -24,7 +24,8 @@ let PlanosService = class PlanosService {
     }
     async create(data) {
         const { acesso, ...planoData } = data;
-        const plano = this.planoRepository.create(planoData);
+        const ciclo = planoData.ciclo === 3 ? 3 : 1;
+        const plano = this.planoRepository.create({ ...planoData, ciclo });
         const saved = await this.planoRepository.save(plano);
         return { ...saved, acesso: acesso || 'all' };
     }
@@ -41,6 +42,7 @@ let PlanosService = class PlanosService {
                 'plano.tokenChat',
                 'plano.ativo',
                 'plano.descricao',
+                'plano.ciclo',
                 'plano.createdAt',
                 'plano.updatedAt',
             ])

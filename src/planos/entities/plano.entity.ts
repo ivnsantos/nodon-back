@@ -32,6 +32,10 @@ export class Plano {
   @Column({ name: 'descricao', type: 'varchar', nullable: true })
   descricao: string;
 
+  /** Intervalo de cobrança em meses: 1 = mensal, 3 = trimestral */
+  @Column({ name: 'ciclo', type: 'int', default: 1 })
+  ciclo: number;
+
   // Temporariamente comentado até a coluna ser criada no banco
   // @Column({ name: 'acesso', type: 'varchar', nullable: true, default: 'all' })
   // acesso: string; // 'all' ou 'calendario,chat' (separado por vírgula)

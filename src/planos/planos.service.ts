@@ -17,11 +17,13 @@ export class PlanosService {
     limiteAnalises: number;
     tokenChat?: number;
     descricao?: string;
+    ciclo?: number;
     acesso?: string; // 'all' ou 'calendario,chat' (separado por vírgula)
   }): Promise<Plano> {
     // Remover acesso temporariamente até a coluna ser criada no banco
     const { acesso, ...planoData } = data;
-    const plano = this.planoRepository.create(planoData);
+    const ciclo = planoData.ciclo === 3 ? 3 : 1;
+    const plano = this.planoRepository.create({ ...planoData, ciclo });
     const saved = await this.planoRepository.save(plano);
     // Adicionar acesso como propriedade virtual
     return { ...saved, acesso: acesso || 'all' } as Plano;
@@ -41,6 +43,7 @@ export class PlanosService {
           'plano.tokenChat',
           'plano.ativo',
           'plano.descricao',
+          'plano.ciclo',
           // 'plano.acesso', // Comentado temporariamente até a coluna ser criada
           'plano.createdAt',
           'plano.updatedAt',

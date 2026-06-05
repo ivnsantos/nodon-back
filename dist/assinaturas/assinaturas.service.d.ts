@@ -156,8 +156,17 @@ export declare class AssinaturasService {
     private getDataAtualBrasil;
     private calcularProximos2Dias;
     private calcularProximos7Dias;
+    private getCicloMesesPlano;
+    private calcularProximoVencimentoAPartirDe;
+    private calcularProximoVencimentoPorPlano;
     private calcularProximoMes;
     private parseDataBrasil;
+    private formatDateOnly;
+    private normalizarDataVencimento;
+    private buscarRecorrenciasVencidasOuAtrasadas;
+    private cobrancaJaPagaParaVencimento;
+    private cobrancaPagaNoPeriodoAtraso;
+    private avancarVencimentoRecorrencia;
     private adicionarRecorrencia;
     private removerRecorrencia;
     private resetarTokensUsuario;
