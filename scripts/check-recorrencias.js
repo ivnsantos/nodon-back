@@ -1,11 +1,11 @@
 const { Client } = require('pg');
 
 const client = new Client({
-  host: process.env.DB_HOST || 'ep-rapid-salad-acurr7nb-pooler.sa-east-1.aws.neon.tech',
+  host: process.env.DB_HOST,
   port: 5432,
-  user: process.env.DB_USERNAME || 'neondb_owner',
-  password: process.env.DB_PASSWORD || 'npg_7ykiOvuSWe6x',
-  database: process.env.DB_NAME || 'neondb',
+  user: process.env.DB_USERNAME,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
   ssl: { rejectUnauthorized: false },
 });
 
