@@ -1118,19 +1118,71 @@ let AssinaturasService = class AssinaturasService {
             userId,
         })
             .andWhere('cobranca.due_date::date = CAST(:vencimento AS date)', { vencimento: vencimentoStr })
-            .andWhere("LOWER(TRIM(cobranca.status)) IN ('paid', 'confirmed', 'received')")
+            .andWhere("LOWER(TRIM(cobranca.status)) IN ('paid', 'confirmed', 'received', 'captured')")
             .getOne();
     }
     async cobrancaPagaNoPeriodoAtraso(assinaturaId, userId, vencimentoStr, hoje) {
         const rows = await this.cobrancaRepository.manager.query(`SELECT c.id, c.due_date::text AS due_date
        FROM cobrancas c
        WHERE (c.assinatura_id = $1 OR c.user_id = $2)
-         AND LOWER(TRIM(c.status)) IN ('paid', 'confirmed', 'received')
+         AND LOWER(TRIM(c.status)) IN ('paid', 'confirmed', 'received', 'captured')
          AND c.due_date::date >= $3::date
          AND c.due_date::date <= $4::date
        ORDER BY c.created_at DESC
        LIMIT 1`, [assinaturaId, userId, vencimentoStr, hoje]);
         return rows[0] ?? null;
+    }
+    async reservarCobrancaRecorrencia(assinatura, recorrencia, vencimentoStr) {
+        const vencimentoDate = this.parseDataBrasil(vencimentoStr);
+        const existente = await this.cobrancaRepository
+            .createQueryBuilder('cobranca')
+            .where('cobranca.assinatura_id = :assinaturaId', { assinaturaId: assinatura.id })
+            .andWhere('cobranca.due_date::date = CAST(:vencimento AS date)', { vencimento: vencimentoStr })
+            .orderBy('cobranca.created_at', 'DESC')
+            .getOne();
+        if (existente) {
+            const st = (existente.status || '').toLowerCase().trim();
+            if (['paid', 'confirmed', 'received', 'captured'].includes(st)) {
+                return { prosseguir: false };
+            }
+            if (st === 'processing' || st === 'pending') {
+                const ageMs = Date.now() - new Date(existente.updatedAt).getTime();
+                if (ageMs < 45 * 60 * 1000) {
+                    console.log(`⏳ Cobrança em processamento (${existente.id}) — não duplicar`);
+                    return { prosseguir: false };
+                }
+            }
+            return { prosseguir: true, cobrancaId: existente.id };
+        }
+        try {
+            const reservada = await this.cobrancaRepository.save(this.cobrancaRepository.create({
+                assinaturaId: assinatura.id,
+                userId: recorrencia.userId,
+                pagarMeOrderId: `pending_rec_${assinatura.id}_${vencimentoStr}`,
+                pagarMeCustomerId: assinatura.pagarMeCustomerId,
+                value: Number(recorrencia.valor),
+                billingType: assinatura.billingType || 'CREDIT_CARD',
+                status: 'processing',
+                dueDate: vencimentoDate,
+                planoId: assinatura.planoId || null,
+                couponId: assinatura.couponId || null,
+            }));
+            return { prosseguir: true, cobrancaId: reservada.id };
+        }
+        catch (error) {
+            if (error?.code === '23505') {
+                console.log(`🔒 Slot de cobrança já reservado para vencimento ${vencimentoStr}`);
+                return { prosseguir: false };
+            }
+            throw error;
+        }
+    }
+    async tratarRecorrenciaJaPaga(recorrencia, assinatura, vencimentoStr, hoje, cobrancaRef) {
+        if (this.formatDateOnly(recorrencia.nextDueDate) <= hoje) {
+            await this.avancarVencimentoRecorrencia(recorrencia, assinatura, this.parseDataBrasil(vencimentoStr));
+            console.log(`✅ Vencimento ${vencimentoStr} já coberto (cobrança ${cobrancaRef?.id ?? '—'}) — próximo ciclo atualizado`);
+        }
+        return true;
     }
     async avancarVencimentoRecorrencia(recorrencia, assinatura, vencimentoDate) {
         const ciclo = await this.getCicloMesesPlano(assinatura.planoId);
@@ -1540,6 +1592,20 @@ let AssinaturasService = class AssinaturasService {
         };
     }
     async processarRecorrencias() {
+        const lockKey = 'cron:processar-recorrencias';
+        const lockOk = await this.queueService.acquireLock(lockKey, 30 * 60 * 1000);
+        if (!lockOk) {
+            console.warn('⚠️ CRON de recorrências já em execução — abortando para evitar duplicatas');
+            return { processadas: 0, sucesso: 0, falhas: 0, detalhes: [] };
+        }
+        try {
+            return await this.executarProcessarRecorrencias();
+        }
+        finally {
+            await this.queueService.releaseLock(lockKey);
+        }
+    }
+    async executarProcessarRecorrencias() {
         const timestamp = new Date().toISOString();
         console.log(`\n${'='.repeat(80)}`);
         console.log(`🔄 [${timestamp}] CRON: Iniciando processamento de recorrências`);
@@ -1728,11 +1794,22 @@ let AssinaturasService = class AssinaturasService {
         }
         const vencimentoStr = this.formatDateOnly(recorrencia.nextDueDate);
         const vencimentoDate = this.parseDataBrasil(vencimentoStr);
+        const hoje = this.getDataAtualBrasil();
         const cobrancaPaga = await this.cobrancaJaPagaParaVencimento(assinatura.id, recorrencia.userId, vencimentoStr);
-        if (cobrancaPaga) {
-            throw new Error(`Vencimento ${vencimentoStr} já possui cobrança paga (id: ${cobrancaPaga.id}).`);
+        const cobrancaPeriodo = cobrancaPaga
+            ? null
+            : await this.cobrancaPagaNoPeriodoAtraso(assinatura.id, recorrencia.userId, vencimentoStr, hoje);
+        if (cobrancaPaga || cobrancaPeriodo) {
+            await this.tratarRecorrenciaJaPaga(recorrencia, assinatura, vencimentoStr, hoje, cobrancaPaga ?? cobrancaPeriodo);
+            return;
         }
-        console.log(`✅ Nenhuma cobrança paga para vencimento ${vencimentoStr}. Prosseguindo...`);
+        const reserva = await this.reservarCobrancaRecorrencia(assinatura, recorrencia, vencimentoStr);
+        if (!reserva.prosseguir) {
+            console.log(`⏭️ Vencimento ${vencimentoStr} já em processamento ou coberto — não duplicar`);
+            return;
+        }
+        const cobrancaReservadaId = reserva.cobrancaId;
+        console.log(`✅ Slot reservado (${cobrancaReservadaId}). Prosseguindo cobrança...`);
         try {
             let phoneForGateway = assinatura.phone || '';
             if (!phoneForGateway && assinatura.userId) {
@@ -1745,7 +1822,7 @@ let AssinaturasService = class AssinaturasService {
             }
             console.log(`💳 Criando cobrança no Pagar.me...`);
             const amountCentavos = Math.round(Number(recorrencia.valor) * 100);
-            const orderCode = `rec_${recorrencia.id}_${Date.now()}`;
+            const orderCode = `rec_${recorrencia.id}_${vencimentoStr.replace(/-/g, '')}`;
             const billingAddress = await this.buildBillingAddressFromAssinatura(assinatura);
             (0, newrelic_logger_1.newRelicLog)('info', 'Criando order no Pagar.me', {
                 orderCode,
@@ -1798,8 +1875,7 @@ let AssinaturasService = class AssinaturasService {
             (0, newrelic_logger_1.newRelicLog)('info', 'Order criada no Pagar.me', {
                 orderResult,
             });
-            await this.registrarCobranca({
-                userId: assinatura.userId,
+            await this.cobrancaRepository.update(cobrancaReservadaId, {
                 pagarMeOrderId: orderResult.id,
                 pagarMeCustomerId: assinatura.pagarMeCustomerId,
                 value: Number(recorrencia.valor),
@@ -1864,6 +1940,9 @@ let AssinaturasService = class AssinaturasService {
             }
         }
         catch (error) {
+            if (cobrancaReservadaId) {
+                await this.cobrancaRepository.update(cobrancaReservadaId, { status: 'failed' }).catch(() => undefined);
+            }
             console.error(`\n❌ ERRO ao processar cobrança para assinatura ${assinatura.id}:`);
             console.error(`   Mensagem: ${error.message}`);
             console.error(`   Stack: ${error.stack}`);
@@ -2625,6 +2704,7 @@ __decorate([
     (0, schedule_1.Cron)('0 9 * * *', {
         name: 'processar-recorrencias',
         timeZone: 'America/Sao_Paulo',
+        disabled: process.env.CRON_RECORRENCIAS_INTERNO === 'false',
     }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),

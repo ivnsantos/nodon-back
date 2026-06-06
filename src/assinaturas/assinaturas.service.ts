@@ -1455,7 +1455,7 @@ export class AssinaturasService {
         userId,
       })
       .andWhere('cobranca.due_date::date = CAST(:vencimento AS date)', { vencimento: vencimentoStr })
-      .andWhere("LOWER(TRIM(cobranca.status)) IN ('paid', 'confirmed', 'received')")
+      .andWhere("LOWER(TRIM(cobranca.status)) IN ('paid', 'confirmed', 'received', 'captured')")
       .getOne();
   }
 
@@ -1472,7 +1472,7 @@ export class AssinaturasService {
       `SELECT c.id, c.due_date::text AS due_date
        FROM cobrancas c
        WHERE (c.assinatura_id = $1 OR c.user_id = $2)
-         AND LOWER(TRIM(c.status)) IN ('paid', 'confirmed', 'received')
+         AND LOWER(TRIM(c.status)) IN ('paid', 'confirmed', 'received', 'captured')
          AND c.due_date::date >= $3::date
          AND c.due_date::date <= $4::date
        ORDER BY c.created_at DESC
@@ -1480,6 +1480,81 @@ export class AssinaturasService {
       [assinaturaId, userId, vencimentoStr, hoje],
     );
     return rows[0] ?? null;
+  }
+
+  /** Reserva slot único (assinatura + vencimento) antes de chamar o Pagar.me — evita cobrança duplicada. */
+  private async reservarCobrancaRecorrencia(
+    assinatura: Assinatura,
+    recorrencia: Recorrencia,
+    vencimentoStr: string,
+  ): Promise<{ prosseguir: boolean; cobrancaId?: string }> {
+    const vencimentoDate = this.parseDataBrasil(vencimentoStr);
+    const existente = await this.cobrancaRepository
+      .createQueryBuilder('cobranca')
+      .where('cobranca.assinatura_id = :assinaturaId', { assinaturaId: assinatura.id })
+      .andWhere('cobranca.due_date::date = CAST(:vencimento AS date)', { vencimento: vencimentoStr })
+      .orderBy('cobranca.created_at', 'DESC')
+      .getOne();
+
+    if (existente) {
+      const st = (existente.status || '').toLowerCase().trim();
+      if (['paid', 'confirmed', 'received', 'captured'].includes(st)) {
+        return { prosseguir: false };
+      }
+      if (st === 'processing' || st === 'pending') {
+        const ageMs = Date.now() - new Date(existente.updatedAt).getTime();
+        if (ageMs < 45 * 60 * 1000) {
+          console.log(`⏳ Cobrança em processamento (${existente.id}) — não duplicar`);
+          return { prosseguir: false };
+        }
+      }
+      return { prosseguir: true, cobrancaId: existente.id };
+    }
+
+    try {
+      const reservada = await this.cobrancaRepository.save(
+        this.cobrancaRepository.create({
+          assinaturaId: assinatura.id,
+          userId: recorrencia.userId,
+          pagarMeOrderId: `pending_rec_${assinatura.id}_${vencimentoStr}`,
+          pagarMeCustomerId: assinatura.pagarMeCustomerId,
+          value: Number(recorrencia.valor),
+          billingType: assinatura.billingType || 'CREDIT_CARD',
+          status: 'processing',
+          dueDate: vencimentoDate,
+          planoId: assinatura.planoId || null,
+          couponId: assinatura.couponId || null,
+        }),
+      );
+      return { prosseguir: true, cobrancaId: reservada.id };
+    } catch (error: any) {
+      if (error?.code === '23505') {
+        console.log(`🔒 Slot de cobrança já reservado para vencimento ${vencimentoStr}`);
+        return { prosseguir: false };
+      }
+      throw error;
+    }
+  }
+
+  /** Se já existe cobrança paga, avança vencimento e encerra (idempotente). */
+  private async tratarRecorrenciaJaPaga(
+    recorrencia: Recorrencia,
+    assinatura: Assinatura,
+    vencimentoStr: string,
+    hoje: string,
+    cobrancaRef?: { id: string } | Cobranca | null,
+  ): Promise<boolean> {
+    if (this.formatDateOnly(recorrencia.nextDueDate) <= hoje) {
+      await this.avancarVencimentoRecorrencia(
+        recorrencia,
+        assinatura,
+        this.parseDataBrasil(vencimentoStr),
+      );
+      console.log(
+        `✅ Vencimento ${vencimentoStr} já coberto (cobrança ${cobrancaRef?.id ?? '—'}) — próximo ciclo atualizado`,
+      );
+    }
+    return true;
   }
 
   /** Avança next_due_date conforme o ciclo do plano (1 ou 3 meses). */
@@ -1843,6 +1918,7 @@ export class AssinaturasService {
   @Cron('0 9 * * *', {
     name: 'processar-recorrencias',
     timeZone: 'America/Sao_Paulo',
+    disabled: process.env.CRON_RECORRENCIAS_INTERNO === 'false',
   })
   async handleCronProcessarRecorrencias() {
     const dataExecucao = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
@@ -2084,6 +2160,30 @@ export class AssinaturasService {
    * CRON job que roda diariamente para cobrar assinaturas
    */
   async processarRecorrencias(): Promise<{
+    processadas: number;
+    sucesso: number;
+    falhas: number;
+    detalhes: Array<{
+      assinaturaId: string;
+      status: string;
+      mensagem: string;
+    }>;
+  }> {
+    const lockKey = 'cron:processar-recorrencias';
+    const lockOk = await this.queueService.acquireLock(lockKey, 30 * 60 * 1000);
+    if (!lockOk) {
+      console.warn('⚠️ CRON de recorrências já em execução — abortando para evitar duplicatas');
+      return { processadas: 0, sucesso: 0, falhas: 0, detalhes: [] };
+    }
+
+    try {
+      return await this.executarProcessarRecorrencias();
+    } finally {
+      await this.queueService.releaseLock(lockKey);
+    }
+  }
+
+  private async executarProcessarRecorrencias(): Promise<{
     processadas: number;
     sucesso: number;
     falhas: number;
@@ -2352,19 +2452,41 @@ export class AssinaturasService {
 
     const vencimentoStr = this.formatDateOnly(recorrencia.nextDueDate);
     const vencimentoDate = this.parseDataBrasil(vencimentoStr);
+    const hoje = this.getDataAtualBrasil();
 
     const cobrancaPaga = await this.cobrancaJaPagaParaVencimento(
       assinatura.id,
       recorrencia.userId,
       vencimentoStr,
     );
-    if (cobrancaPaga) {
-      throw new Error(
-        `Vencimento ${vencimentoStr} já possui cobrança paga (id: ${cobrancaPaga.id}).`,
+    const cobrancaPeriodo = cobrancaPaga
+      ? null
+      : await this.cobrancaPagaNoPeriodoAtraso(
+          assinatura.id,
+          recorrencia.userId,
+          vencimentoStr,
+          hoje,
+        );
+
+    if (cobrancaPaga || cobrancaPeriodo) {
+      await this.tratarRecorrenciaJaPaga(
+        recorrencia,
+        assinatura,
+        vencimentoStr,
+        hoje,
+        cobrancaPaga ?? cobrancaPeriodo,
       );
+      return;
     }
 
-    console.log(`✅ Nenhuma cobrança paga para vencimento ${vencimentoStr}. Prosseguindo...`);
+    const reserva = await this.reservarCobrancaRecorrencia(assinatura, recorrencia, vencimentoStr);
+    if (!reserva.prosseguir) {
+      console.log(`⏭️ Vencimento ${vencimentoStr} já em processamento ou coberto — não duplicar`);
+      return;
+    }
+
+    const cobrancaReservadaId = reserva.cobrancaId;
+    console.log(`✅ Slot reservado (${cobrancaReservadaId}). Prosseguindo cobrança...`);
 
     try {
       // Pagar.me exige pelo menos um telefone no customer para criar pedido
@@ -2378,9 +2500,8 @@ export class AssinaturasService {
       }
 
       console.log(`💳 Criando cobrança no Pagar.me...`);
-      // Pagar.me: amount em centavos. recorrencia.valor em reais.
       const amountCentavos = Math.round(Number(recorrencia.valor) * 100);
-      const orderCode = `rec_${recorrencia.id}_${Date.now()}`;
+      const orderCode = `rec_${recorrencia.id}_${vencimentoStr.replace(/-/g, '')}`;
 
       const billingAddress = await this.buildBillingAddressFromAssinatura(assinatura);
       newRelicLog('info', 'Criando order no Pagar.me', {
@@ -2435,17 +2556,17 @@ export class AssinaturasService {
         orderResult,
       });
 
-      await this.registrarCobranca({
-        userId: assinatura.userId,
+      await this.cobrancaRepository.update(cobrancaReservadaId!, {
         pagarMeOrderId: orderResult.id,
         pagarMeCustomerId: assinatura.pagarMeCustomerId,
         value: Number(recorrencia.valor),
         billingType: assinatura.billingType || 'CREDIT_CARD',
         status: orderResult.status,
         dueDate: vencimentoDate,
-        paymentDate: orderResult.status === 'paid' && orderResult.charges?.[0]?.paid_at
-          ? this.parseDataBrasil(orderResult.charges[0].paid_at.split('T')[0])
-          : null,
+        paymentDate:
+          orderResult.status === 'paid' && orderResult.charges?.[0]?.paid_at
+            ? this.parseDataBrasil(orderResult.charges[0].paid_at.split('T')[0])
+            : null,
         pagarMeResponse: JSON.stringify(orderResult),
         assinaturaId: assinatura.id,
         planoId: assinatura.planoId || null,
@@ -2512,6 +2633,9 @@ export class AssinaturasService {
         throw new Error(`Pagamento não confirmado. Status: ${orderResult.status}`);
       }
     } catch (error: any) {
+      if (cobrancaReservadaId) {
+        await this.cobrancaRepository.update(cobrancaReservadaId, { status: 'failed' }).catch(() => undefined);
+      }
       // ❌ Erro ao processar cobrança
       console.error(`\n❌ ERRO ao processar cobrança para assinatura ${assinatura.id}:`);
       console.error(`   Mensagem: ${error.message}`);

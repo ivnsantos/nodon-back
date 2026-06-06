@@ -79,14 +79,14 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
       this.processarRecorrenciaQueue = new Queue('processar-recorrencia', {
         connection: this.redisConnectionOptions,
         defaultJobOptions: {
-          attempts: 3, // Tentar 3 vezes em caso de falha
+          attempts: 1,
           backoff: {
             type: 'exponential',
-            delay: 5000, // Começar com 5 segundos, dobrar a cada tentativa
+            delay: 5000,
           },
           removeOnComplete: {
-            age: 24 * 3600, // Manter jobs completos por 24 horas
-            count: 1000, // Manter últimos 1000 jobs
+            age: 7 * 24 * 3600,
+            count: 5000,
           },
           removeOnFail: {
             age: 7 * 24 * 3600, // Manter jobs falhados por 7 dias
@@ -154,6 +154,35 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Lock distribuído (Redis) para evitar CRONs concorrentes.
+   */
+  async acquireLock(lockKey: string, ttlMs: number): Promise<boolean> {
+    try {
+      if (!this.processarRecorrenciaQueue) {
+        return true;
+      }
+      const client = await this.processarRecorrenciaQueue.client;
+      const result = await client.set(`lock:${lockKey}`, '1', 'PX', ttlMs, 'NX');
+      return result === 'OK';
+    } catch (error: any) {
+      console.warn(`⚠️ Não foi possível adquirir lock ${lockKey}: ${error.message}`);
+      return true;
+    }
+  }
+
+  async releaseLock(lockKey: string): Promise<void> {
+    try {
+      if (!this.processarRecorrenciaQueue) {
+        return;
+      }
+      const client = await this.processarRecorrenciaQueue.client;
+      await client.del(`lock:${lockKey}`);
+    } catch (error: any) {
+      console.warn(`⚠️ Não foi possível liberar lock ${lockKey}: ${error.message}`);
+    }
+  }
+
+  /**
    * Adiciona um job para processar uma recorrência
    */
   async adicionarJobProcessarRecorrencia(
@@ -171,11 +200,16 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
       const existente = await this.processarRecorrenciaQueue.getJob(jobId);
       if (existente) {
         const estado = await existente.getState();
-        if (estado === 'completed' || estado === 'failed') {
-          await existente.remove();
-        } else {
+        if (estado === 'completed') {
+          console.log(`📋 Job ${jobId} já concluído — não reprocessar vencimento ${vencimentoStr}`);
+          return;
+        }
+        if (estado === 'active' || estado === 'waiting' || estado === 'delayed') {
           console.log(`📋 Job ${jobId} já existe (${estado}), não duplicar`);
           return;
+        }
+        if (estado === 'failed') {
+          await existente.remove();
         }
       }
 
@@ -188,7 +222,8 @@ export class QueueService implements OnModuleInit, OnModuleDestroy {
         },
         {
           jobId,
-          removeOnComplete: true,
+          removeOnComplete: false,
+          attempts: 1,
         },
       );
 

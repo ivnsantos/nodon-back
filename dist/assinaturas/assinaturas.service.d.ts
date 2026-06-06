@@ -166,6 +166,8 @@ export declare class AssinaturasService {
     private buscarRecorrenciasVencidasOuAtrasadas;
     private cobrancaJaPagaParaVencimento;
     private cobrancaPagaNoPeriodoAtraso;
+    private reservarCobrancaRecorrencia;
+    private tratarRecorrenciaJaPaga;
     private avancarVencimentoRecorrencia;
     private adicionarRecorrencia;
     private removerRecorrencia;
@@ -190,6 +192,7 @@ export declare class AssinaturasService {
             mensagem: string;
         }>;
     }>;
+    private executarProcessarRecorrencias;
     processarRecorrenciaIndividual(recorrenciaId: string, assinaturaId: string): Promise<void>;
     createCustomer(createCustomerDto: CreateCustomerDto): Promise<{
         pagarMeCustomerId: string;
